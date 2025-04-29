@@ -67,9 +67,21 @@ function insertDeSer(cassandra) {
     return [id, 100, tuid, ip, date, time];
 }
 
+function insertConcurrentDeSer(cassandra, n) {
+    let allParameters = [];
+    for (let i = 0; i < n; i++) {
+        allParameters.push({
+            query: "INSERT INTO benchmarks.basic (id, val, tuuid, ip, date, time) VALUES (?, ?, ?, ?, ?, ?)",
+            params: insertDeSer(cassandra)
+        });
+    }
+    return allParameters;
+}
+
 exports.getClientArgs = getClientArgs;
 exports.insertDeSer = insertDeSer;
 exports.tableSchemaBasic = tableSchemaBasic;
 exports.getClientArgs = getClientArgs;
 exports.prepareDatabase = prepareDatabase;
+exports.insertConcurrentDeSer = insertConcurrentDeSer;
 exports.repeatCapped = repeatCapped;
