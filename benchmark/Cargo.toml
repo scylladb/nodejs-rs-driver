@@ -4,10 +4,11 @@ name = "benchmark"
 version = "0.0.0"
 
 [dependencies]
-scylla = { version = "1.4.0", features = [] }
+scylla = { version = "1.4.0", features = ["chrono-04"] }
 tokio = { version = "1.34", features = ["full"] }
 uuid = "1"
 futures = "0.3"
+chrono = "0.4"
 
 [[bin]]
 name = "select_benchmark"
@@ -36,3 +37,7 @@ path = "logic_rust/batch.rs"
 [[bin]]
 name = "paging_benchmark"
 path = "logic_rust/paging.rs"
+
+[[bin]]
+name = "deser_benchmark"
+path = "logic_rust/deser.rs"

@@ -1,4 +1,6 @@
 "use strict";
+const { randomBytes } = require("crypto");
+const utils = require("../../lib/utils");
 
 const { _Client } = require("../../main");
 
@@ -52,6 +54,21 @@ async function repeatCapped(callback, n) {
     
 }
 
+
+
+
+function insertDeSer(cassandra) {
+    const id = cassandra.types.Uuid.random();
+    const tuid = cassandra.types.TimeUuid.fromString("8e14e760-7fa8-11eb-bc66-000000000001");
+    const ip = new cassandra.types.InetAddress(utils.allocBufferFromArray(randomBytes(4)));
+    const date = cassandra.types.LocalDate.now();
+    const time = cassandra.types.LocalTime.now();
+
+    return [id, 100, tuid, ip, date, time];
+}
+
+exports.getClientArgs = getClientArgs;
+exports.insertDeSer = insertDeSer;
 exports.tableSchemaBasic = tableSchemaBasic;
 exports.getClientArgs = getClientArgs;
 exports.prepareDatabase = prepareDatabase;
