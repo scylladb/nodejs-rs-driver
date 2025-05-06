@@ -53,3 +53,7 @@ path = "logic_rust/concurrent_deser.rs"
 [[bin]]
 name = "ser_benchmark"
 path = "logic_rust/ser.rs"
+
+[[bin]]
+name = "concurrent_ser_benchmark"
+path = "logic_rust/concurrent_ser.rs"
