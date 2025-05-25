@@ -6,6 +6,8 @@ const { _Client } = require("../../main");
 const cassandra = require(process.argv[2]);
 
 const tableSchemaBasic = "CREATE TABLE benchmarks.basic (id uuid, val int, PRIMARY KEY(id))";
+const tableSchemaDeSer = "CREATE TABLE benchmarks.basic (id uuid, val int, tuuid timeuuid, ip inet, date date, time time, PRIMARY KEY(id))";
+const DesSerInsertStatement = "INSERT INTO benchmarks.basic (id, val, tuuid, ip, date, time) VALUES (?, ?, ?, ?, ?, ?)";
 const singleStepCount = 1000000;
 
 function getClientArgs() {
@@ -114,6 +116,8 @@ function insertConcurrentDeSer(cassandra, n) {
 
 exports.insertDeSer = insertDeSer;
 exports.tableSchemaBasic = tableSchemaBasic;
+exports.tableSchemaDeSer = tableSchemaDeSer;
+exports.DesSerInsertStatement = DesSerInsertStatement;
 exports.getClientArgs = getClientArgs;
 exports.prepareDatabase = prepareDatabase;
 exports.insertConcurrentDeSer = insertConcurrentDeSer;
