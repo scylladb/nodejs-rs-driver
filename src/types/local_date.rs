@@ -1,4 +1,4 @@
-use crate::errors::js_error;
+use crate::errors::{ConvertedResult, JsResult, js_error, with_custom_error_sync};
 use crate::utils::CharCounter;
 use regex::Regex;
 use scylla::value::CqlDate;
@@ -41,26 +41,30 @@ pub struct LocalDateWrapper {
 impl LocalDateWrapper {
     /// Create a new object from the day, month and year.
     #[napi]
-    pub fn new(day: i8, month: i8, year: i32) -> napi::Result<Self> {
-        let date = Ymd::new(year, month, day)?;
+    pub fn new(day: i8, month: i8, year: i32) -> JsResult<LocalDateWrapper> {
+        with_custom_error_sync(|| {
+            let date = Ymd::new(year, month, day)?;
 
-        let value = date.to_days();
+            let value = date.to_days();
 
-        Ok(LocalDateWrapper {
-            date: Some(date),
-            value,
-            in_date: (MIN_JS_DATE..=MAX_JS_DATE).contains(&value),
+            ConvertedResult::Ok(LocalDateWrapper {
+                date: Some(date),
+                value,
+                in_date: (MIN_JS_DATE..=MAX_JS_DATE).contains(&value),
+            })
         })
     }
 
     /// Create a new object from number of days since 01.01.1970.
     #[napi]
-    pub fn new_day(value: i32) -> napi::Result<Self> {
-        let date = Ymd::from_days(value.into());
-        Ok(LocalDateWrapper {
-            value,
-            date,
-            in_date: (MIN_JS_DATE..=MAX_JS_DATE).contains(&value),
+    pub fn new_day(value: i32) -> JsResult<LocalDateWrapper> {
+        with_custom_error_sync(|| {
+            let date = Ymd::from_days(value.into());
+            ConvertedResult::Ok(LocalDateWrapper {
+                value,
+                date,
+                in_date: (MIN_JS_DATE..=MAX_JS_DATE).contains(&value),
+            })
         })
     }
 
@@ -90,46 +94,48 @@ impl LocalDateWrapper {
 
     /// Returns the number of days since 01.01.1970 based on a String representing the date.
     #[napi]
-    pub fn from_string(value: String) -> napi::Result<i32> {
-        match value.chars().filter(|c| *c == '-').count() {
-            d if d < 2 => match value.parse::<i32>() {
-                Ok(val) => Ok(val),
-                Err(_) => Err(DateInvalid::Format.into()),
-            },
-            2 | 3 => {
-                if !DATE_REGEX.is_match(&value) {
-                    return Err(DateInvalid::Format.into());
-                }
-
-                let lambda = |s: String| -> Result<(i32, i8, i8), DateInvalid> {
-                    // From checking the regex and from removing the first '-',
-                    // it is clear that the date string has three '-'.
-                    let date = s.strip_prefix('-').unwrap_or(&s);
-
-                    let mut parts = date.split('-');
-                    let y = parts.next().and_then(|q| q.parse::<i32>().ok());
-                    let m = parts.next().and_then(|q| q.parse::<i8>().ok());
-                    let d = parts.next().and_then(|q| q.parse::<i8>().ok());
-                    let (Some(y), Some(m), Some(d)) = (y, m, d) else {
-                        return Err(DateInvalid::Format);
-                    };
-                    Ok((if s.starts_with('-') { -1 } else { 1 } * y, m, d))
-                };
-
-                match lambda(value) {
-                    Ok(s) => {
-                        let date = Ymd {
-                            year: s.0,
-                            month: s.1,
-                            day: s.2,
-                        };
-                        Ok(date.to_days())
+    pub fn from_string(value: String) -> JsResult<i32> {
+        with_custom_error_sync(|| {
+            match value.chars().filter(|c| *c == '-').count() {
+                d if d < 2 => match value.parse::<i32>() {
+                    Ok(val) => ConvertedResult::Ok(val),
+                    Err(_) => Err(DateInvalid::Format.into()),
+                },
+                2 | 3 => {
+                    if !DATE_REGEX.is_match(&value) {
+                        return Err(DateInvalid::Format.into());
                     }
-                    Err(e) => Err(e.into()),
+
+                    let lambda = |s: String| -> Result<(i32, i8, i8), DateInvalid> {
+                        // From checking the regex and from removing the first '-',
+                        // it is clear that the date string has three '-'.
+                        let date = s.strip_prefix('-').unwrap_or(&s);
+
+                        let mut parts = date.split('-');
+                        let y = parts.next().and_then(|q| q.parse::<i32>().ok());
+                        let m = parts.next().and_then(|q| q.parse::<i8>().ok());
+                        let d = parts.next().and_then(|q| q.parse::<i8>().ok());
+                        let (Some(y), Some(m), Some(d)) = (y, m, d) else {
+                            return Err(DateInvalid::Format);
+                        };
+                        Ok((if s.starts_with('-') { -1 } else { 1 } * y, m, d))
+                    };
+
+                    match lambda(value) {
+                        Ok(s) => {
+                            let date = Ymd {
+                                year: s.0,
+                                month: s.1,
+                                day: s.2,
+                            };
+                            Ok(date.to_days())
+                        }
+                        Err(e) => Err(e.into()),
+                    }
                 }
+                _ => Err(DateInvalid::Format.into()),
             }
-            _ => Err(DateInvalid::Format.into()),
-        }
+        })
     }
 }
 

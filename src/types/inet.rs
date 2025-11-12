@@ -1,4 +1,4 @@
-use crate::errors::{ErrorType, js_typed_error};
+use crate::errors::{ConvertedError, ErrorType, JsResult, js_typed_error, with_custom_error_sync};
 use napi::bindgen_prelude::{Buffer, BufferSlice};
 use std::net::IpAddr;
 
@@ -10,22 +10,24 @@ pub struct InetAddressWrapper {
 #[napi]
 impl InetAddressWrapper {
     #[napi]
-    pub fn new(buffer: BufferSlice) -> napi::Result<Self> {
-        let buffer = buffer.as_ref();
-        if let Ok(arr) = <[u8; 4]>::try_from(buffer) {
-            Ok(Self {
-                inet: IpAddr::from(arr),
-            })
-        } else if let Ok(arr) = <[u8; 16]>::try_from(buffer) {
-            Ok(Self {
-                inet: IpAddr::from(arr),
-            })
-        } else {
-            Err(js_typed_error(
-                "Invalid IP address length",
-                ErrorType::TypeError,
-            ))
-        }
+    pub fn new(buffer: BufferSlice) -> JsResult<InetAddressWrapper> {
+        with_custom_error_sync(|| {
+            let buffer = buffer.as_ref();
+            if let Ok(arr) = <[u8; 4]>::try_from(buffer) {
+                Ok(Self {
+                    inet: IpAddr::from(arr),
+                })
+            } else if let Ok(arr) = <[u8; 16]>::try_from(buffer) {
+                Ok(Self {
+                    inet: IpAddr::from(arr),
+                })
+            } else {
+                Err(ConvertedError::from(js_typed_error(
+                    "Invalid IP address length",
+                    ErrorType::TypeError,
+                )))
+            }
+        })
     }
 
     #[napi]

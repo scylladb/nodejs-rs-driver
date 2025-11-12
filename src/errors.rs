@@ -218,11 +218,6 @@ where
     c.into_converted_result().into()
 }
 
-/// Convert rust error to napi::Error
-pub(crate) fn err_to_napi<T: Error>(e: T) -> napi::Error {
-    js_error(e)
-}
-
 /// Create napi::Error from a message
 pub(crate) fn js_error<T: Display>(e: T) -> napi::Error {
     js_typed_error(e, ErrorType::Error)
