@@ -33,7 +33,7 @@ define_js_to_rust_convertible_object!(
         routing_names, routingNames: Vec<String>,
         serial_consistency, serialConsistency: i16,
         timestamp, timestamp: BigInt,
-        trace_query, traceQuery: bool
+        trace_query, traceQuery: bool,
     }
 );
 

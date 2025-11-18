@@ -29,7 +29,7 @@ const DEFAULT_CACHE_SIZE: u32 = 512;
 // This specific option is added, as it's used in the existing integration tests
 #[rustfmt::skip] // fmt splits the struct definition into multiple lines
 define_js_to_rust_convertible_object!(SslOptions {
-    reject_unauthorized, rejectUnauthorized: bool
+    reject_unauthorized, rejectUnauthorized: bool,
 });
 
 define_js_to_rust_convertible_object!(SessionOptions {
@@ -41,7 +41,7 @@ define_js_to_rust_convertible_object!(SessionOptions {
     credentials_username, credentialsUsername: String,
     credentials_password, credentialsPassword: String,
     cache_size, cacheSize: u32,
-    ssl_options, sslOptions: SslOptions
+    ssl_options, sslOptions: SslOptions,
 });
 
 #[napi]
