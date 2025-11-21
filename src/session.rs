@@ -175,7 +175,8 @@ impl SessionWrapper {
         options: &QueryOptionsWrapper,
     ) -> JsResult<QueryResultWrapper> {
         with_custom_error_async(async || {
-            let statement: Statement = apply_statement_options(query.into(), &options.options)?;
+            let statement: Statement =
+                self.apply_statement_options(query.into(), &options.options)?;
             let query_result = self
                 .inner
                 .get_session()
@@ -224,7 +225,7 @@ impl SessionWrapper {
         options: &QueryOptionsWrapper,
     ) -> JsResult<QueryResultWrapper> {
         with_custom_error_async(async || {
-            let query = apply_statement_options(query.into(), &options.options)?;
+            let query = self.apply_statement_options(query.into(), &options.options)?;
             QueryResultWrapper::from_query(self.inner.execute_unpaged(query, params).await?)
         })
         .await
@@ -260,7 +261,7 @@ impl SessionWrapper {
         paging_state: Option<&PagingStateWrapper>,
     ) -> JsResult<PagingResultWithExecutor> {
         with_custom_error_async(async || {
-            let statement = Arc::new(apply_statement_options(query.into(), &options.options)?);
+            let statement = Arc::new(self.apply_statement_options(query.into(), &options.options)?);
 
             let params = Arc::new(params);
 
@@ -289,7 +290,7 @@ impl SessionWrapper {
         paging_state: Option<&PagingStateWrapper>,
     ) -> JsResult<PagingResultWithExecutor> {
         with_custom_error_async(async || {
-            let statement = Arc::new(apply_statement_options(query.into(), &options.options)?);
+            let statement = Arc::new(self.apply_statement_options(query.into(), &options.options)?);
 
             let params = Arc::new(params);
 
@@ -303,23 +304,42 @@ impl SessionWrapper {
         })
         .await
     }
-}
 
-/// Creates object representing a prepared batch of statements.
-/// Requires each passed statement to be already prepared.
-#[napi]
-pub fn create_prepared_batch(
-    statements: Vec<String>,
-    options: &QueryOptionsWrapper,
-) -> JsResult<BatchWrapper> {
-    with_custom_error_sync(|| {
-        let mut batch: Batch = Default::default();
-        statements
-            .iter()
-            .for_each(|q| batch.append_statement(q.as_str()));
-        batch = apply_batch_options(batch, &options.options)?;
-        ConvertedResult::Ok(BatchWrapper { inner: batch })
-    })
+    /// Creates object representing a prepared batch of statements.
+    /// Requires each passed statement to be already prepared.
+    #[napi]
+    pub fn create_prepared_batch(
+        &self,
+        statements: Vec<String>,
+        options: &QueryOptionsWrapper,
+    ) -> JsResult<BatchWrapper> {
+        with_custom_error_sync(|| {
+            let mut batch: Batch = Default::default();
+            statements
+                .iter()
+                .for_each(|q| batch.append_statement(q.as_str()));
+            batch = self.apply_batch_options(batch, &options.options)?;
+            ConvertedResult::Ok(BatchWrapper { inner: batch })
+        })
+    }
+
+    /// Creates object representing unprepared batch of statements.
+    #[napi]
+    pub fn create_unprepared_batch(
+        &self,
+        statements: Vec<String>,
+        options: &QueryOptionsWrapper,
+    ) -> JsResult<BatchWrapper> {
+        with_custom_error_sync(|| {
+            let mut batch: Batch = Default::default();
+            statements
+                .into_iter()
+                .for_each(|q| batch.append_statement(q.as_str()));
+
+            batch = self.apply_batch_options(batch, &options.options)?;
+            ConvertedResult::Ok(BatchWrapper { inner: batch })
+        })
+    }
 }
 
 fn configure_session_builder(options: &SessionOptions) -> ConvertedResult<SessionBuilder> {
@@ -357,60 +377,49 @@ fn configure_session_builder(options: &SessionOptions) -> ConvertedResult<Sessio
     Ok(builder)
 }
 
-/// Creates object representing unprepared batch of statements.
-#[napi]
-pub fn create_unprepared_batch(
-    statements: Vec<String>,
-    options: &QueryOptionsWrapper,
-) -> JsResult<BatchWrapper> {
-    with_custom_error_sync(|| {
-        let mut batch: Batch = Default::default();
-        statements
-            .into_iter()
-            .for_each(|q| batch.append_statement(q.as_str()));
-
-        batch = apply_batch_options(batch, &options.options)?;
-        ConvertedResult::Ok(BatchWrapper { inner: batch })
-    })
-}
-
 /// Macro to allow applying options to any query type
 macro_rules! make_apply_options {
     ($statement_type: ty, $fn_name: ident) => {
-        fn $fn_name(
-            mut statement: $statement_type,
-            options: &QueryOptionsObj,
-        ) -> ConvertedResult<$statement_type> {
-            if let Some(o) = options.consistency {
-                statement.set_consistency(
-                    Consistency::try_from(o)
-                        .map_err(|_| make_js_error(format!("Unknown consistency value: {o}")))?,
-                );
-            }
+        impl SessionWrapper {
+            fn $fn_name(
+                &self,
+                mut statement: $statement_type,
+                options: &QueryOptionsObj,
+            ) -> ConvertedResult<$statement_type> {
+                if let Some(o) = options.consistency {
+                    statement.set_consistency(
+                        Consistency::try_from(o).map_err(|_| {
+                            make_js_error(format!("Unknown consistency value: {o}"))
+                        })?,
+                    );
+                }
 
-            if let Some(o) = options.serial_consistency {
-                statement.set_serial_consistency(Some(SerialConsistency::try_from(o).map_err(
-                    |_| make_js_error(format!("Unknown serial consistency value: {o}")),
-                )?));
-            }
+                if let Some(o) = options.serial_consistency {
+                    statement.set_serial_consistency(Some(
+                        SerialConsistency::try_from(o).map_err(|_| {
+                            make_js_error(format!("Unknown serial consistency value: {o}"))
+                        })?,
+                    ));
+                }
 
-            if let Some(o) = options.is_idempotent {
-                statement.set_is_idempotent(o);
-            }
+                if let Some(o) = options.is_idempotent {
+                    statement.set_is_idempotent(o);
+                }
 
-            if let Some(o) = &options.timestamp {
-                statement.set_timestamp(Some(bigint_to_i64(
-                    o.clone(),
-                    "Timestamp cannot overflow i64",
-                )?));
-            }
-            // TODO: Update it to allow collection of information from traced query
-            // Currently it's just passing the value, but not able to access any tracing information
-            if let Some(o) = options.trace_query {
-                statement.set_tracing(o);
-            }
+                if let Some(o) = &options.timestamp {
+                    statement.set_timestamp(Some(bigint_to_i64(
+                        o.clone(),
+                        "Timestamp cannot overflow i64",
+                    )?));
+                }
+                // TODO: Update it to allow collection of information from traced query
+                // Currently it's just passing the value, but not able to access any tracing information
+                if let Some(o) = options.trace_query {
+                    statement.set_tracing(o);
+                }
 
-            Ok(statement)
+                Ok(statement)
+            }
         }
     };
 }
@@ -419,22 +428,26 @@ macro_rules! make_apply_options {
 macro_rules! make_non_batch_apply_options {
     ($statement_type: ty, $fn_name: ident, $partial_name: ident) => {
         make_apply_options!($statement_type, $partial_name);
-        fn $fn_name(
-            statement: $statement_type,
-            options: &QueryOptionsObj,
-        ) -> ConvertedResult<$statement_type> {
-            // Statement with partial options applied -
-            // those that are common with batch queries
-            let mut statement_with_part_of_options_applied = $partial_name(statement, options)?;
-            if let Some(o) = options.fetch_size {
-                if !o.is_positive() {
-                    return Err(ConvertedError::from(make_js_error(
-                        "fetch size must be a positive value",
-                    )));
+        impl SessionWrapper {
+            fn $fn_name(
+                &self,
+                statement: $statement_type,
+                options: &QueryOptionsObj,
+            ) -> ConvertedResult<$statement_type> {
+                // Statement with partial options applied -
+                // those that are common with batch queries
+                let mut statement_with_part_of_options_applied =
+                    self.$partial_name(statement, options)?;
+                if let Some(o) = options.fetch_size {
+                    if !o.is_positive() {
+                        return Err(ConvertedError::from(make_js_error(
+                            "fetch size must be a positive value",
+                        )));
+                    }
+                    statement_with_part_of_options_applied.set_page_size(o);
                 }
-                statement_with_part_of_options_applied.set_page_size(o);
+                Ok(statement_with_part_of_options_applied)
             }
-            Ok(statement_with_part_of_options_applied)
         }
     };
 }
