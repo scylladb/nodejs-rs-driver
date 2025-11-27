@@ -1,7 +1,7 @@
 use napi::bindgen_prelude::{Buffer, ToNapiValue};
 use scylla::response::{PagingState, PagingStateResponse};
 
-use crate::{errors::js_error, result::QueryResultWrapper};
+use crate::{errors::js_error, result::QueryResultWrapper, session::QueryExecutor};
 
 #[napi]
 pub struct PagingStateWrapper {
@@ -47,6 +47,20 @@ pub struct PagingResult {
     pub(crate) result: QueryResultWrapper,
 }
 
+pub struct PagingResultWithExecutor {
+    pub(crate) result: PagingResult,
+    pub(crate) executor: QueryExecutor,
+}
+
+impl PagingResult {
+    pub(crate) fn with_executor(self, executor: QueryExecutor) -> PagingResultWithExecutor {
+        PagingResultWithExecutor {
+            result: self,
+            executor,
+        }
+    }
+}
+
 impl ToNapiValue for PagingResult {
     /// # Safety
     ///
@@ -62,6 +76,28 @@ impl ToNapiValue for PagingResult {
                 vec![
                     PagingStateResponseWrapper::to_napi_value(env, val.paging_state),
                     QueryResultWrapper::to_napi_value(env, val.result),
+                ],
+            )
+        }
+    }
+}
+
+impl ToNapiValue for PagingResultWithExecutor {
+    /// # Safety
+    ///
+    /// Valid pointer to napi env must be provided
+    unsafe fn to_napi_value(
+        env: napi::sys::napi_env,
+        val: Self,
+    ) -> napi::Result<napi::sys::napi_value> {
+        // Caller of this function ensures a valid pointer to napi env is provided
+        unsafe {
+            Vec::to_napi_value(
+                env,
+                vec![
+                    Option::to_napi_value(env, Some(val.result.paging_state)),
+                    QueryResultWrapper::to_napi_value(env, val.result.result),
+                    QueryExecutor::to_napi_value(env, val.executor),
                 ],
             )
         }
