@@ -128,9 +128,7 @@ describe("Client @SERVER_API", function () {
             );
         });
 
-        // Would require #191
-        // TODO: Fix this test
-        /* it("should support retrieving empty buffers as values", () => {
+        it("should support retrieving empty buffers as values", () => {
             // Include some columns to make sure the behaviour is consistent across different types.
             // Inserting empty buffers fails server side for some types, e.g., "Not enough bytes to read a list"
             const columnsAsNulls = [
@@ -167,7 +165,7 @@ describe("Client @SERVER_API", function () {
                         utils.allocBufferUnsafe(0),
                     );
                 });
-        }); */
+        });
 
         it("should handle 250 parallel queries", function (done) {
             const client = setupInfo.client;

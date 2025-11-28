@@ -1,7 +1,5 @@
 use crate::{
-    errors::{
-        ConvertedError, ConvertedResult, IntoConvertedResult, JsResult, with_custom_error_sync,
-    },
+    errors::{ConvertedError, ConvertedResult},
     types::{local_date::LocalDateWrapper, type_wrappers::ComplexType},
 };
 use napi::{
@@ -76,28 +74,28 @@ impl QueryResultWrapper {
         Ok(QueryResultWrapper { inner: value })
     }
 
-    /// Extracts all the rows of the result into a vector of rows
+    /// Extracts all the rows of the result. This returns the whole result page as a single buffer and a row count.
     #[napi]
-    pub fn get_rows(&self) -> JsResult<Option<Vec<RowWrapper>>> {
-        with_custom_error_sync(|| {
-            let result = match &self.inner {
-                QueryResultVariant::RowsResult(v) => v,
-                QueryResultVariant::EmptyResult(_) => {
-                    return ConvertedResult::Ok(None);
-                }
-            };
+    pub fn get_rows(&self) -> Option<(Buffer, u32)> {
+        let result = match &self.inner {
+            QueryResultVariant::RowsResult(v) => v,
+            QueryResultVariant::EmptyResult(_) => {
+                return None;
+            }
+        };
 
-            let rows = result.rows::<Row>()
-            .expect("Type check against the Row type has failed; this is a bug in the underlying Rust driver");
+        let res_with_metadata = result.raw_rows_with_metadata();
 
-            Ok(Some(
-                rows.map(|f| {
-                    f.map(|v| RowWrapper { inner: v.columns })
-                        .into_converted_result()
-                })
-                .collect::<ConvertedResult<Vec<_>>>()?,
-            ))
-        })
+        Some((
+            Buffer::from(res_with_metadata.raw_rows().to_vec()),
+            // According to CQLv4 spec, row count is a 4 bytes integer:
+            // > <rows_count> is an [int] representing the number of rows present in this result
+            // This means we can safely convert it to u32, as the Rust driver should handle checking the correctness of the received data.
+            res_with_metadata
+                .rows_count()
+                .try_into()
+                .expect("Expected row count to fit into u32. This is a bug in the driver."),
+        ))
     }
 
     /// Get the names of the columns in order, as they appear in the query result

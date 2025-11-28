@@ -424,10 +424,7 @@ describe("Client @SERVER_API", function () {
                                     // as a string also
                                     value = value.toString();
                                 }
-                                // This is a temporary conversion, as for now we always return Cql Varint as BigInt
-                                expectedRows[id] = arbitraryValueToBigInt(
-                                    value.toString(),
-                                );
+                                expectedRows[id] = value;
                                 client.execute(
                                     query,
                                     [id, value],
@@ -453,8 +450,8 @@ describe("Client @SERVER_API", function () {
                                         expectedRows[row["id"]];
                                     assert.ok(expectedValue !== undefined);
                                     assert.strictEqual(
-                                        row["val"],
-                                        expectedValue,
+                                        row["val"].toString(),
+                                        expectedValue.toString(),
                                     );
                                 });
                                 seriesNext();
@@ -1567,9 +1564,7 @@ describe("Client @SERVER_API", function () {
                 );
             });
 
-            // TODO: Re-enable this test, once the https://github.com/scylladb/scylla-rust-driver/issues/1452 bug is fixed
-            // This test fails, due to the bug in the Rust decoding that fails for this test case
-            /* vit(
+            vit(
                 "2.1",
                 "should support encoding and decoding tuples with fewer items than declared",
                 () => {
@@ -1607,7 +1602,7 @@ describe("Client @SERVER_API", function () {
                             );
                         });
                 },
-            );*/
+            );
         });
 
         describe("with smallint and tinyint types", function () {
