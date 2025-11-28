@@ -4,7 +4,7 @@ use openssl::ssl::{SslContextBuilder, SslMethod, SslVerifyMode};
 use scylla::client::SelfIdentity;
 use scylla::client::caching_session::CachingSession;
 use scylla::client::session_builder::SessionBuilder;
-use scylla::response::PagingState;
+use scylla::response::{PagingState, PagingStateResponse};
 use scylla::statement::batch::Batch;
 use scylla::statement::{Consistency, SerialConsistency, Statement};
 
@@ -110,7 +110,12 @@ impl QueryExecutor {
 
         Ok(PagingResult {
             result: QueryResultWrapper::from_query(result)?,
-            paging_state: paging_state_response.into(),
+            paging_state: match paging_state_response {
+                PagingStateResponse::HasMorePages { state } => {
+                    Some(PagingStateWrapper { inner: state })
+                }
+                PagingStateResponse::NoMorePages => None,
+            },
         })
     }
 }

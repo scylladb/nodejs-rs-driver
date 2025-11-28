@@ -1,16 +1,11 @@
 use napi::bindgen_prelude::{Buffer, ToNapiValue};
-use scylla::response::{PagingState, PagingStateResponse};
+use scylla::response::PagingState;
 
-use crate::{errors::js_error, result::QueryResultWrapper, session::QueryExecutor};
+use crate::{result::QueryResultWrapper, session::QueryExecutor};
 
 #[napi]
 pub struct PagingStateWrapper {
     pub(crate) inner: PagingState,
-}
-
-#[napi]
-pub struct PagingStateResponseWrapper {
-    inner: PagingStateResponse,
 }
 
 #[napi]
@@ -30,12 +25,6 @@ impl PagingStateWrapper {
     }
 }
 
-impl From<PagingStateResponse> for PagingStateResponseWrapper {
-    fn from(value: PagingStateResponse) -> Self {
-        PagingStateResponseWrapper { inner: value }
-    }
-}
-
 /// Simple object that keeps the result of the current page result
 /// and information about next page.
 ///
@@ -43,7 +32,7 @@ impl From<PagingStateResponse> for PagingStateResponseWrapper {
 /// This would return the same object to the Node part of the program.
 /// But, this can be only done in NAPI 3.0 which we are not using at the moment
 pub struct PagingResult {
-    pub(crate) paging_state: PagingStateResponseWrapper,
+    pub(crate) paging_state: Option<PagingStateWrapper>,
     pub(crate) result: QueryResultWrapper,
 }
 
@@ -74,7 +63,7 @@ impl ToNapiValue for PagingResult {
             Vec::to_napi_value(
                 env,
                 vec![
-                    PagingStateResponseWrapper::to_napi_value(env, val.paging_state),
+                    Option::to_napi_value(env, val.paging_state),
                     QueryResultWrapper::to_napi_value(env, val.result),
                 ],
             )
@@ -101,29 +90,5 @@ impl ToNapiValue for PagingResultWithExecutor {
                 ],
             )
         }
-    }
-}
-
-#[napi]
-impl PagingStateResponseWrapper {
-    /// Determines if the query has finished
-    /// or it should be resumed with
-    /// given PagingState in order to fetch next pages.
-    #[napi]
-    pub fn has_next_page(&self) -> bool {
-        !self.inner.finished()
-    }
-
-    /// Get the next page of the given query, assuming there are pages left
-    #[napi]
-    pub fn next_page(&self) -> napi::Result<PagingStateWrapper> {
-        Ok(PagingStateWrapper {
-            inner: match &self.inner {
-                PagingStateResponse::HasMorePages { state } => state.clone(),
-                PagingStateResponse::NoMorePages => {
-                    return Err(js_error("All pages transferred"));
-                }
-            },
-        })
     }
 }
