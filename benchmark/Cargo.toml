@@ -36,3 +36,7 @@ path = "logic_rust/batch.rs"
 [[bin]]
 name = "paging_benchmark"
 path = "logic_rust/paging.rs"
+
+[[bin]]
+name = "concurrent_paging_benchmark"
+path = "logic_rust/concurrent_paging.rs"

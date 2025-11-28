@@ -14,17 +14,7 @@ async.series(
             utils.prepareDatabase(client, utils.tableSchemaBasic, next);
         },
         async function insert(next) {
-            let query =
-                "INSERT INTO benchmarks.basic (id, val) VALUES (?, ?)";
-            for (let i = 0; i < 10; i++) {
-                let id = cassandra.types.Uuid.random();
-                try {
-                    await client.execute(query, [id, 100], { prepare: true });
-                } catch (err) {
-                    return next(err);
-                }
-            }
-            next();
+            utils.insertSimple(client, 10, next);
         },
         async function select(next) {
             let limited = async function (steps) {
