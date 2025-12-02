@@ -1,0 +1,117 @@
+name: Release package
+env:
+  DEBUG: napi:*
+  APP_NAME: scylladb-javascript-driver
+  PEDANTIC: true
+on:
+    workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  # For now we build only for linux x86_64
+  # We can later add more targets as a separate jobs on a different architectures
+  build-x86_64-unknown-linux-gnu:
+    strategy:
+      fail-fast: false
+      matrix:
+        settings:
+          - host: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            build: npm run build -- --target x86_64-unknown-linux-gnu
+    name: build for release stable - ${{ matrix.settings.target }}
+    runs-on: ${{ matrix.settings.host }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/setup
+        with:
+          node-version: 24
+          host: ubuntu-latest
+          target: x86_64-unknown-linux-gnu
+      - name: Install libraries for linking
+        run: sudo apt-get install -y libssl-dev 
+      - name: Build
+        run: ${{ matrix.settings.build }}
+        shell: bash
+      - name: Upload artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: bindings-x86_64-unknown-linux-gnu
+          path: |
+            index.linux-x64-gnu.node
+            index.d.ts
+            index.js
+          if-no-files-found: error
+  test-x86_64-unknown-linux-gnu:
+    needs:
+      - build-x86_64-unknown-linux-gnu
+    name: test built package - x86_64-unknown-linux-gnu
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - name: Download artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: bindings-x86_64-unknown-linux-gnu
+      - name: Install dependencies
+        shell: bash
+        run: npm i
+      - name: Install ccm
+        # We need a copy of the repo for the ssl tests.
+        # When installing ccm as a package, we do not save the certificates, 
+        # that are present in the ./ssl directory
+        run: |
+          git clone https://github.com/scylladb/scylla-ccm.git
+          pip install --user --upgrade psutil
+          pip install --user https://github.com/scylladb/scylla-ccm/archive/master.zip
+      - name: Run integration tests
+        env: 
+          CCM_IS_SCYLLA: "true"
+          CCM_PATH: "./scylla-ccm"
+        run: npm run integration
+  publish:
+    needs:
+      - test-x86_64-unknown-linux-gnu
+    name: Publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: "https://registry.npmjs.org"
+          cache: npm
+      - name: Install dependencies
+        shell: bash
+        run: npm i
+      # This creates the directories for subpackage for specific platforms
+      - name: create npm dirs
+        run: npm run create-npm-dirs
+      - name: Download all artifacts
+        uses: actions/download-artifact@v6
+        with:
+          path: artifacts
+      # Copies the downloaded artifacts to proper places in the npm package directories
+      - name: Move artifacts
+        run: npm run artifacts
+      # Not necessary for the release, but useful for debugging in case some binaries are missing
+      - name: List packages
+        run: ls -R ./npm
+        shell: bash
+      - name: Copy index files
+        run: cp ./artifacts/index.js ./artifacts/index.d.ts .
+      - name: Publish
+        run: |
+          npm config set provenance true
+          npm publish --provenance --access public
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
