@@ -20,7 +20,7 @@ jobs:
           - host: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             build: npm run build -- --target x86_64-unknown-linux-gnu
-        node: [ 16, 18, 20 ]
+        node: [ 20, 22, 24, current ]
     name: Build and run examples - ${{ matrix.settings.target }} - node@${{ matrix.node }}
     runs-on: ${{ matrix.settings.host }}
     steps:

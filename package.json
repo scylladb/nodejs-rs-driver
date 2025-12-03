@@ -65,6 +65,6 @@
     "eslint-fix": "npx eslint \"lib/**/*.js\" \"examples/**/*.js\" --fix"
   },
   "engines": {
-    "node": ">=16"
+    "node": ">=20"
   }
 }
