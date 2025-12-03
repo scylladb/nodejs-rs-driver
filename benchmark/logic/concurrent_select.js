@@ -34,7 +34,11 @@ async.series(
                         query: 'SELECT * FROM benchmarks.basic',
                     });
                 }
-                utils
+                try {
+                    const _result = await cassandra.concurrent.executeConcurrent(client, allParameters, { prepare: true, collectResults: true });
+                } catch (err) {
+                    return next(err);
+                }
             }
             await utils.repeatCapped(limited, iterCnt);
             next();
