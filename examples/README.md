@@ -29,13 +29,34 @@ Alternatively you can run just a specific example by providing the path to it:
 node ./basic/basic-connect.js
 ```
 
-## Paging examples
+## Code samples
 
-Those examples show how queries can be paged. This included the following code samples:
+Part of the examples listed here are from the [datastax driver repository](https://github.com/datastax/nodejs-driver/tree/master).
+Some of the examples use features that are not yet implemented.
+Those examples are present in this directory and have the `.broken` in the name but are not listed below.
 
-1. ``each-row.js`` - Show usage of ``client.eachRow()``, without auto paging.
-1. ``each-row-auto paged.js`` - Show usage of ``client.eachRow()``, with auto paging.
+- Basic
+  - [Connect](basic/basic-connect.js)
+  - [Execute with promise-based API](basic/basic-execute.js)
+  - [Execute using callbacks](basic/basic-execute-flow.js)
+<!-- - Mapper
+  - [Insert and retrieve using the Mapper](mapper/mapper-insert-retrieve.js) -->
+<!-- - Metadata
+  - [Get hosts information](metadata/metadata-hosts.js)
+  - [Get keyspaces information](metadata/metadata-keyspaces.js)
+  - [Get table information](metadata/metadata-table.js) -->
+- Data types
+  - [Working with user-defined types (UDT)](udt/udt-insert-select.js)
+  - [Working with tuples](tuple/tuple-insert-select.js)
+<!-- - Query tracing
+  - [Retrieving the trace of a query request](tracing/retrieve-query-trace.js) -->
+- Concurrent execution
+  - [Insert multiple rows in a table from an Array using built-in
+    method](concurrent-executions/execute-concurrent-array.js)
+  - [Execute multiple queries in a loop with a defined concurrency level](concurrent-executions/execute-in-loop.js)
+- Paging
+  - [Shows usage of ``client.eachRow()``, without auto paging.](./paging/each-row.js)
+  - [Shows usage of ``client.eachRow()``, with auto paging.](./paging/each-row-auto-paged.js)
 
-## Other examples
-
-For examples from the DataStax driver, see ``./DataStax`` directory.
+Each example is generally structured in a way where the `Client` is connected at the beginning.
+While this is suitable for example single script purposes, you should reuse a single `Client` instance.
