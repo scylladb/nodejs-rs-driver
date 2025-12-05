@@ -1,4 +1,4 @@
-use crate::errors::{ConvertedError, ErrorType, JsResult, js_typed_error, with_custom_error_sync};
+use crate::errors::{ConvertedError, JsResult, make_js_error, with_custom_error_sync};
 use napi::bindgen_prelude::{Buffer, BufferSlice};
 use std::net::IpAddr;
 
@@ -22,9 +22,8 @@ impl InetAddressWrapper {
                     inet: IpAddr::from(arr),
                 })
             } else {
-                Err(ConvertedError::from(js_typed_error(
-                    "Invalid IP address length",
-                    ErrorType::TypeError,
+                Err(ConvertedError::from(make_js_error(
+                    "TypeError#Invalid IP address length",
                 )))
             }
         })
