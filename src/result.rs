@@ -76,24 +76,31 @@ impl QueryResultWrapper {
 
     /// Extracts all the rows of the result into a vector of rows
     #[napi]
-    pub fn get_rows(&self) -> napi::Result<Option<Vec<RowWrapper>>> {
+    pub fn get_rows(&self) -> Option<(Buffer, i32)> {
         let result = match &self.inner {
             QueryResultVariant::RowsResult(v) => v,
             QueryResultVariant::EmptyResult(_) => {
-                return Ok(None);
+                return None;
             }
         };
 
-        let rows = result.rows::<Row>()
-            .expect("Type check against the Row type has failed; this is a bug in the underlying Rust driver");
+        let z = result.get_raw();
 
-        Ok(Some(
-            rows.map(|f| {
-                f.map(|v| RowWrapper { inner: v.columns })
-                    .map_err(err_to_napi)
-            })
-            .collect::<Result<Vec<_>, _>>()?,
+        Some((
+            Buffer::from(z.get_raw_rows().to_vec()),
+            z.rows_count().try_into().unwrap(),
         ))
+
+        // let rows = result.rows::<Row>()
+        //     .expect("Type check against the Row type has failed; this is a bug in the underlying Rust driver");
+
+        // Ok(Some(
+        //     rows.map(|f| {
+        //         f.map(|v| RowWrapper { inner: v.columns })
+        //             .map_err(err_to_napi)Buffer
+        //     })
+        //     .collect::<Result<Vec<_>, _>>()?,
+        // ))
     }
 
     /// Get the names of the columns in order, as they appear in the query result
