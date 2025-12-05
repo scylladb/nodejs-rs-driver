@@ -1,6 +1,8 @@
 use napi::{Error, Status, bindgen_prelude::Buffer, bindgen_prelude::BufferSlice};
 use uuid::Uuid;
 
+use crate::errors::{ConvertedError, JsResult, with_custom_error_sync};
+
 #[napi]
 pub struct UuidWrapper {
     uuid: Uuid,
@@ -9,11 +11,14 @@ pub struct UuidWrapper {
 #[napi]
 impl UuidWrapper {
     #[napi]
-    pub fn new(buffer: BufferSlice) -> napi::Result<Self> {
-        match Uuid::from_slice(buffer.as_ref()) {
-            Err(_) => Err(Error::new(Status::InvalidArg, "Invalid uuid buffer")),
+    pub fn new(buffer: BufferSlice) -> JsResult<UuidWrapper> {
+        with_custom_error_sync(|| match Uuid::from_slice(buffer.as_ref()) {
+            Err(_) => Err(ConvertedError::from(Error::new(
+                Status::InvalidArg,
+                "Invalid uuid buffer",
+            ))),
             Ok(uuid) => Ok(Self { uuid }),
-        }
+        })
     }
 
     #[napi]

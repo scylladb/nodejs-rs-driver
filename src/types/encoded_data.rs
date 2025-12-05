@@ -8,7 +8,7 @@ use scylla::{
     serialize::value::{BuiltinSerializationError, BuiltinSerializationErrorKind, SerializeValue},
 };
 
-use crate::errors::js_error;
+use crate::errors::make_js_error;
 
 enum MaybeUnsetNullableValue<T> {
     Value(T),
@@ -90,7 +90,7 @@ impl FromNapiValue for EncodedValuesWrapper {
                     inner: MaybeUnsetNullableValue::Value(z.to_vec()),
                 })
             },
-            _ => Err(js_error(
+            _ => Err(make_js_error(
                 "Expected value to be either `Buffer`, `null` or `undefined` when converting to `EncodedValuesWrapper`".to_owned(),
             )),
         }

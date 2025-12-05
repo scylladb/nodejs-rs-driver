@@ -1,7 +1,10 @@
 use napi::bindgen_prelude::BigInt;
 use scylla::value::CqlDuration;
 
-use crate::utils::bigint_to_i64;
+use crate::{
+    errors::{ConvertedResult, JsResult, with_custom_error_sync},
+    utils::bigint_to_i64,
+};
 
 #[napi]
 pub struct DurationWrapper {
@@ -13,11 +16,13 @@ pub struct DurationWrapper {
 #[napi]
 impl DurationWrapper {
     #[napi]
-    pub fn new(months: i32, days: i32, ns_bigint: BigInt) -> napi::Result<Self> {
-        Ok(DurationWrapper {
-            months,
-            days,
-            nanoseconds: bigint_to_i64(ns_bigint, "Nanoseconds must not overflow i64")?,
+    pub fn new(months: i32, days: i32, ns_bigint: BigInt) -> JsResult<DurationWrapper> {
+        with_custom_error_sync(|| {
+            ConvertedResult::Ok(DurationWrapper {
+                months,
+                days,
+                nanoseconds: bigint_to_i64(ns_bigint, "Nanoseconds must not overflow i64")?,
+            })
         })
     }
 

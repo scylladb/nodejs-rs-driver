@@ -1,7 +1,10 @@
 use napi::bindgen_prelude::{Buffer, ToNapiValue};
 use scylla::response::{PagingState, PagingStateResponse};
 
-use crate::{errors::js_error, result::QueryResultWrapper};
+use crate::{
+    errors::{JsResult, make_js_error, with_custom_error_sync},
+    result::QueryResultWrapper,
+};
 
 #[napi]
 pub struct PagingStateWrapper {
@@ -80,14 +83,16 @@ impl PagingStateResponseWrapper {
 
     /// Get the next page of the given query, assuming there are pages left
     #[napi]
-    pub fn next_page(&self) -> napi::Result<PagingStateWrapper> {
-        Ok(PagingStateWrapper {
-            inner: match &self.inner {
-                PagingStateResponse::HasMorePages { state } => state.clone(),
-                PagingStateResponse::NoMorePages => {
-                    return Err(js_error("All pages transferred"));
-                }
-            },
+    pub fn next_page(&self) -> JsResult<PagingStateWrapper> {
+        with_custom_error_sync(|| {
+            Ok(PagingStateWrapper {
+                inner: match &self.inner {
+                    PagingStateResponse::HasMorePages { state } => state.clone(),
+                    PagingStateResponse::NoMorePages => {
+                        return Err(make_js_error("All pages transferred"));
+                    }
+                },
+            })
         })
     }
 }

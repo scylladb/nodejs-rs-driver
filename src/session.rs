@@ -6,7 +6,10 @@ use scylla::response::PagingState;
 use scylla::statement::batch::Batch;
 use scylla::statement::{Consistency, SerialConsistency, Statement};
 
-use crate::errors::{err_to_napi, js_error};
+use crate::errors::{
+    ConvertedError, ConvertedResult, JsResult, make_js_error, with_custom_error_async,
+    with_custom_error_sync,
+};
 use crate::options;
 use crate::paging::{PagingResult, PagingStateWrapper};
 use crate::requests::request::{QueryOptionsObj, QueryOptionsWrapper};
@@ -53,14 +56,17 @@ pub struct SessionWrapper {
 impl SessionWrapper {
     /// Creates session based on the provided session options.
     #[napi]
-    pub async fn create_session(options: SessionOptions) -> napi::Result<Self> {
-        let builder = configure_session_builder(&options)?;
-        let session = builder.build().await.map_err(err_to_napi)?;
-        let session: CachingSession = CachingSession::from(
-            session,
-            options.cache_size.unwrap_or(DEFAULT_CACHE_SIZE) as usize,
-        );
-        Ok(SessionWrapper { inner: session })
+    pub async fn create_session(options: SessionOptions) -> JsResult<SessionWrapper> {
+        with_custom_error_async(async || {
+            let builder = configure_session_builder(&options)?;
+            let session = builder.build().await?;
+            let session: CachingSession = CachingSession::from(
+                session,
+                options.cache_size.unwrap_or(DEFAULT_CACHE_SIZE) as usize,
+            );
+            ConvertedResult::Ok(SessionWrapper { inner: session })
+        })
+        .await
     }
 
     /// Returns the name of the current keyspace
@@ -86,15 +92,17 @@ impl SessionWrapper {
         query: String,
         params: Vec<EncodedValuesWrapper>,
         options: &QueryOptionsWrapper,
-    ) -> napi::Result<QueryResultWrapper> {
-        let statement: Statement = apply_statement_options(query.into(), &options.options)?;
-        let query_result = self
-            .inner
-            .get_session()
-            .query_unpaged(statement, params)
-            .await
-            .map_err(err_to_napi)?;
-        QueryResultWrapper::from_query(query_result)
+    ) -> JsResult<QueryResultWrapper> {
+        with_custom_error_async(async || {
+            let statement: Statement = apply_statement_options(query.into(), &options.options)?;
+            let query_result = self
+                .inner
+                .get_session()
+                .query_unpaged(statement, params)
+                .await?;
+            QueryResultWrapper::from_query(query_result)
+        })
+        .await
     }
 
     /// Prepares a statement through rust driver for a given session
@@ -103,16 +111,18 @@ impl SessionWrapper {
     pub async fn prepare_statement(
         &self,
         statement: String,
-    ) -> napi::Result<Vec<ComplexType<'static>>> {
-        let statement: Statement = statement.into();
-        let w = PreparedStatementWrapper {
-            prepared: self
-                .inner
-                .add_prepared_statement(&statement) // TODO: change for add_prepared_statement_to_owned after it is made public
-                .await
-                .map_err(err_to_napi)?,
-        };
-        Ok(w.get_expected_types())
+    ) -> JsResult<Vec<ComplexType<'static>>> {
+        with_custom_error_async(async || {
+            let statement: Statement = statement.into();
+            let w = PreparedStatementWrapper {
+                prepared: self
+                    .inner
+                    .add_prepared_statement(&statement) // TODO: change for add_prepared_statement_to_owned after it is made public
+                    .await?,
+            };
+            ConvertedResult::Ok(w.get_expected_types())
+        })
+        .await
     }
 
     /// Execute a given prepared statement against the database with provided parameters.
@@ -131,14 +141,12 @@ impl SessionWrapper {
         query: String,
         params: Vec<EncodedValuesWrapper>,
         options: &QueryOptionsWrapper,
-    ) -> napi::Result<QueryResultWrapper> {
-        let query = apply_statement_options(query.into(), &options.options)?;
-        QueryResultWrapper::from_query(
-            self.inner
-                .execute_unpaged(query, params)
-                .await
-                .map_err(err_to_napi)?,
-        )
+    ) -> JsResult<QueryResultWrapper> {
+        with_custom_error_async(async || {
+            let query = apply_statement_options(query.into(), &options.options)?;
+            QueryResultWrapper::from_query(self.inner.execute_unpaged(query, params).await?)
+        })
+        .await
     }
 
     /// Executes all statements in the provided batch. Those statements can be either prepared or unprepared.
@@ -149,13 +157,12 @@ impl SessionWrapper {
         &self,
         batch: &BatchWrapper,
         params: Vec<Vec<EncodedValuesWrapper>>,
-    ) -> napi::Result<QueryResultWrapper> {
-        QueryResultWrapper::from_query(
-            self.inner
-                .batch(&batch.inner, params)
-                .await
-                .map_err(err_to_napi)?,
-        )
+    ) -> JsResult<QueryResultWrapper> {
+        with_custom_error_async(async || {
+            let res = self.inner.batch(&batch.inner, params).await?;
+            QueryResultWrapper::from_query(res)
+        })
+        .await
     }
 
     /// Query a single page of a prepared statement
@@ -170,23 +177,25 @@ impl SessionWrapper {
         params: Vec<EncodedValuesWrapper>,
         options: &QueryOptionsWrapper,
         paging_state: Option<&PagingStateWrapper>,
-    ) -> napi::Result<PagingResult> {
-        let statement: Statement = apply_statement_options(query.into(), &options.options)?;
-        let paging_state = paging_state
-            .map(|e| e.inner.clone())
-            .unwrap_or(PagingState::start());
+    ) -> JsResult<PagingResult> {
+        with_custom_error_async(async || {
+            let statement: Statement = apply_statement_options(query.into(), &options.options)?;
+            let paging_state = paging_state
+                .map(|e| e.inner.clone())
+                .unwrap_or(PagingState::start());
 
-        let (result, paging_state_response) = self
-            .inner
-            .get_session()
-            .query_single_page(statement, params, paging_state)
-            .await
-            .map_err(err_to_napi)?;
+            let (result, paging_state_response) = self
+                .inner
+                .get_session()
+                .query_single_page(statement, params, paging_state)
+                .await?;
 
-        Ok(PagingResult {
-            result: QueryResultWrapper::from_query(result)?,
-            paging_state: paging_state_response.into(),
+            ConvertedResult::Ok(PagingResult {
+                result: QueryResultWrapper::from_query(result)?,
+                paging_state: paging_state_response.into(),
+            })
         })
+        .await
     }
 
     /// Execute a single page of a prepared statement
@@ -201,21 +210,23 @@ impl SessionWrapper {
         params: Vec<EncodedValuesWrapper>,
         options: &QueryOptionsWrapper,
         paging_state: Option<&PagingStateWrapper>,
-    ) -> napi::Result<PagingResult> {
-        let paging_state = paging_state
-            .map(|e| e.inner.clone())
-            .unwrap_or(PagingState::start());
-        let prepared = apply_statement_options(query.into(), &options.options)?;
+    ) -> JsResult<PagingResult> {
+        with_custom_error_async(async || {
+            let paging_state = paging_state
+                .map(|e| e.inner.clone())
+                .unwrap_or(PagingState::start());
+            let prepared = apply_statement_options(query.into(), &options.options)?;
 
-        let (result, paging_state) = self
-            .inner
-            .execute_single_page(prepared, params, paging_state)
-            .await
-            .map_err(err_to_napi)?;
-        Ok(PagingResult {
-            result: QueryResultWrapper::from_query(result)?,
-            paging_state: paging_state.into(),
+            let (result, paging_state) = self
+                .inner
+                .execute_single_page(prepared, params, paging_state)
+                .await?;
+            ConvertedResult::Ok(PagingResult {
+                result: QueryResultWrapper::from_query(result)?,
+                paging_state: paging_state.into(),
+            })
         })
+        .await
     }
 }
 
@@ -225,16 +236,18 @@ impl SessionWrapper {
 pub fn create_prepared_batch(
     statements: Vec<String>,
     options: &QueryOptionsWrapper,
-) -> napi::Result<BatchWrapper> {
-    let mut batch: Batch = Default::default();
-    statements
-        .iter()
-        .for_each(|q| batch.append_statement(q.as_str()));
-    batch = apply_batch_options(batch, &options.options)?;
-    Ok(BatchWrapper { inner: batch })
+) -> JsResult<BatchWrapper> {
+    with_custom_error_sync(|| {
+        let mut batch: Batch = Default::default();
+        statements
+            .iter()
+            .for_each(|q| batch.append_statement(q.as_str()));
+        batch = apply_batch_options(batch, &options.options)?;
+        ConvertedResult::Ok(BatchWrapper { inner: batch })
+    })
 }
 
-fn configure_session_builder(options: &SessionOptions) -> napi::Result<SessionBuilder> {
+fn configure_session_builder(options: &SessionOptions) -> ConvertedResult<SessionBuilder> {
     let mut builder = SessionBuilder::new();
     builder = builder.custom_identity(self_identity(options));
     builder = builder.known_nodes(options.connect_points.as_deref().unwrap_or(&[]));
@@ -257,8 +270,7 @@ fn configure_session_builder(options: &SessionOptions) -> napi::Result<SessionBu
     }
 
     if let Some(ssl_options) = &options.ssl_options {
-        let mut ssl_context_builder =
-            SslContextBuilder::new(SslMethod::tls()).map_err(err_to_napi)?;
+        let mut ssl_context_builder = SslContextBuilder::new(SslMethod::tls())?;
 
         ssl_context_builder.set_verify(match ssl_options.reject_unauthorized {
             Some(false) => SslVerifyMode::NONE,
@@ -275,14 +287,16 @@ fn configure_session_builder(options: &SessionOptions) -> napi::Result<SessionBu
 pub fn create_unprepared_batch(
     statements: Vec<String>,
     options: &QueryOptionsWrapper,
-) -> napi::Result<BatchWrapper> {
-    let mut batch: Batch = Default::default();
-    statements
-        .into_iter()
-        .for_each(|q| batch.append_statement(q.as_str()));
+) -> JsResult<BatchWrapper> {
+    with_custom_error_sync(|| {
+        let mut batch: Batch = Default::default();
+        statements
+            .into_iter()
+            .for_each(|q| batch.append_statement(q.as_str()));
 
-    batch = apply_batch_options(batch, &options.options)?;
-    Ok(BatchWrapper { inner: batch })
+        batch = apply_batch_options(batch, &options.options)?;
+        ConvertedResult::Ok(BatchWrapper { inner: batch })
+    })
 }
 
 /// Macro to allow applying options to any query type
@@ -291,19 +305,18 @@ macro_rules! make_apply_options {
         fn $fn_name(
             mut statement: $statement_type,
             options: &QueryOptionsObj,
-        ) -> napi::Result<$statement_type> {
+        ) -> ConvertedResult<$statement_type> {
             if let Some(o) = options.consistency {
                 statement.set_consistency(
                     Consistency::try_from(o)
-                        .map_err(|_| js_error(format!("Unknown consistency value: {o}")))?,
+                        .map_err(|_| make_js_error(format!("Unknown consistency value: {o}")))?,
                 );
             }
 
             if let Some(o) = options.serial_consistency {
-                statement
-                    .set_serial_consistency(Some(SerialConsistency::try_from(o).map_err(
-                        |_| js_error(format!("Unknown serial consistency value: {o}")),
-                    )?));
+                statement.set_serial_consistency(Some(SerialConsistency::try_from(o).map_err(
+                    |_| make_js_error(format!("Unknown serial consistency value: {o}")),
+                )?));
             }
 
             if let Some(o) = options.is_idempotent {
@@ -334,13 +347,15 @@ macro_rules! make_non_batch_apply_options {
         fn $fn_name(
             statement: $statement_type,
             options: &QueryOptionsObj,
-        ) -> napi::Result<$statement_type> {
+        ) -> ConvertedResult<$statement_type> {
             // Statement with partial options applied -
             // those that are common with batch queries
             let mut statement_with_part_of_options_applied = $partial_name(statement, options)?;
             if let Some(o) = options.fetch_size {
                 if !o.is_positive() {
-                    return Err(js_error("fetch size must be a positive value"));
+                    return Err(ConvertedError::from(make_js_error(
+                        "fetch size must be a positive value",
+                    )));
                 }
                 statement_with_part_of_options_applied.set_page_size(o);
             }

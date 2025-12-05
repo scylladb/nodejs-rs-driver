@@ -9,19 +9,19 @@ describe("InetAddress", function () {
         it("should validate the Buffer length", function () {
             assert.throws(function () {
                 return new InetAddress(utils.allocBufferUnsafe(10));
-            }, TypeError);
+            }, Error);
             assert.throws(function () {
                 return new InetAddress(null);
-            }, TypeError);
+            }, Error);
             assert.throws(function () {
                 return new InetAddress();
-            }, TypeError);
+            }, Error);
             assert.doesNotThrow(function () {
                 return new InetAddress(utils.allocBufferUnsafe(16));
-            }, TypeError);
+            }, Error);
             assert.doesNotThrow(function () {
                 return new InetAddress(utils.allocBufferUnsafe(4));
-            }, TypeError);
+            }, Error);
         });
     });
     describe("#toString()", function () {
