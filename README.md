@@ -1,152 +1,59 @@
 # ScyllaDB Node.js-RS Driver
 
-![Static Badge](https://img.shields.io/badge/API%20coverage-0%25-red)
-![test workflow](https://github.com/scylladb-zpp-2024-javascript-driver/scylladb-javascript-driver/actions/workflows/tests.yml/badge.svg?branch=main)
-![quality workflow](https://github.com/scylladb-zpp-2024-javascript-driver/scylladb-javascript-driver/actions/workflows/code-quality.yml/badge.svg?branch=main)
+![test workflow](https://github.com/scylladb-zpp-2024-javascript-driver/scylladb-javascript-driver/actions/workflows/integration-tests.yml/badge.svg?branch=main)
+![quality workflow](https://github.com/scylladb-zpp-2024-javascript-driver/scylladb-javascript-driver/actions/workflows/check-docs.yml/badge.svg?branch=main)
 
 This is a client-side driver for [ScyllaDB](https://www.scylladb.com/) written in Node.js and Rust.
 This driver is an overlay over the [ScyllaDB Rust Driver](https://github.com/scylladb/scylla-rust-driver),
 with the interface based on the [DataStax Node.js Driver](https://github.com/datastax/nodejs-driver).
-Although optimized for ScyllaDB, the driver is also compatible with [Apache Cassandra®].
+Although optimized for ScyllaDB, the driver is also compatible with [Apache Cassandra®](https://cassandra.apache.org/).
 
-This driver is currently in the experimental state.
+This driver is currently in the experimental state. We are working on features necessary for the driver to be considered production ready.
 
-API documentation is available [here](https://scylladb.github.io/nodejs-rs-driver/docs/). <!-- Note: update those links after first commit to new main -->
+## Getting started
 
-Book is available [here](https://scylladb.github.io/nodejs-rs-driver/book)
+### Installation
 
-Each of the driver endpoint is listed and documented int the API documentation, while more in-depth look into the driver usage can be found in the book.
+``npm install [TODO:]``
 
-## Installation and build process
+### Documentation
 
-### Install dependencies
+The API ([documentation](https://scylladb.github.io/nodejs-rs-driver/docs/)) of the driver is based on the DataStax driver.
+Some of the endpoints are already implemented, others are planned, and some parts of the API (including features that were deprecated and are specific to DataStax databases) are removed.
+The status of each API endpoint is listed in [this document](https://docs.google.com/spreadsheets/d/e/2PACX-1vQyg-WhZaMVdBKttbDq7Iuec4KjoMJnU7XEGyiRBlgNubid8T7WqtAH1VDy32meQq5-04P72jLqhF3O/pubhtml#gid=2021765806) and unimplemented features are tracked in the repository [issues](https://github.com/scylladb/nodejs-rs-driver/issues).
 
-You can install required packages with the following command:
+<!-- Currently there is very little content in the book, so I don't think we should list it in the readme -->
+<!-- Book is available [here](https://scylladb.github.io/nodejs-rs-driver/book) -->
 
-```bash
-npm install
-```
+## Examples
 
-You also need to install [NAPI-RS cli](https://napi.rs/docs/introduction/getting-started#install-cli): 
+You can find example usages of the driver in the [examples directory](https://github.com/scylladb/nodejs-rs-driver/tree/main/examples).
 
-```bash
-npm install -g @napi-rs/cli
-```
+## Features and roadmap
 
-### Building
+The driver supports the following:
 
-For build process use this command:
+- Simple, Prepared, and Batch statements
+- Asynchronous IO, parallel execution, request pipelining
+- Token-aware routing
+- Shard-aware and Tablet-aware routing (specific to ScyllaDB)
+- CQL binary protocol version 4
+- Works with any cluster size
+- Both promise and callback-based API
+- Row streaming and pipes
+- Built-in TypeScript support
+- Password authentication
 
-```bash
-npm run build
-```
+Features that are planned for the driver to become production ready:
 
-If you want to build in development mode use this command:
+- Configurable load balancing and retry policies
+- Faster performance, compared to DataStax Node.js driver
+- SSL support
+- Error handling, based on the Rust driver
+- Migration guide from the DataStax driver
 
-```bash
-npm run build:debug
-```
+For other planned features see our [Milestones](https://github.com/scylladb/nodejs-rs-driver/milestones)
 
-## Testing the driver
+## Reference Documentation
 
-### Test dependencies
-
-Before running any of the tests, ensure the driver is built correctly.
-
-For the integration tests you need to do the following steps before running tests:
-
-1. Install [scylla-ccm](https://github.com/scylladb/scylla-ccm) package.
-You may also use [ccm](https://github.com/riptano/ccm) but not all tests are guaranteed to pass while using it.
-2. Have ``java-8`` installed and available in path ``/usr/lib/jvm/java-8`` (scylla-ccm uses this hardcoded path)
-
-### Running the tests
-
-You can run currently supported test with the following commands:
-
-- Unit tests (``npm run unit``)
-- Integration tests (``npm run integration``)
-
-There are also some categories of unsupported tests. See `package.json` for a list of all possible commands.
-
-## Running examples
-
-Before running examples, you need to build the driver and install packages for the examples by running:
-
-```bash
-npm install
-```
-
-in ``./examples`` directory. You need also Cassandra or ScyllaDB running with at least three nodes (to ensure the replication_factor can be satisfied).
-By default, examples assume the entrypoint for the database is ``172.17.0.2:9042`` but you can change it by setting ``SCYLLA_URI`` env variable.
-
-You can run all examples with the following command:
-
-```bash
-npm run examples
-```
-
-This will check if all examples finished successfully, but will hide any output generated by the examples.
-
-Alternatively you can run just a specific example by providing the path to it:
-
-```bash
-node ./examples/basic.js
-```
-
-## List of supported endpoints
-
-The goal for this driver is to have the same interface as the DataStax Node.js driver.
-You can find the current status for the endpoint compatibility in [this documentation](https://docs.google.com/spreadsheets/d/e/2PACX-1vQyg-WhZaMVdBKttbDq7Iuec4KjoMJnU7XEGyiRBlgNubid8T7WqtAH1VDy32meQq5-04P72jLqhF3O/pubhtml#gid=2021765806).
-
-## File structure
-
-| File / Directory     | Origin                             | Usage
-| ----------------- | ---------------------------------- | --------------------------------------
-| .cargo            | Generated by 'napi-rs'             |
-| .github           | Generated by 'napi-rs'             | CI-CD for GitHub
-| examples          | Copied from Datastax               | Example usage of the Datastax driver
-| lib               | Copied from Datastax               | Source code of the Datastax driver
-| npm               | Generated by 'napi-rs'             | Files for publishing to the NPM
-| src               | Generated by 'napi-rs'             | Source files of Rust code of our driver
-| test              | Copied from Datastax               | Tests from Datastax
-| .gitignore        | Generated by 'napi-rs'             | .gitignore modified (template for Node.js)
-| .npmignore        | Generated by 'napi-rs'             | Folders ignored when publishing to the NPM
-| .prettierignore   | Manually created                   | Files to ignore when prettifying
-| .prettierrc       | Manually created                   | File specifying rules for prettifying JS files
-| build.rs          | Generated by 'napi-rs'             | File needed for a build process
-| Cargo.toml        | Generated by 'napi-rs'             | Cargo file
-| index.d.ts        | Generated by 'napi-rs' every build | Types of native JS functions (generated on build)
-| index.js          | Generated by 'napi-rs' every build | File containing native JS functions (generated on build)
-| main.d.ts         | Copied from Datastax and renamed   | Types of the JS API
-| main.js           | Copied from Datastax and renamed   | Entry file for the JS API
-| package.json      | Generated by 'napi-rs'             | NPM package description
-| package-lock.json | npm install                        | NPM installed packages
-| rustfmt.toml      | Generated by 'napi-rs'             | Rust format file
-
-Files in .gitignore (auto-generated)
-
-- node_modules/
-- target/
-- Cargo.lock
-- *.node
-
-## Not implemented functions
-
-For functions not yet implemented:
-
-```js
-function functionName()) {
-    throw new Error(`TODO: Not implemented`);
-}
-```
-
-And for entities that will not be implemented:
-
-```js
-/**
- * @deprecated Not supported by the driver. Usage will throw an error.
- */
-function entityName() {
-  throw new ReferenceError(`entityName is not supported by our driver`);
-}
-```
+- [CQL binary protocol](https://github.com/apache/cassandra/blob/trunk/doc/native_protocol_v4.spec) specification version 4
