@@ -1,6 +1,7 @@
 "use strict";
 
 const { _Client } = require("../../main");
+const cassandra = require(process.argv[2]);
 
 const tableSchemaBasic = "CREATE TABLE benchmarks.basic (id uuid, val int, PRIMARY KEY(id))";
 const singleStepCount = 1000000;
@@ -37,6 +38,27 @@ async function prepareDatabase(client, tableDefinition, next) {
 }
 
 /**
+ * 
+ * @param {_Client} client 
+ * @param {number} count 
+ * @param {Function} next 
+ * @returns 
+ */
+async function insertSimple(client, count, next) {
+    let query =
+        "INSERT INTO benchmarks.basic (id, val) VALUES (?, ?)";
+    for (let i = 0; i < count; i++) {
+        let id = cassandra.types.Uuid.random();
+        try {
+            await client.execute(query, [id, 100], { prepare: true });
+        } catch (err) {
+            return next(err);
+        }
+    }
+    next();
+}
+
+/**
  * Call callback, each with up to singleStepCount
  * multiple times, so that sum of all called callback is equal to n
  * 
@@ -49,10 +71,24 @@ async function repeatCapped(callback, n) {
         const finalStep = Math.min(n, (rep + 1) * singleStepCount);
         await callback(finalStep - rep * singleStepCount);
     }
-    
+}
+
+async function executeMultipleRepeatCapped(callback, n, asyncLevel) {
+    /**
+     * @type {Array<Promise<_>>}
+     */
+    let promises = [];
+    for (let c = 0; c < asyncLevel; c++) {
+        promises.push(repeatCapped(callback, n));
+    }
+    for (let c = 0; c < asyncLevel; c++) {
+        await promises[c];
+    }
 }
 
 exports.tableSchemaBasic = tableSchemaBasic;
 exports.getClientArgs = getClientArgs;
 exports.prepareDatabase = prepareDatabase;
 exports.repeatCapped = repeatCapped;
+exports.executeMultipleRepeatCapped = executeMultipleRepeatCapped;
+exports.insertSimple = insertSimple;
