@@ -3,6 +3,18 @@
   "version": "0.0.2",
   "description": "",
   "license": "Apache-2.0",
+  "contributors": [
+    {
+      "name": "Stanisław Czech",
+      "email": "stanislaw.czech@scylladb.com",
+      "url": "https://github.com/adespawn"
+    },
+    {
+      "name": "Wojciech Przytuła",
+      "email": "wojciech.przytula@scylladb.com",
+      "url": "https://github.com/wprzytula"
+    }
+  ],
   "main": "main.js",
   "types": "main.d.ts",
   "napi": {
