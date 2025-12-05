@@ -4,9 +4,7 @@ import { types } from "../types";
 export namespace policies {
   function defaultAddressTranslator(): addressResolution.AddressTranslator;
 
-  function defaultLoadBalancingPolicy(
-    localDc?: string,
-  ): loadBalancing.LoadBalancingPolicy;
+  function defaultLoadBalancingPolicy(): loadBalancing.LoadBalancingPolicy;
 
   function defaultReconnectionPolicy(): reconnection.ReconnectionPolicy;
 
@@ -53,8 +51,6 @@ export namespace policies {
       constructor(childPolicy: LoadBalancingPolicy, allowList: string[]);
     }
 
-    class WhiteListPolicy extends AllowListPolicy {}
-
     class RoundRobinPolicy extends LoadBalancingPolicy {
       constructor();
     }
@@ -64,6 +60,18 @@ export namespace policies {
         localDc?: string;
         filter?: (host: Host) => boolean;
       });
+    }
+    
+    class LoadBalancingConfig {
+      preferDatacenter?: string;
+      preferRack?: string;
+      tokenAware?: boolean;
+      permitDcFailover?: boolean;
+      enableShufflingReplicas?: boolean;
+    }
+    
+    class NewDefaultLoadBalancingPolicy extends LoadBalancingPolicy {
+      constructor(config?: LoadBalancingConfig);
     }
   }
 
@@ -164,8 +172,7 @@ export namespace policies {
 
   namespace speculativeExecution {
     class ConstantSpeculativeExecutionPolicy
-      implements SpeculativeExecutionPolicy
-    {
+      implements SpeculativeExecutionPolicy {
       constructor(delay: number, maxSpeculativeExecutions: number);
 
       getOptions(): Map<string, object>;

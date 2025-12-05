@@ -39,7 +39,7 @@
 /// Example {some_field: Some(false), other_field: None}
 /// ```
 macro_rules! define_js_to_rust_convertible_object {
-    ($struct_name: ident{$($field_name:ident, $js_name:ident: $field_type:ty),*}) => {
+    ($struct_name: ident{$($field_name:ident, $js_name:ident: $field_type:ty),*,}) => {
         // The PartialEq and Eq are used only for testing purposes
         // If at some point those traits become a problem, feel free to remove them
         // Or update the macro to make them optional

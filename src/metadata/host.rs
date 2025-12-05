@@ -8,7 +8,7 @@ define_rust_to_js_convertible_object!(
         host_id, hostId: Buffer,
         address, address: String,
         datacenter, datacenter: Option<String>,
-        rack, rack: Option<String>
+        rack, rack: Option<String>,
     }
 );
 

@@ -31,7 +31,7 @@
 /// {someField: false, otherField: 42}
 /// ```
 macro_rules! define_rust_to_js_convertible_object {
-    ($struct_name: ident{$($field_name:ident, $js_name:ident: $field_type:ty),*}) => {
+    ($struct_name: ident{$($field_name:ident, $js_name:ident: $field_type:ty),*,}) => {
         pub struct $struct_name {
             $(
                 pub $field_name: $field_type,

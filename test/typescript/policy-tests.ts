@@ -18,13 +18,9 @@ function myTest(): void {
 
   lbp = new policies.loadBalancing.DCAwareRoundRobinPolicy("dc1");
   lbp = new policies.loadBalancing.AllowListPolicy(lbp, ["a", "b", "c"]);
-  // For backward compatibility only
-  lbp = new policies.loadBalancing.WhiteListPolicy(lbp, ["a", "b", "c"]);
   lbp = new TokenAwarePolicy(lbp);
   lbp.getOptions();
 
-  // defaultLoadBalancingPolicy method should have an optional string parameter
-  lbp = policies.defaultLoadBalancingPolicy("dc1");
   lbp = policies.defaultLoadBalancingPolicy();
 
   rp = new ConstantReconnectionPolicy(10);
