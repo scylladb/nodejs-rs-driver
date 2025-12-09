@@ -1,6 +1,6 @@
 "use strict";
 const cassandra = require("scylladb-nodejs-rs-driver");
-const { getClientArgs } = require("../DataStax/util");
+const { getClientArgs } = require("../util");
 const async = require("async");
 
 const client = new cassandra.Client(getClientArgs());
