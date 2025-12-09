@@ -108,6 +108,10 @@ jobs:
         shell: bash
       - name: Copy index files
         run: cp ./artifacts/index.js ./artifacts/index.d.ts .
+      # napi artifacts copies binaries both to specific platform directories and the main directory
+      # We want to release the binaries only in the platform specific directories
+      - name: Clean up binaries 
+        run: rm *.node
       - name: Publish
         run: |
           npm config set provenance true
