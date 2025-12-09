@@ -1,5 +1,5 @@
 use scylla::statement::batch::{Batch, BatchStatement};
-use std::{cmp::min, env};
+use std::cmp::min;
 use uuid::Uuid;
 
 mod common;
@@ -9,12 +9,9 @@ const STEP: i32 = 3971;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let n: i32 = env::var("CNT")
-        .ok()
-        .and_then(|s: String| s.parse::<i32>().ok())
-        .expect("CNT parameter is required.");
+    let n: i32 = common::get_cnt();
 
-    let session = common::init_simple_table().await?;
+    let session = common::init_simple_table_caching().await?;
 
     let insert_query = "INSERT INTO benchmarks.basic (id, val) VALUES (?, ?)";
 
