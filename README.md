@@ -14,7 +14,9 @@ This driver is currently in the experimental state. We are working on features n
 
 ### Installation
 
-``npm install [TODO:]``
+``npm install scylladb-driver-alpha``
+
+Currently only linux x86_64 architecture is supported with planned support for other architectures in the future.
 
 ### Documentation
 
