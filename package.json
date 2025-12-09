@@ -1,6 +1,6 @@
 {
   "name": "scylladb-nodejs-rs-driver",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "description": "",
   "license": "Apache-2.0",
   "contributors": [
