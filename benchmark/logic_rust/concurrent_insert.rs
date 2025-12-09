@@ -50,17 +50,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     join_all(handles).await;
 
-    let select_query = "SELECT COUNT(1) FROM benchmarks.basic USING TIMEOUT 120s;";
-
-    assert!(
-        session
-            .query_unpaged(select_query, &[])
-            .await?
-            .into_rows_result()?
-            .first_row::<(i64,)>()?
-            .0
-            == n.into()
-    );
+    common::check_row_cnt(&session, n).await?;
 
     Ok(())
 }

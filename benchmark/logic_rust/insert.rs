@@ -23,5 +23,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .await?;
     }
 
+    common::check_row_cnt(session.get_session(), n).await?;
+
     Ok(())
 }
