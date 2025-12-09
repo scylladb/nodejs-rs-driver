@@ -1,6 +1,6 @@
 "use strict";
 const async = require("async");
-// Possible values of argv[2] (driver) are scylladb-nodejs-rs-driver and cassandra-driver.
+// Possible values of argv[2] (driver) are scylladb-driver-alpha and cassandra-driver.
 const cassandra = require(process.argv[2]);
 const utils = require("./utils");
 const { exit } = require("process");

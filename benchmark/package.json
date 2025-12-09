@@ -1,5 +1,5 @@
 {
-    "name": "scylladb-nodejs-rs-driver-benchmarks",
+    "name": "scylladb-driver-alpha-benchmarks",
     "description": "Benchmarks for the driver",
     "version": "0.0.2",
     "license": "Apache-2.0",
@@ -7,6 +7,6 @@
     "dependencies": {
         "async": "^1.5.2",
         "cassandra-driver": "^4.8.0",
-        "scylladb-nodejs-rs-driver": "file:./../"
+        "scylladb-driver-alpha": "file:./../"
     }
 }

@@ -1,5 +1,5 @@
 {
-  "name": "scylladb-nodejs-rs-driver",
+  "name": "scylladb-driver-alpha",
   "version": "0.1.0",
   "description": "Async CQL driver for Node.js, built on top of Rust driver, optimized for ScyllaDB!",
   "license": "Apache-2.0",
@@ -18,7 +18,7 @@
   "main": "main.js",
   "types": "main.d.ts",
   "napi": {
-    "binary-name": "scylladb-nodejs-rs-driver",
+    "binary-name": "scylladb-driver-alpha",
     "targets": [
       "x86_64-unknown-linux-gnu"
     ]

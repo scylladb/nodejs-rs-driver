@@ -5,7 +5,7 @@
   "license": "Apache-2.0",
   "private": true,
   "dependencies": {
-    "scylladb-nodejs-rs-driver": "file:./../",
+    "scylladb-driver-alpha": "file:./../",
     "async": "^1.5.2"
   },
   "scripts": {
