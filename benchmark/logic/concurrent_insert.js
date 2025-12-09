@@ -4,7 +4,6 @@ const async = require("async");
 const cassandra = require(process.argv[2]);
 const utils = require("./utils");
 const { exit } = require("process");
-const assert = require("assert");
 
 const client = new cassandra.Client(utils.getClientArgs());
 const iterCnt = parseInt(process.argv[3]);
@@ -34,14 +33,7 @@ async.series(
             next();
         },
         async function test(next) {
-            const query = "SELECT COUNT(1) FROM benchmarks.basic USING TIMEOUT 120s;";
-            try {
-                let res = await client.execute(query);
-                assert(res.rows[0].count == iterCnt);
-            } catch (err) {
-                return next(err);
-            }
-            next();
+            utils.checkRowCount(client, iterCnt, next);
         },
         function r() {
             exit(0);

@@ -1,6 +1,7 @@
 "use strict";
 const { randomBytes } = require("crypto");
 const utils = require("../../lib/utils");
+const assert = require("assert");
 
 const { _Client } = require("../../main");
 
@@ -53,11 +54,8 @@ async function repeatCapped(callback, n) {
         const finalStep = Math.min(n, (rep + 1) * singleStepCount);
         await callback(finalStep - rep * singleStepCount);
     }
-    
+
 }
-
-
-
 
 function insertDeSer(cassandra) {
     const id = cassandra.types.Uuid.random();
@@ -80,6 +78,42 @@ function insertConcurrentDeSer(cassandra, n) {
     return allParameters;
 }
 
+async function queryWithRowCheck(client, number, iterCnt, next) {
+    const query = "SELECT * FROM benchmarks.basic";
+    for (let i = 0; i < iterCnt; i++) {
+        try {
+            // The idea for the select benchmark is to select all of the rows in a single page.
+            let res = await client.execute(query, [], { fetchSize: number });
+            assert.equal(res.rowLength, number);
+        } catch (err) {
+            return next(err);
+        }
+    }
+    next();
+}
+
+async function executeInsertDerser(client, iterCnt, cassandra, next) {
+    for (let i = 0; i < iterCnt; i++) {
+        try {
+            await client.execute(DesSerInsertStatement, insertDeSer(cassandra), { prepare: true });
+        } catch (err) {
+            return next(err);
+        }
+    }
+    next();
+}
+
+async function checkRowCount(client, expected, next) {
+    const query = "SELECT COUNT(1) FROM benchmarks.basic USING TIMEOUT 120s;";
+    try {
+        let res = await client.execute(query);
+        assert.equal(res.rows[0].count, expected);
+    } catch (err) {
+        return next(err);
+    }
+    next();
+}
+
 exports.getClientArgs = getClientArgs;
 exports.insertDeSer = insertDeSer;
 exports.tableSchemaBasic = tableSchemaBasic;
@@ -89,3 +123,6 @@ exports.getClientArgs = getClientArgs;
 exports.prepareDatabase = prepareDatabase;
 exports.insertConcurrentDeSer = insertConcurrentDeSer;
 exports.repeatCapped = repeatCapped;
+exports.queryWithRowCheck = queryWithRowCheck;
+exports.executeInsertDerser = executeInsertDerser;
+exports.checkRowCount = checkRowCount;
