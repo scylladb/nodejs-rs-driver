@@ -4,7 +4,6 @@ const async = require("async");
 const cassandra = require(process.argv[2]);
 const utils = require("./utils");
 const { exit } = require("process");
-const { assert } = require("console");
 
 const client = new cassandra.Client(utils.getClientArgs());
 const iterCnt = parseInt(process.argv[3]);
@@ -19,17 +18,7 @@ function selectWithRows(number) {
                 utils.insertSimple(client, 10, next);
             },
             async function query(next) {
-                const query = "SELECT * FROM benchmarks.basic";
-                for (let i = 0; i < iterCnt; i++) {
-                    try {
-                        // The idea for the select benchmark is to select all of the rows in a single page.
-                        let res = await client.execute(query, [], { fetchSize: number });
-                        assert(res.rowLength === number);
-                    } catch (err) {
-                        return next(err);
-                    }
-                }
-                next();
+                await utils.queryWithRowCheck(client, number, iterCnt, next);
             },
             function r() {
                 exit(0);

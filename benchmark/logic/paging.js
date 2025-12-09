@@ -4,7 +4,7 @@ const async = require("async");
 const cassandra = require(process.argv[2]);
 const utils = require("./utils");
 const { exit } = require("process");
-const { assert } = require("console");
+const assert = require("assert");
 
 const client = new cassandra.Client(utils.getClientArgs());
 const iterCnt = parseInt(process.argv[3]);
@@ -26,7 +26,7 @@ async.series(
                         for await (const row of q) {
                             s += row['val'];
                         }
-                        assert(s === 5000);
+                        assert.equal(s, 5000);
                     } catch (err) {
                         return next(err);
                     }

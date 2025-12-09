@@ -1,6 +1,7 @@
 "use strict";
 const { randomBytes } = require("crypto");
 const utils = require("../../lib/utils");
+const assert = require("assert");
 
 const { _Client } = require("../../main");
 const cassandra = require(process.argv[2]);
@@ -90,9 +91,6 @@ async function executeMultipleRepeatCapped(callback, n, asyncLevel) {
     }
 }
 
-
-
-
 function insertDeSer(cassandra) {
     const id = cassandra.types.Uuid.random();
     const tuid = cassandra.types.TimeUuid.fromString("8e14e760-7fa8-11eb-bc66-000000000001");
@@ -114,6 +112,42 @@ function insertConcurrentDeSer(cassandra, n) {
     return allParameters;
 }
 
+async function queryWithRowCheck(client, number, iterCnt, next) {
+    const query = "SELECT * FROM benchmarks.basic";
+    for (let i = 0; i < iterCnt; i++) {
+        try {
+            // The idea for the select benchmark is to select all of the rows in a single page.
+            let res = await client.execute(query, [], { fetchSize: number });
+            assert.equal(res.rowLength, number);
+        } catch (err) {
+            return next(err);
+        }
+    }
+    next();
+}
+
+async function executeInsertDeSer(client, iterCnt, cassandra, next) {
+    for (let i = 0; i < iterCnt; i++) {
+        try {
+            await client.execute(DesSerInsertStatement, insertDeSer(cassandra), { prepare: true });
+        } catch (err) {
+            return next(err);
+        }
+    }
+    next();
+}
+
+async function checkRowCount(client, expected, next) {
+    const query = "SELECT COUNT(1) FROM benchmarks.basic USING TIMEOUT 120s;";
+    try {
+        let res = await client.execute(query);
+        assert.equal(res.rows[0].count, expected);
+    } catch (err) {
+        return next(err);
+    }
+    next();
+}
+
 exports.insertDeSer = insertDeSer;
 exports.tableSchemaBasic = tableSchemaBasic;
 exports.tableSchemaDeSer = tableSchemaDeSer;
@@ -124,3 +158,6 @@ exports.insertConcurrentDeSer = insertConcurrentDeSer;
 exports.repeatCapped = repeatCapped;
 exports.executeMultipleRepeatCapped = executeMultipleRepeatCapped;
 exports.insertSimple = insertSimple;
+exports.queryWithRowCheck = queryWithRowCheck;
+exports.executeInsertDeSer = executeInsertDeSer;
+exports.checkRowCount = checkRowCount;

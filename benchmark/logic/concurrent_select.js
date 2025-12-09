@@ -4,6 +4,7 @@ const async = require("async");
 const cassandra = require(process.argv[2]);
 const utils = require("./utils");
 const { exit } = require("process");
+const assert = require("assert");
 
 const client = new cassandra.Client(utils.getClientArgs());
 const iterCnt = parseInt(process.argv[3]);
@@ -25,7 +26,10 @@ async.series(
                     });
                 }
                 try {
-                    const _result = await cassandra.concurrent.executeConcurrent(client, allParameters, { prepare: true, collectResults: true });
+                    const result = await cassandra.concurrent.executeConcurrent(client, allParameters, { prepare: true, collectResults: true });
+                    for (let singleResult of result.resultItems) {
+                        assert.equal(singleResult.rowLength, 10);
+                    }
                 } catch (err) {
                     return next(err);
                 }

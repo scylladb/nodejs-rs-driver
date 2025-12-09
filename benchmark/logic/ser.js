@@ -14,14 +14,10 @@ async.series(
             utils.prepareDatabase(client, utils.tableSchemaDeSer, next);
         },
         async function insert(next) {
-            for (let i = 0; i < iterCount * iterCount; i++) {
-                try {
-                    await client.execute(utils.DesSerInsertStatement, utils.insertDeSer(cassandra), { prepare: true });
-                } catch (err) {
-                    return next(err);
-                }
-            }
-            next();
+            utils.executeInsertDeSer(client, iterCount * iterCount, cassandra, next);
+        },
+        async function test(next) {
+            utils.checkRowCount(client, iterCount * iterCount, next);
         },
         function r() {
             exit(0);

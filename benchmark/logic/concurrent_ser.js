@@ -22,6 +22,9 @@ async.series(
             }
             next();
         },
+        async function test(next) {
+            utils.checkRowCount(client, iterCnt * iterCnt, next);
+        },
         function r() {
             exit(0);
         }
