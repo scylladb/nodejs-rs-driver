@@ -1,4 +1,4 @@
-use scylla::{client::caching_session::CachingSession, statement::Statement};
+use scylla::{client::caching_session::CachingSession, statement::Statement, value::Row};
 
 use crate::common::DESER_INSERT_QUERY;
 
@@ -28,7 +28,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let select_query = "SELECT * FROM benchmarks.basic";
     for _ in 0..n {
-        let _ = session.execute_unpaged(select_query, &[]).await?;
+        let r = session
+            .execute_unpaged(select_query, &[])
+            .await?
+            .into_rows_result()?
+            .rows::<Row>()?
+            .collect::<Vec<_>>();
+        assert_eq!(r.len() as i32, n);
     }
 
     Ok(())

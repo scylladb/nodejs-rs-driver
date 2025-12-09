@@ -1,6 +1,7 @@
 use futures::future::join_all;
 use scylla::client::session::Session;
 use scylla::statement::prepared::PreparedStatement;
+use scylla::value::Row;
 use std::sync::Arc;
 
 use crate::common::DESER_INSERT_QUERY;
@@ -36,7 +37,13 @@ async fn select_data(
     let mut index = start_index;
 
     while index < n as usize {
-        session.execute_unpaged(select_query, &[]).await?;
+        let r = session
+            .execute_unpaged(select_query, &[])
+            .await?
+            .into_rows_result()?
+            .rows::<Row>()?
+            .collect::<Vec<_>>();
+        assert_eq!(r.len() as i32, n);
         index += CONCURRENCY;
     }
 

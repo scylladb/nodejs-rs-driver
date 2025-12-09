@@ -54,5 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         result.unwrap();
     }
 
+    common::check_row_cnt(&session, n * n).await?;
+
     Ok(())
 }

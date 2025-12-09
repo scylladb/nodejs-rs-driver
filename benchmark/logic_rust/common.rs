@@ -87,3 +87,23 @@ pub(crate) fn get_cnt() -> i32 {
         .and_then(|s: String| s.parse::<i32>().ok())
         .expect("CNT parameter is required.")
 }
+
+// This may be imported by binaries that use only one of the helpers
+#[allow(dead_code)]
+pub(crate) async fn check_row_cnt(
+    session: &Session,
+    n: i32,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let select_query = "SELECT COUNT(1) FROM benchmarks.basic USING TIMEOUT 120s;";
+
+    assert_eq!(
+        session
+            .query_unpaged(select_query, &[])
+            .await?
+            .into_rows_result()?
+            .first_row::<(i64,)>()?
+            .0,
+        n.into()
+    );
+    Ok(())
+}
