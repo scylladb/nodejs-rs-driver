@@ -4,6 +4,7 @@ const utils = require("../../lib/utils");
 const assert = require("assert");
 
 const { _Client } = require("../../main");
+const { exit } = require("process");
 
 const tableSchemaBasic = "CREATE TABLE benchmarks.basic (id uuid, val int, PRIMARY KEY(id))";
 const tableSchemaDesSer = "CREATE TABLE benchmarks.basic (id uuid, val int, tuuid timeuuid, ip inet, date date, time time, PRIMARY KEY(id))";
@@ -114,6 +115,13 @@ async function checkRowCount(client, expected, next) {
     next();
 }
 
+function onError(err) {
+    if (err) {
+        console.error("Error: ", err.message, err.stack);
+        exit(1);
+    }
+}
+
 exports.getClientArgs = getClientArgs;
 exports.insertDeSer = insertDeSer;
 exports.tableSchemaBasic = tableSchemaBasic;
@@ -126,3 +134,4 @@ exports.repeatCapped = repeatCapped;
 exports.queryWithRowCheck = queryWithRowCheck;
 exports.executeInsertDerser = executeInsertDerser;
 exports.checkRowCount = checkRowCount;
+exports.onError = onError;

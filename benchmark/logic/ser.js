@@ -23,12 +23,6 @@ async.series(
             exit(0);
         }
     ],
-    function (err) {
-        if (err) {
-            console.error("There was an error", err.message, err.stack);
-            exit(1);
-        }
-
-    },
+    utils.onError,
 );
 

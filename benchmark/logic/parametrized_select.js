@@ -34,12 +34,7 @@ function selectWithRows(number) {
                 exit(0);
             }
 
-        ], function (err) {
-            if (err) {
-                console.error("Error: ", err.message, err.stack);
-                exit(1);
-            }
-        },);
+        ], utils.onError);
 }
 
 
