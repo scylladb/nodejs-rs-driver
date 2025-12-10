@@ -16,17 +16,7 @@ function selectWithRows(number) {
                 utils.prepareDatabase(client, utils.tableSchemaBasic, next);
             },
             async function insert(next) {
-                let query =
-                    "INSERT INTO benchmarks.basic (id, val) VALUES (?, ?)";
-                for (let i = 0; i < number; i++) {
-                    let id = cassandra.types.Uuid.random();
-                    try {
-                        await client.execute(query, [id, 100], { prepare: true });
-                    } catch (err) {
-                        return next(err);
-                    }
-                }
-                next();
+                utils.insertSimple(client, 10, next);
             },
             async function query(next) {
                 const query = "SELECT * FROM benchmarks.basic";
