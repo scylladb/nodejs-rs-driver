@@ -1,17 +1,14 @@
 use scylla::{response::PagingState, statement::Statement};
-use std::{env, ops::ControlFlow};
+use std::ops::ControlFlow;
 use uuid::Uuid;
 
 mod common;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let n: i32 = env::var("CNT")
-        .ok()
-        .and_then(|s: String| s.parse::<i32>().ok())
-        .expect("CNT parameter is required.");
+    let n: i32 = common::get_cnt();
 
-    let session = common::init_simple_table().await?;
+    let session = common::init_simple_table_caching().await?;
 
     let insert_query = "INSERT INTO benchmarks.basic (id, val) VALUES (?, ?)";
     for _ in 0..50 {

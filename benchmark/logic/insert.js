@@ -26,16 +26,13 @@ async.series(
             }
             next();
         },
+        async function test(next) {
+            utils.checkRowCount(client, iterCnt, next);
+        },
         function r() {
             exit(0);
         }
     ],
-    function (err) {
-        if (err) {
-            console.error("There was an error", err.message, err.stack);
-            exit(1);
-        }
-
-    },
+    utils.onError
 );
 

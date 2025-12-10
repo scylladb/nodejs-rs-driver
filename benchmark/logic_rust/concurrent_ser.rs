@@ -2,7 +2,6 @@ use futures::future::join_all;
 use scylla::client::session::Session;
 use scylla::statement::prepared::PreparedStatement;
 use std::sync::Arc;
-use uuid::Uuid;
 
 mod common;
 
@@ -17,8 +16,9 @@ async fn insert_data(
     let mut index = start_index;
 
     while index < n as usize {
-        let id = Uuid::new_v4();
-        session.execute_unpaged(insert_query, (id, 100)).await?;
+        session
+            .execute_unpaged(insert_query, common::get_deser_data())
+            .await?;
         index += CONCURRENCY;
     }
 
@@ -29,10 +29,10 @@ async fn insert_data(
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let n: i32 = common::get_cnt();
 
-    let session = common::init_simple_table().await?;
+    let session = common::init_deser_table().await?;
 
     let insert_query = session
-        .prepare("INSERT INTO benchmarks.basic (id, val) VALUES (?, ?)")
+        .prepare("INSERT INTO benchmarks.basic (id, val, tuuid, ip, date, time) VALUES (?, ?, ?, ?, ?, ?)")
         .await?;
 
     let mut handles = vec![];
@@ -42,15 +42,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let session_clone = Arc::clone(&session);
         let insert_query_clone = insert_query.clone();
         handles.push(tokio::spawn(async move {
-            insert_data(session_clone, i, n, &insert_query_clone)
+            insert_data(session_clone, i, n * n, &insert_query_clone)
                 .await
                 .unwrap();
         }));
     }
 
-    join_all(handles).await;
+    let results = join_all(handles).await;
 
-    common::check_row_cnt(&session, n).await?;
+    for result in results {
+        result.unwrap();
+    }
+
+    common::check_row_cnt(&session, n * n).await?;
 
     Ok(())
 }

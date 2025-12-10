@@ -59,6 +59,10 @@ n_min["concurrent_insert.js"] = 4_000_000 / 64
 n_min["concurrent_select.js"] = 400_000 / 64
 n_min["insert.js"] = 400_000 / 64
 n_min["select.js"] = 100_000 / 64
+n_min["deser.js"] = 2_000 / 64
+n_min["concurrent_deser.js"] = 2_000 / 64
+n_min["ser.js"] = 900 / 64
+n_min["concurrent_ser.js"] = 1_200 / 64
 n_min["batch.js"] = 3_000_000 / 64
 n_min["paging.js"] = 10_000 / 64
 n_min["large_select.js"] = 4_000 / 64
@@ -71,13 +75,18 @@ step = 4
 libs = ["scylladb-driver-alpha", "cassandra-driver"]
 benchmarks = ["concurrent_insert.js", "insert.js", "select.js",
              "concurrent_select.js", "batch.js", "paging.js",
-             "large_select.js"]
+             "large_select.js", "deser.js", "concurrent_deser.js", 
+             "ser.js", "concurrent_ser.js"]
 
 name_rust = {}
 name_rust["concurrent_insert.js"] = "concurrent_insert_benchmark"
 name_rust["insert.js"] = "insert_benchmark"
 name_rust["select.js"] = "select_benchmark"
 name_rust["concurrent_select.js"] = "concurrent_select_benchmark"
+name_rust["deser.js"] = "deser_benchmark"
+name_rust["concurrent_deser.js"] = "concurrent_deser_benchmark"
+name_rust["ser.js"] = "ser_benchmark"
+name_rust["concurrent_ser.js"] = "concurrent_ser_benchmark"
 name_rust["batch.js"] = "batch_benchmark"
 name_rust["paging.js"] = "paging_benchmark"
 name_rust["large_select.js"] = "large_select_benchmark"
@@ -152,12 +161,12 @@ for ben in benchmarks:
 
 libs.append("rust-driver")
 
-cols = 3
+cols = 4
 rows_time = (len(df) + cols - 1) // cols
 rows_mem = (len(df_mem) + cols - 1) // cols
 total_rows = rows_time + rows_mem
 
-fig, axes = plt.subplots(total_rows, cols, figsize=(15, 5 * total_rows),
+fig, axes = plt.subplots(total_rows, cols, figsize=(20, 5 * total_rows),
                          facecolor="white")
 axes = axes.flatten()
 

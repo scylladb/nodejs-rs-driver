@@ -1,8 +1,14 @@
 "use strict";
+const { randomBytes } = require("crypto");
+const utils = require("../../lib/utils");
+const assert = require("assert");
 
 const { _Client } = require("../../main");
+const { exit } = require("process");
 
 const tableSchemaBasic = "CREATE TABLE benchmarks.basic (id uuid, val int, PRIMARY KEY(id))";
+const tableSchemaDesSer = "CREATE TABLE benchmarks.basic (id uuid, val int, tuuid timeuuid, ip inet, date date, time time, PRIMARY KEY(id))";
+const DesSerInsertStatement = "INSERT INTO benchmarks.basic (id, val, tuuid, ip, date, time) VALUES (?, ?, ?, ?, ?, ?)";
 const singleStepCount = 1000000;
 
 function getClientArgs() {
@@ -49,10 +55,83 @@ async function repeatCapped(callback, n) {
         const finalStep = Math.min(n, (rep + 1) * singleStepCount);
         await callback(finalStep - rep * singleStepCount);
     }
-    
+
 }
 
+function insertDeSer(cassandra) {
+    const id = cassandra.types.Uuid.random();
+    const tuid = cassandra.types.TimeUuid.fromString("8e14e760-7fa8-11eb-bc66-000000000001");
+    const ip = new cassandra.types.InetAddress(utils.allocBufferFromArray(randomBytes(4)));
+    const date = cassandra.types.LocalDate.now();
+    const time = cassandra.types.LocalTime.now();
+
+    return [id, 100, tuid, ip, date, time];
+}
+
+function insertConcurrentDeSer(cassandra, n) {
+    let allParameters = [];
+    for (let i = 0; i < n; i++) {
+        allParameters.push({
+            query: "INSERT INTO benchmarks.basic (id, val, tuuid, ip, date, time) VALUES (?, ?, ?, ?, ?, ?)",
+            params: insertDeSer(cassandra)
+        });
+    }
+    return allParameters;
+}
+
+async function queryWithRowCheck(client, number, iterCnt, next) {
+    const query = "SELECT * FROM benchmarks.basic";
+    for (let i = 0; i < iterCnt; i++) {
+        try {
+            // The idea for the select benchmark is to select all of the rows in a single page.
+            let res = await client.execute(query, [], { fetchSize: number });
+            assert.equal(res.rowLength, number);
+        } catch (err) {
+            return next(err);
+        }
+    }
+    next();
+}
+
+async function executeInsertDerser(client, iterCnt, cassandra, next) {
+    for (let i = 0; i < iterCnt; i++) {
+        try {
+            await client.execute(DesSerInsertStatement, insertDeSer(cassandra), { prepare: true });
+        } catch (err) {
+            return next(err);
+        }
+    }
+    next();
+}
+
+async function checkRowCount(client, expected, next) {
+    const query = "SELECT COUNT(1) FROM benchmarks.basic USING TIMEOUT 120s;";
+    try {
+        let res = await client.execute(query);
+        assert.equal(res.rows[0].count, expected);
+    } catch (err) {
+        return next(err);
+    }
+    next();
+}
+
+function onError(err) {
+    if (err) {
+        console.error("Error: ", err.message, err.stack);
+        exit(1);
+    }
+}
+
+exports.getClientArgs = getClientArgs;
+exports.insertDeSer = insertDeSer;
 exports.tableSchemaBasic = tableSchemaBasic;
+exports.tableSchemaDesSer = tableSchemaDesSer;
+exports.DesSerInsertStatement = DesSerInsertStatement;
 exports.getClientArgs = getClientArgs;
 exports.prepareDatabase = prepareDatabase;
+exports.insertConcurrentDeSer = insertConcurrentDeSer;
 exports.repeatCapped = repeatCapped;
+exports.queryWithRowCheck = queryWithRowCheck;
+exports.executeInsertDerser = executeInsertDerser;
+exports.checkRowCount = checkRowCount;
+exports.onError = onError;
