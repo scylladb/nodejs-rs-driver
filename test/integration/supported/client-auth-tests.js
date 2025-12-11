@@ -1,7 +1,5 @@
 "use strict";
 
-const { assert } = require("chai");
-
 const helper = require("../../test-helper");
 const Client = require("../../../lib/client");
 const utils = require("../../../lib/utils");
@@ -216,11 +214,12 @@ function createRole(client, role, password) {
  * @param {*} message
  */
 function assertAuthError(err, message) {
-    helper.assertInstanceOf(err, Error);
-    assert.strictEqual(err.message.includes("Authentication"), true);
-    // TODO: Would require proper error throwing
-    /* helper.assertInstanceOf(err, errors.NoHostAvailableError);
-    assert.ok(err.innerErrors);
+    helper.assertErrorWithName(err, "NewSessionError");
+    // This value was checked by the DSx integration tests.
+    // Current error handling does not pass this information along.
+    // We may want to add this information considering that we already lose some information,
+    // compared to the information provided by Rust driver
+    /* assert.ok(err.innerErrors);
     const firstErr = Object.values(err.innerErrors)[0];
     helper.assertInstanceOf(firstErr, errors.AuthenticationError);
 
