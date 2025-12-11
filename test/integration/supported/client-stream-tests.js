@@ -83,15 +83,7 @@ describe("Client", function () {
                     assert.strictEqual(stream.read(), null);
                 })
                 .on("error", function (err) {
-                    assert.ok(err, "It should yield an error");
-                    // TODO: Fix this test
-                    // Would require error throwing refactor
-                    /* helper.assertInstanceOf(err, errors.ResponseError); */
-                    assert.ok(
-                        err.message.includes(
-                            "The submitted query has a syntax error",
-                        ),
-                    );
+                    helper.assertErrorWithName(err, "ExecutionError");
                     errorCalled = true;
                 });
         });
@@ -362,21 +354,7 @@ describe("Client", function () {
                     assert.strictEqual(stream.read(), null);
                 })
                 .on("error", function (err) {
-                    assert.ok(err);
-                    // Would require error throwing refactor
-                    // TODO: fix this test
-                    assert.ok(
-                        err.message.includes("Serializing values failed"),
-                    );
-                    /* assert.ok(
-                        err instanceof errors.ResponseError,
-                        "Error should be an instance of ResponseError",
-                    );
-                    assert.ok(
-                        err.code === types.responseErrorCodes.invalid ||
-                        err.code === types.responseErrorCodes.protocolError,
-                        "Obtained err code " + err.code,
-                    ); */
+                    helper.assertErrorWithName(err, "ExecutionError");
                     errCalled = true;
                 })
                 .on("end", function () {

@@ -1,4 +1,5 @@
 /* eslint-disable no-unused-vars */
+/* eslint camelcase: ["error", {"properties": "never"}] */
 "use strict";
 const assert = require("assert");
 const util = require("util");
@@ -7,7 +8,6 @@ const helper = require("../../test-helper");
 const Client = require("../../../lib/client");
 const types = require("../../../lib/types");
 const utils = require("../../../lib/utils");
-const errors = require("../../../lib/errors");
 const loadBalancing = require("../../../lib/policies/load-balancing");
 const vit = helper.vit;
 const vdescribe = helper.vdescribe;
@@ -66,21 +66,12 @@ describe("Client @SERVER_API", function () {
             const client = setupInfo.client;
             const query = "SELECT WILL FAIL";
             client.execute(query, ["system"], { prepare: 1 }, function (err) {
-                assert.ok(err);
-                // Would require error throwing refactor
-                // TODO: fix this test
-                helper.assertInstanceOf(err, Error);
-                /* assert.strictEqual(
-                    err.code,
-                    types.responseErrorCodes.syntaxError,
-                );
-                assert.strictEqual(err.query, query); */
-                assert.ok(
-                    err.message.includes(
-                        "Preparation failed on every connection from the selected pool.",
-                    ),
-                );
-                assert.ok(err.message.includes("syntax error"));
+                helper.assertErrorWithName(err, "PrepareError");
+                // This value was checked by the DSx integration tests.
+                // Current error handling does not pass this information along.
+                // We may want to add this information considering that we already lose some information,
+                // compared to the information provided by Rust driver
+                /* assert.strictEqual(err.query, query); */
                 done();
             });
         });
@@ -101,22 +92,10 @@ describe("Client @SERVER_API", function () {
                             params,
                             { prepare: true },
                             (err) => {
-                                // Would require error throwing refactor
-                                // TODO: fix this test
-                                assert.ok(
-                                    err instanceof errors.ResponseError ||
-                                        err.message.includes(
-                                            "Serializing values failed",
-                                        ),
-                                );
-                                /* helper.assertInstanceOf(
+                                helper.assertErrorWithName(
                                     err,
-                                    errors.ResponseError,
-                                ); 
-                                assert.strictEqual(
-                                    err.code,
-                                    types.responseErrorCodes.invalid,
-                                );*/
+                                    "ExecutionError",
+                                );
                                 next();
                             },
                         ),
@@ -255,26 +234,9 @@ describe("Client @SERVER_API", function () {
                                     ["val"],
                                     { prepare: 1 },
                                     function (err) {
-                                        helper.assertInstanceOf(err, Error);
-                                        // Would require error throwing refactor
-                                        // TODO: fix this test
-                                        /* helper.assertInstanceOf(
+                                        helper.assertErrorWithName(
                                             err,
-                                            errors.ResponseError,
-                                        );
-                                        assert.strictEqual(
-                                            err.code,
-                                            types.responseErrorCodes.invalid,
-                                        ); */
-                                        assert.ok(
-                                            err.message.includes(
-                                                "Preparation failed on every connection from the selected pool.",
-                                            ),
-                                        );
-                                        assert.ok(
-                                            err.message.includes(
-                                                "The query is syntactically correct but invalid",
-                                            ),
+                                            "PrepareError",
                                         );
                                         next();
                                     },
@@ -292,26 +254,9 @@ describe("Client @SERVER_API", function () {
                                     ["val"],
                                     { prepare: 1 },
                                     function (err) {
-                                        helper.assertInstanceOf(err, Error);
-                                        // Would require error throwing refactor
-                                        // TODO: fix this test
-                                        /* helper.assertInstanceOf(
+                                        helper.assertErrorWithName(
                                             err,
-                                            errors.ResponseError,
-                                        );
-                                        assert.strictEqual(
-                                            err.code,
-                                            types.responseErrorCodes.invalid,
-                                        ); */
-                                        assert.ok(
-                                            err.message.includes(
-                                                "Preparation failed on every connection from the selected pool.",
-                                            ),
-                                        );
-                                        assert.ok(
-                                            err.message.includes(
-                                                "The query is syntactically correct but invalid",
-                                            ),
+                                            "PrepareError",
                                         );
                                         next();
                                     },
@@ -1351,18 +1296,7 @@ describe("Client @SERVER_API", function () {
 
             function validateResponseError(callback) {
                 return (err) => {
-                    // Would require error throwing refactor
-                    // TODO: fix this test
-                    helper.assertInstanceOf(err, Error);
-                    assert.ok(
-                        err instanceof errors.ResponseError ||
-                            err.message.includes("Serializing values failed"),
-                    );
-                    /* helper.assertInstanceOf(err, errors.ResponseError);
-                    assert.strictEqual(
-                        err.code,
-                        types.responseErrorCodes.invalid,
-                    ); */
+                    helper.assertErrorWithName(err, "ExecutionError");
                     callback();
                 };
             }

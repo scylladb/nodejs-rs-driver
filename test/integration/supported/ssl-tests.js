@@ -4,7 +4,6 @@ const util = require("util");
 
 const helper = require("../../test-helper");
 const Client = require("../../../lib/client");
-const errors = require("../../../lib/errors");
 const utils = require("../../../lib/utils");
 const types = require("../../../lib/types");
 
@@ -34,9 +33,11 @@ describe("Client @SERVER_API", function () {
                     sslOptions: { rejectUnauthorized: true },
                 });
                 client.connect(function (err) {
-                    // TODO: Would require proper error throwing
-                    helper.assertInstanceOf(err, Error);
-                    // helper.assertInstanceOf(err, errors.NoHostAvailableError);
+                    helper.assertErrorWithName(err, "NewSessionError");
+                    // This value was checked by the DSx integration tests.
+                    // Current error handling does not pass this information along.
+                    // We may want to add this information considering that we already lose some information,
+                    // compared to the information provided by Rust driver
                     // assert.strictEqual(Object.keys(err.innerErrors).length, 1);
                     // helper.assertInstanceOf(
                     //     Object.values(err.innerErrors)[0],
