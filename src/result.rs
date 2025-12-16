@@ -2,7 +2,7 @@ use crate::{
     errors::{
         ConvertedError, ConvertedResult, IntoConvertedResult, JsResult, with_custom_error_sync,
     },
-    types::{local_date::LocalDateWrapper, type_wrappers::ComplexType, uuid::UuidWrapper},
+    types::{local_date::LocalDateWrapper, type_wrappers::ComplexType},
 };
 use napi::{
     Env, JsValue,
@@ -160,10 +160,14 @@ impl QueryResultWrapper {
 
     /// Get all tracing ids generated in the query
     #[napi]
-    pub fn get_trace_id(&self) -> Option<UuidWrapper> {
+    pub fn get_trace_id(&self) -> Option<Buffer> {
         match &self.inner {
-            QueryResultVariant::RowsResult(v) => v.tracing_id().map(UuidWrapper::from_cql_uuid),
-            QueryResultVariant::EmptyResult(v) => v.tracing_id().map(UuidWrapper::from_cql_uuid),
+            QueryResultVariant::RowsResult(v) => v
+                .tracing_id()
+                .map(|val| Buffer::from(val.as_bytes().as_slice())),
+            QueryResultVariant::EmptyResult(v) => v
+                .tracing_id()
+                .map(|val| Buffer::from(val.as_bytes().as_slice())),
         }
     }
 }
