@@ -3,7 +3,6 @@
 const assert = require("assert");
 const fs = require("fs");
 const types = require("../../../../lib/types");
-const errors = require("../../../../lib/errors");
 const helper = require("../../../test-helper");
 const Transform = require("stream").Transform;
 const Uuid = types.Uuid;
@@ -102,16 +101,13 @@ describe("executeConcurrent()", function () {
                         result.resultItems.length,
                         values.length,
                     );
-                    result.resultItems.forEach((rs, index) =>
-                        // TODO: Would require error throwing refactor
-                        helper.assertInstanceOf(
-                            rs,
-                            index === 7
-                                ? // ? errors.ResponseError
-                                  Error
-                                : types.ResultSet,
-                        ),
-                    );
+                    result.resultItems.forEach((rs, index) => {
+                        if (index === 7) {
+                            helper.assertErrorWithName(rs, "ExecutionError");
+                        } else {
+                            helper.assertInstanceOf(rs, types.ResultSet);
+                        }
+                    });
                 })
                 .then(() => validateInserted(client, id, values.length - 1));
         });
@@ -123,16 +119,7 @@ describe("executeConcurrent()", function () {
             return executeConcurrent(client, insertQuery1, values)
                 .catch((err) => (error = err))
                 .then(() => {
-                    // Would require error throwing refactor
-                    // TODO: fix this test
-                    assert.ok(
-                        error.message.includes("Serializing values failed"),
-                    );
-                    /* helper.assertInstanceOf(error, errors.ResponseError);
-                    assert.strictEqual(
-                        error.code,
-                        types.responseErrorCodes.invalid,
-                    ); */
+                    helper.assertErrorWithName(error, "ExecutionError");
                 });
         });
 
@@ -150,17 +137,8 @@ describe("executeConcurrent()", function () {
                 .then((result) => {
                     assert.strictEqual(result.totalExecuted, values.length);
                     assert.strictEqual(result.errors.length, 2);
-                    result.errors.forEach(
-                        (err) =>
-                            // Would require error throwing refactor
-                            // TODO: fix this test
-                            assert.ok(
-                                err instanceof errors.ResponseError ||
-                                    err.message.includes(
-                                        "Serializing values failed",
-                                    ),
-                            ),
-                        // helper.assertInstanceOf(err, errors.ResponseError),
+                    result.errors.forEach((err) =>
+                        helper.assertErrorWithName(err, "ExecutionError"),
                     );
                 })
                 .then(() => validateInserted(client, id, values.length - 2));
@@ -208,14 +186,8 @@ describe("executeConcurrent()", function () {
                 concurrencyLevel: 10,
             })
                 .catch((err) => (error = err))
-                .then(
-                    () =>
-                        // Would require error throwing refactor
-                        // TODO: fix this test
-                        assert.ok(
-                            error.message.includes("Serializing values failed"),
-                        ),
-                    // helper.assertInstanceOf(error, errors.ResponseError),
+                .then(() =>
+                    helper.assertErrorWithName(error, "ExecutionError"),
                 );
         });
 
@@ -240,16 +212,8 @@ describe("executeConcurrent()", function () {
                         transformStream.index,
                     );
                     assert.strictEqual(result.errors.length, 2);
-                    result.errors.forEach(
-                        (err) =>
-                            // Would require error throwing refactor
-                            // TODO: fix this test
-                            assert.ok(
-                                err.message.includes(
-                                    "Serializing values failed",
-                                ),
-                            ),
-                        // helper.assertInstanceOf(err, errors.ResponseError),
+                    result.errors.forEach((err) =>
+                        helper.assertErrorWithName(err, "ExecutionError"),
                     );
                 })
                 .then(() =>
@@ -315,8 +279,7 @@ describe("executeConcurrent()", function () {
                 )
                 .then((rs2) => assert.ok(rs2.first()));
         });
-        // Test requires correct error handling
-        /* it("should reject the promise when there is an error", () => {
+        it("should reject the promise when there is an error", () => {
             const id = Uuid.random();
             const queryAndParameters = [
                 { query: insertQuery1, params: [id, 0, "one on table1"] },
@@ -324,18 +287,14 @@ describe("executeConcurrent()", function () {
                 { query: insertQuery1, params: [id, 1, "second on table1"] },
             ];
             let error;
-    
+
             return executeConcurrent(client, queryAndParameters)
                 .catch((err) => (error = err))
                 .then(() => {
-                    helper.assertInstanceOf(error, errors.ResponseError);
-                    assert.strictEqual(
-                        error.code,
-                        types.responseErrorCodes.syntaxError,
-                    );
+                    helper.assertErrorWithName(error, "PrepareError");
                 });
         });
-     
+
         it("should resolve the promise when there is an error and raiseOnFirstError is false", () => {
             const id = Uuid.random();
             const queryAndParameters = [
@@ -343,7 +302,7 @@ describe("executeConcurrent()", function () {
                 { query: "INSERT FAIL", params: [] },
                 { query: insertQuery1, params: [id, 1, "second on table1"] },
             ];
-    
+
             return executeConcurrent(client, queryAndParameters, {
                 raiseOnFirstError: false,
             })
@@ -353,14 +312,16 @@ describe("executeConcurrent()", function () {
                         queryAndParameters.length,
                     );
                     assert.strictEqual(result.errors.length, 1);
-                    helper.assertInstanceOf(
+                    helper.assertErrorWithName(
                         result.errors[0],
-                        errors.ResponseError,
+                        "PrepareError",
                     );
                 })
-                .then(() => validateInserted(client, id, 2));
+                .then(() => validateInserted(client, id, 2))
+                .catch((err) => {
+                    assert.fail(`Unexpected error: ${err}`);
+                });
         });
-        */
     });
 });
 

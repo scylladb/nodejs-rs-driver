@@ -51,10 +51,7 @@ describe("Client", function () {
         it("should fail if the contact points can not be resolved", function (done) {
             const client = newInstance({ contactPoints: ["not-a-host"] });
             client.connect(function (err) {
-                assert.ok(err);
-                // TODO: Would require proper error throwing
-                helper.assertInstanceOf(err, Error);
-                // helper.assertInstanceOf(err, errors.NoHostAvailableError);
+                helper.assertErrorWithName(err, "NewSessionError");
                 client.shutdown(function (err) {
                     assert.ifError(err);
                     done();
@@ -65,10 +62,7 @@ describe("Client", function () {
         it("should fail if the contact points can not be reached", function (done) {
             const client = newInstance({ contactPoints: ["1.1.1.1"] });
             client.connect(function (err) {
-                assert.ok(err);
-                // TODO: Would require proper error throwing
-                helper.assertInstanceOf(err, Error);
-                // helper.assertInstanceOf(err, errors.NoHostAvailableError);
+                helper.assertErrorWithName(err, "NewSessionError");
                 done();
             });
         });
@@ -360,9 +354,7 @@ describe("Client", function () {
                 [
                     function tryConnect(next) {
                         client.connect(function (err) {
-                            // TODO: Would require proper error throwing
-                            helper.assertInstanceOf(err, Error);
-                            // helper.assertInstanceOf(err, errors.ResponseError);
+                            helper.assertErrorWithName(err, "NewSessionError");
                             next();
                         });
                     },

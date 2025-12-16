@@ -165,16 +165,7 @@ describe("Client @SERVER_API", function () {
             function (done) {
                 const client = newInstance();
                 client.batch(["INSERT WILL FAIL"], function (err) {
-                    assert.ok(err);
-                    assert.ok(
-                        err.message.includes(
-                            "Preparation failed on every connection from the selected pool.",
-                        ),
-                    );
-                    assert.ok(err.message.includes("syntax error"));
-                    // Would require error throwing refactor
-                    // TODO: fix this test
-                    /* assert.ok(err instanceof errors.ResponseError); */
+                    helper.assertErrorWithName(err, "ExecutionError");
                     done();
                 });
             },
@@ -198,18 +189,28 @@ describe("Client @SERVER_API", function () {
         vit("2.0", "should validate that arguments are valid", function () {
             const client = newInstance();
             const badArgumentCalls = [
-                function () {
-                    return client.batch();
-                },
-                function () {
-                    return client.batch(["SELECT"], {});
-                },
-                function () {
-                    return client.batch({}, {});
-                },
+                [
+                    function () {
+                        return client.batch();
+                    },
+                    "ArgumentError",
+                ],
+                [
+                    function () {
+                        return client.batch(["SELECT"], {});
+                    },
+                    "ExecutionError",
+                ],
+                [
+                    function () {
+                        return client.batch({}, {});
+                    },
+                    "ArgumentError",
+                ],
             ];
 
-            const promises = badArgumentCalls.map(function (method) {
+            const promises = badArgumentCalls.map(function (test) {
+                let [method, desiredError] = test;
                 return method()
                     .then(function () {
                         throw new Error(
@@ -217,31 +218,7 @@ describe("Client @SERVER_API", function () {
                         );
                     })
                     .catch(function (err) {
-                        assert.ok(err);
-                        // Would require error throwing refactor
-                        // TODO: Fix this test
-                        /* if (
-                            !(err instanceof errors.ArgumentError) &&
-                            !(err instanceof errors.ResponseError)
-                        ) {
-                            throw new Error(
-                                "Expected ArgumentError or ResponseError for method " +
-                                    method.toString(),
-                            );
-                        } */
-                        if (
-                            !(err instanceof errors.ArgumentError) &&
-                            // TODO: This should be ResponseError.
-                            // For now we just check the message to make sure it's the proper error
-                            !err.message.includes(
-                                "Preparation failed on every connection from the selected pool.",
-                            )
-                        ) {
-                            throw new Error(
-                                "Expected ArgumentError or ResponseError for method " +
-                                    method.toString(),
-                            );
-                        }
+                        helper.assertErrorWithName(err, desiredError);
                     });
             });
             setImmediate(client.shutdown.bind(client));
@@ -725,17 +702,7 @@ describe("Client @SERVER_API", function () {
                             queries,
                             { prepare: true },
                             function (err) {
-                                // Would require error throwing refactor
-                                // TODO: Fix this test
-                                assert.ok(err);
-                                /* helper.assertInstanceOf(
-                                    err,
-                                    errors.ResponseError,
-                                );
-                                assert.strictEqual(
-                                    err.code,
-                                    types.responseErrorCodes.syntaxError,
-                                ); */
+                                helper.assertErrorWithName(err, "PrepareError");
                                 next();
                             },
                         );
@@ -1054,8 +1021,7 @@ describe("Client @SERVER_API", function () {
                 });
             },
         );
-        // Would require error throwing refactor
-        // TODO: Fix this test
+
         it("should not use keyspace if set on options for lower protocol versions", function () {
             const client = newInstance({});
             const insertQuery =
@@ -1075,18 +1041,11 @@ describe("Client @SERVER_API", function () {
             ];
             return client
                 .batch(queries, { prepare: true, keyspace: keyspace })
-                .then((result) => {
+                .then(() => {
                     throw new Error("should have failed");
                 })
                 .catch(function (err) {
-                    assert.ok(err);
-                    assert.ok(
-                        err.message.includes(
-                            "Preparation failed on every connection from the selected pool.",
-                        ),
-                    );
-                    // helper.assertInstanceOf(err, errors.ResponseError);
-                    return client.shutdown();
+                    helper.assertErrorWithName(err, "PrepareError");
                 });
         });
     });
