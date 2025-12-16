@@ -130,6 +130,18 @@ impl QueryResultWrapper {
         .collect()
     }
 
+    /// Get the coordinator that answered the query
+    #[napi]
+    pub fn get_coordinator(&self) -> String {
+        let coordinator = match &self.inner {
+            QueryResultVariant::EmptyResult(query_result) => query_result.request_coordinator(),
+            QueryResultVariant::RowsResult(query_rows_result) => {
+                query_rows_result.request_coordinator()
+            }
+        };
+        coordinator.connection_address().to_string()
+    }
+
     /// Get the specification of all columns as they appear in the query result
     #[napi]
     pub fn get_columns_specs(&self) -> Vec<MetaColumnWrapper> {
