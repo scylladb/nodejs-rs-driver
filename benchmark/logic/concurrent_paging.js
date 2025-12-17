@@ -8,6 +8,7 @@ const { assert } = require("console");
 
 const client = new cassandra.Client(utils.getClientArgs());
 const iterCnt = parseInt(process.argv[3]);
+const concurrencyLevel = 20;
 
 async.series(
     [
@@ -33,7 +34,7 @@ async.series(
 
                 }
             }
-            await utils.repeatCapped(limited, iterCnt);
+            await utils.executeMultipleRepeatCapped(limited, iterCnt, concurrencyLevel);
             next();
         },
         function r() {

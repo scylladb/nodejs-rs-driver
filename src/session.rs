@@ -1,8 +1,10 @@
+use std::sync::Arc;
+
 use openssl::ssl::{SslContextBuilder, SslMethod, SslVerifyMode};
 use scylla::client::SelfIdentity;
 use scylla::client::caching_session::CachingSession;
 use scylla::client::session_builder::SessionBuilder;
-use scylla::response::PagingState;
+use scylla::response::{PagingState, PagingStateResponse};
 use scylla::statement::batch::Batch;
 use scylla::statement::{Consistency, SerialConsistency, Statement};
 
@@ -11,7 +13,7 @@ use crate::errors::{
     with_custom_error_sync,
 };
 use crate::options;
-use crate::paging::{PagingResult, PagingStateWrapper};
+use crate::paging::{PagingResult, PagingResultWithExecutor, PagingStateWrapper};
 use crate::requests::request::{QueryOptionsObj, QueryOptionsWrapper};
 use crate::types::encoded_data::EncodedValuesWrapper;
 use crate::types::type_wrappers::ComplexType;
@@ -50,6 +52,85 @@ pub struct BatchWrapper {
 #[napi]
 pub struct SessionWrapper {
     pub(crate) inner: CachingSession,
+}
+
+/// This object allows executing queries for following pages of the result,
+/// without the need to pass the statement and parameters multiple times.
+/// This structure is tied to specific session.
+#[napi]
+pub struct QueryExecutor {
+    params: Arc<Vec<EncodedValuesWrapper>>,
+    statement: Arc<Statement>,
+    is_prepared: bool,
+}
+
+impl QueryExecutor {
+    fn new(
+        statement: Arc<Statement>,
+        params: Arc<Vec<EncodedValuesWrapper>>,
+        is_prepared: bool,
+    ) -> Self {
+        QueryExecutor {
+            statement,
+            params,
+            is_prepared,
+        }
+    }
+}
+
+impl QueryExecutor {
+    async fn fetch_next_page_internal(
+        &self,
+        session: &SessionWrapper,
+        paging_state: Option<&PagingStateWrapper>,
+    ) -> ConvertedResult<PagingResult> {
+        let paging_state = paging_state
+            .map(|e| e.inner.clone())
+            .unwrap_or(PagingState::start());
+
+        let (result, paging_state_response) = if self.is_prepared {
+            session
+                .inner
+                .execute_single_page(
+                    Statement::clone(self.statement.as_ref()),
+                    self.params.as_ref(),
+                    paging_state,
+                )
+                .await
+        } else {
+            session
+                .inner
+                .get_session()
+                .query_single_page(
+                    Statement::clone(self.statement.as_ref()),
+                    self.params.as_ref(),
+                    paging_state,
+                )
+                .await
+        }?;
+
+        Ok(PagingResult {
+            result: QueryResultWrapper::from_query(result)?,
+            paging_state: match paging_state_response {
+                PagingStateResponse::HasMorePages { state } => {
+                    Some(PagingStateWrapper { inner: state })
+                }
+                PagingStateResponse::NoMorePages => None,
+            },
+        })
+    }
+}
+#[napi]
+impl QueryExecutor {
+    #[napi]
+    pub async fn fetch_next_page(
+        &self,
+        session: &SessionWrapper,
+        paging_state: Option<&PagingStateWrapper>,
+    ) -> JsResult<PagingResult> {
+        with_custom_error_async(async || self.fetch_next_page_internal(session, paging_state).await)
+            .await
+    }
 }
 
 #[napi]
@@ -177,23 +258,19 @@ impl SessionWrapper {
         params: Vec<EncodedValuesWrapper>,
         options: &QueryOptionsWrapper,
         paging_state: Option<&PagingStateWrapper>,
-    ) -> JsResult<PagingResult> {
+    ) -> JsResult<PagingResultWithExecutor> {
         with_custom_error_async(async || {
-            let statement: Statement = apply_statement_options(query.into(), &options.options)?;
-            let paging_state = paging_state
-                .map(|e| e.inner.clone())
-                .unwrap_or(PagingState::start());
+            let statement = Arc::new(apply_statement_options(query.into(), &options.options)?);
 
-            let (result, paging_state_response) = self
-                .inner
-                .get_session()
-                .query_single_page(statement, params, paging_state)
+            let params = Arc::new(params);
+
+            let executor = QueryExecutor::new(statement, params, false);
+
+            let res = executor
+                .fetch_next_page_internal(self, paging_state)
                 .await?;
 
-            ConvertedResult::Ok(PagingResult {
-                result: QueryResultWrapper::from_query(result)?,
-                paging_state: paging_state_response.into(),
-            })
+            ConvertedResult::Ok(res.with_executor(executor))
         })
         .await
     }
@@ -210,21 +287,19 @@ impl SessionWrapper {
         params: Vec<EncodedValuesWrapper>,
         options: &QueryOptionsWrapper,
         paging_state: Option<&PagingStateWrapper>,
-    ) -> JsResult<PagingResult> {
+    ) -> JsResult<PagingResultWithExecutor> {
         with_custom_error_async(async || {
-            let paging_state = paging_state
-                .map(|e| e.inner.clone())
-                .unwrap_or(PagingState::start());
-            let prepared = apply_statement_options(query.into(), &options.options)?;
+            let statement = Arc::new(apply_statement_options(query.into(), &options.options)?);
 
-            let (result, paging_state) = self
-                .inner
-                .execute_single_page(prepared, params, paging_state)
+            let params = Arc::new(params);
+
+            let executor = QueryExecutor::new(statement, params, true);
+
+            let res = executor
+                .fetch_next_page_internal(self, paging_state)
                 .await?;
-            ConvertedResult::Ok(PagingResult {
-                result: QueryResultWrapper::from_query(result)?,
-                paging_state: paging_state.into(),
-            })
+
+            ConvertedResult::Ok(res.with_executor(executor))
         })
         .await
     }

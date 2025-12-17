@@ -1,7 +1,6 @@
 "use strict";
 
 const { assert } = require("chai");
-const sinon = require("sinon");
 const utils = require("../../lib/utils");
 const types = require("../../lib/types");
 const helper = require("../test-helper");
@@ -57,7 +56,7 @@ describe("ResultSet", function () {
                 assert.deepStrictEqual(result, rows);
             });
 
-            it("should reject when nextPageAsync is not set", async () => {
+            it("should reject when rawNextPageAsync is not set", async () => {
                 const rs = new ResultSet({
                     rows: [100],
                     meta: { pageState: utils.allocBuffer(1) },
@@ -68,85 +67,8 @@ describe("ResultSet", function () {
                 await helper.assertThrowsAsync(
                     iterator.next(),
                     null,
-                    "Property nextPageAsync",
+                    "Property rawNextPageAsync",
                 );
-            });
-
-            it("should return the following pages", async () => {
-                const firstPageState = utils.allocBuffer(1);
-                const secondPageState = utils.allocBuffer(2).fill(0xff);
-                const rs = new ResultSet({
-                    rows: [100, 101, 102],
-                    meta: { pageState: firstPageState },
-                });
-                rs.nextPageAsync = sinon.spy(function (pageState) {
-                    if (pageState === firstPageState) {
-                        return Promise.resolve({
-                            rows: [200, 201],
-                            rawPageState: secondPageState,
-                        });
-                    }
-
-                    return Promise.resolve({ rows: [300] });
-                });
-
-                const result = await helper.asyncIteratorToArray(rs);
-                assert.strictEqual(rs.isPaged(), true);
-                assert.deepEqual(result, [100, 101, 102, 200, 201, 300]);
-                assert.strictEqual(rs.nextPageAsync.callCount, 2);
-                assert.ok(
-                    rs.nextPageAsync.firstCall.calledWithExactly(
-                        firstPageState,
-                    ),
-                );
-                assert.ok(
-                    rs.nextPageAsync.secondCall.calledWithExactly(
-                        secondPageState,
-                    ),
-                );
-                // After iterating, isPaged() should continue to be true
-                assert.strictEqual(rs.isPaged(), true);
-            });
-
-            it("should support next page empty", async () => {
-                const pageState = utils.allocBuffer(1);
-                const rs = new ResultSet({
-                    rows: [100, 101, 102],
-                    meta: { pageState },
-                });
-                rs.nextPageAsync = sinon.spy(function () {
-                    return Promise.resolve({
-                        rows: [],
-                        rawPageState: undefined,
-                    });
-                });
-
-                const result = await helper.asyncIteratorToArray(rs);
-                assert.deepEqual(result, [100, 101, 102]);
-                assert.strictEqual(rs.nextPageAsync.callCount, 1);
-                assert.ok(
-                    rs.nextPageAsync.firstCall.calledWithExactly(pageState),
-                );
-            });
-
-            it("should reject when nextPageAsync rejects", async () => {
-                const rs = new ResultSet({
-                    rows: [100],
-                    meta: { pageState: utils.allocBuffer(1) },
-                });
-                const error = new Error("Test dummy error");
-                rs.nextPageAsync = sinon.spy(function () {
-                    return Promise.reject(error);
-                });
-                const iterator = rs[Symbol.asyncIterator]();
-                const item = await iterator.next();
-                assert.deepEqual(item, { value: 100, done: false });
-                await helper.assertThrowsAsync(
-                    iterator.next(),
-                    null,
-                    error.message,
-                );
-                assert.strictEqual(rs.nextPageAsync.callCount, 1);
             });
         });
 
