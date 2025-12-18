@@ -183,15 +183,29 @@ describe("Client @SERVER_API", function () {
             client.execute(helper.queries.basic, function (err, result) {
                 assert.equal(err, null);
                 assert.notEqual(result, null);
+                let hosts = client.hosts.values().map((h) => h.address);
+                let queriedHost = result.info.queriedHost;
 
-                for (const host of client.hosts.values()) {
-                    if (host.address === result.info.queriedHost) {
+                if (helper.getServerInfo().isScylla) {
+                    // For Scylla, we may get the address with shard aware port,
+                    // while the client.hosts returns the hosts with non shard aware ports.
+                    // (See https://github.com/scylladb/scylla-rust-driver/issues/1513)
+                    // For this reason, when testing with Scylla, we strip the port part of the address.
+                    hosts = hosts.map((address) =>
+                        address.replace(/:\d+$/, ""),
+                    );
+                    queriedHost = queriedHost.replace(/:\d+$/, "");
+                }
+
+                for (const host of hosts) {
+                    if (host === queriedHost) {
                         done();
                         return;
                     }
                 }
                 assert.fail(
-                    "Expected queried host to be part of the client's host map",
+                    `Expected queried host ${queriedHost} to be part of the client's host map ` +
+                        `(${hosts.join(", ")})`,
                 );
             });
         });
