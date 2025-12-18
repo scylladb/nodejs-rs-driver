@@ -180,6 +180,23 @@ describe("Client @SERVER_API", function () {
             );
         });
 
+        it("should return valid queried host info", function (done) {
+            const client = setupInfo.client;
+            client.execute(helper.queries.basic, function (err, result) {
+                assert.equal(err, null);
+                assert.notEqual(result, null);
+
+                for (const host of client.hosts.values()) {
+                    if (host.address === result.info.queriedHost) {
+                        done();
+                        return;
+                    }
+                }
+                assert.fail(
+                    "Expected queried host to be part of the client's host map",
+                );
+            });
+        });
         it("should fail if non-existent profile provided", function (done) {
             const client = newInstance();
             utils.series(
