@@ -57,7 +57,7 @@ export namespace policies {
       constructor();
     }
 
-    class DefaultLoadBalancingPolicy extends LoadBalancingPolicy {
+    class LegacyDefaultLoadBalancingPolicy extends LoadBalancingPolicy {
       constructor(options?: {
         localDc?: string;
         filter?: (host: Host) => boolean;
