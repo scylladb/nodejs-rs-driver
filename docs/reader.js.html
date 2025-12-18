@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>JSDoc: Source: mapping/tree.js</title>
+    <title>JSDoc: Source: reader.js</title>
 
     <script src="scripts/prettify/prettify.js"> </script>
     <script src="scripts/prettify/lang-css.js"> </script>
@@ -17,7 +17,7 @@
 
 <div id="main">
 
-    <h1 class="page-title">Source: mapping/tree.js</h1>
+    <h1 class="page-title">Source: reader.js</h1>
 
     
 
@@ -28,148 +28,89 @@
         <article>
             <pre class="prettyprint source linenums"><code>"use strict";
 
-const EventEmitter = require("events");
-
 /**
- * Represents a tree node where the key is composed by 1 or more strings.
- * @ignore
+ * Buffer forward reader of CQL binary frames
  */
-class Node extends EventEmitter {
+class FrameReader {
     /**
-     * Creates a new instance of {@link Node}.
-     * @param {Array&lt;String>} key
-     * @param {Object} value
-     * @param {Array} [edges]
+     * Creates a new instance of the reader
+     * @param {Buffer} body
      */
-    constructor(key, value, edges) {
-        super();
-        this.key = key;
-        this.value = value;
-        this.edges = edges || [];
-    }
-}
-
-/**
- * A radix tree where each node contains a key, a value and edges.
- * @ignore
- */
-class Tree extends Node {
-    constructor() {
-        super([], null);
-        this.length = 0;
+    constructor(body) {
+        this.offset = 0;
+        this.buf = body;
     }
 
     /**
-     * Gets the existing item in the tree or creates a new one with the value provided by valueHandler
-     * @param {Iterator} keyIterator
-     * @param {Function} valueHandler
-     * @return {Object}
+     * Slices the underlying buffer
+     * @param {Number} begin
+     * @param {Number} [end]
+     * @returns {Buffer}
      */
-    getOrCreate(keyIterator, valueHandler) {
-        if (typeof keyIterator.next !== "function") {
-            keyIterator = keyIterator[Symbol.iterator]();
+    slice(begin, end) {
+        if (typeof end === "undefined") {
+            end = this.buf.length;
         }
-        let node = this;
-        let isMatch = false;
-        let item = keyIterator.next();
-        while (true) {
-            let newBranch;
-            // Check node keys at position 1 and above
-            for (let i = 1; i &lt; node.key.length; i++) {
-                if (item.done || node.key[i] !== item.value) {
-                    // We should branch out
-                    newBranch = this._createBranch(
-                        node,
-                        i,
-                        item.done,
-                        valueHandler,
-                    );
-                    break;
-                }
-                item = keyIterator.next();
-            }
-
-            if (item.done) {
-                isMatch = true;
-                break;
-            }
-
-            if (newBranch !== undefined) {
-                break;
-            }
-
-            const edges = node.edges;
-            let nextNode;
-            for (let i = 0; i &lt; edges.length; i++) {
-                const e = edges[i];
-                if (e.key[0] === item.value) {
-                    // its a match
-                    nextNode = e;
-                    item = keyIterator.next();
-                    break;
-                }
-            }
-
-            if (nextNode === undefined) {
-                // Current node is the root for a new leaf
-                break;
-            } else {
-                node = nextNode;
-            }
-        }
-
-        if (!isMatch) {
-            // Create using "node" as the root
-            const value = valueHandler();
-            node.edges.push(
-                new Node(iteratorToArray(item.value, keyIterator), value),
-            );
-            this._onItemAdded();
-            return value;
-        }
-        if (node.value === null &amp;&amp; node.edges.length > 0) {
-            node.value = valueHandler();
-        }
-        return node.value;
+        return this.buf.slice(begin, end);
     }
 
-    _createBranch(node, index, useNewValue, valueHandler) {
-        const newBranch = new Node(
-            node.key.slice(index),
-            node.value,
-            node.edges,
-        );
-        node.key = node.key.slice(0, index);
-        node.edges = [newBranch];
-        if (useNewValue) {
-            // The previous node value has moved to a leaf
-            // The node containing the new leaf should use the new value
-            node.value = valueHandler();
-            this._onItemAdded();
-        } else {
-            // Clear the value as it was copied in the branch
-            node.value = null;
+    /**
+     * Reads any number of bytes and moves the offset.
+     * if length not provided or it's larger than the remaining bytes, reads to end.
+     * @param length
+     * @returns {Buffer}
+     */
+    read(length) {
+        let end = this.buf.length;
+        if (
+            typeof length !== "undefined" &amp;&amp;
+            this.offset + length &lt; this.buf.length
+        ) {
+            end = this.offset + length;
         }
-        return newBranch;
+        const bytes = this.slice(this.offset, end);
+        this.offset = end;
+        return bytes;
     }
 
-    _onItemAdded() {
-        this.length++;
-        this.emit("add", this.length);
+    /**
+     * Reads a BE Int and moves the offset
+     * @returns {Number}
+     */
+    readInt() {
+        this.checkOffset(4);
+        const result = this.buf.readInt32BE(this.offset);
+        this.offset += 4;
+        return result;
+    }
+
+    /**
+     * Checks that the new length to read is within the range of the buffer length. Throws a RangeError if not.
+     * @param {Number} newLength
+     */
+    checkOffset(newLength) {
+        if (this.offset + newLength > this.buf.length) {
+            const err = new RangeError("Trying to access beyond buffer length");
+            err.expectedLength = newLength;
+            throw err;
+        }
+    }
+
+    /**
+     * Reads the amount of bytes that the field has and returns them (slicing them).
+     * @returns {Buffer}
+     */
+    readBytes() {
+        const length = this.readInt();
+        if (length &lt; 0) {
+            return null;
+        }
+        this.checkOffset(length);
+        return this.read(length);
     }
 }
 
-function iteratorToArray(value, iterator) {
-    const values = [value];
-    let item = iterator.next();
-    while (!item.done) {
-        values.push(item.value);
-        item = iterator.next();
-    }
-    return values;
-}
-
-module.exports = Tree;
+module.exports = { FrameReader };
 </code></pre>
         </article>
     </section>
