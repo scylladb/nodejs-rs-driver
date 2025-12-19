@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>JSDoc: Source: mapping/table-mappings.js</title>
+    <title>JSDoc: Class: LoadBalancingConfig</title>
 
     <script src="scripts/prettify/prettify.js"> </script>
     <script src="scripts/prettify/lang-css.js"> </script>
@@ -17,130 +17,552 @@
 
 <div id="main">
 
-    <h1 class="page-title">Source: mapping/table-mappings.js</h1>
+    <h1 class="page-title">Class: LoadBalancingConfig</h1>
 
     
 
 
 
+
+<section>
+
+<header>
     
-    <section>
-        <article>
-            <pre class="prettyprint source linenums"><code>"use strict";
+        <h2><span class="attribs"><span class="type-signature"></span></span>
+            <span class="ancestors"><a href="module-policies_loadBalancing.html">policies/loadBalancing</a>~</span>LoadBalancingConfig<span class="signature">()</span><span class="type-signature"></span></h2>
+        
+            <div class="class-description"><p>This class represents the options of the rust driver Default Load Balancing Policy.
+This option will be used to configure that policy.
+You can find more about this policy in the documentation:
+https://rust-driver.docs.scylladb.com/stable/load-balancing/default-policy.html</p></div>
+        
+    
+</header>
 
-/**
- * Contains a set of methods to represent a row into a document and a document into a row.
- * @alias module:mapping~TableMappings
- * @interface
- */
-class TableMappings {
-    /**
-     * Method that is called by the mapper to create the instance of the document.
-     * @return {Object}
-     */
-    newObjectInstance() {
-        return {};
-    }
+<article>
+    <div class="container-overview">
+    
+        
 
-    /**
-     * Gets the name of the column based on the document property name.
-     * @param {String} propName The name of the property.
-     * @returns {String}
-     */
-    getColumnName(propName) {
-        return propName;
-    }
+    
+    <h2>Constructor</h2>
+    
 
-    /**
-     * Gets the name of the document property based on the column name.
-     * @param {String} columnName The name of the column.
-     * @returns {String}
-     */
-    getPropertyName(columnName) {
-        return columnName;
-    }
-}
+    
+    <h4 class="name" id="LoadBalancingConfig"><span class="type-signature"></span>new LoadBalancingConfig<span class="signature">()</span><span class="type-signature"></span></h4>
+    
 
-/**
- * A [TableMappings]{@link module:mapping~TableMappings} implementation that converts CQL column names in all-lowercase
- * identifiers with underscores (snake case) to camel case (initial lowercase letter) property names.
- *
- * The conversion is performed without any checks for the source format, you should make sure that the source
- * format is snake case for CQL identifiers and camel case for properties.
- * @alias module:mapping~UnderscoreCqlToCamelCaseMappings
- * @implements {module:mapping~TableMappings}
- */
-class UnderscoreCqlToCamelCaseMappings extends TableMappings {
-    /**
-     * Creates a new instance of {@link UnderscoreCqlToCamelCaseMappings}
-     */
-    constructor() {
-        super();
-    }
+    
 
-    /**
-     * Converts a property name in camel case to snake case.
-     * @param {String} propName Name of the property to convert to snake case.
-     * @return {String}
-     */
-    getColumnName(propName) {
-        return propName
-            .replace(
-                /[a-z][A-Z]/g,
-                (match, offset) => match.charAt(0) + "_" + match.charAt(1),
-            )
-            .toLowerCase();
-    }
 
-    /**
-     * Converts a column name in snake case to camel case.
-     * @param {String} columnName The column name to convert to camel case.
-     * @return {String}
-     */
-    getPropertyName(columnName) {
-        return columnName.replace(/_[a-z]/g, (match, offset) =>
-            offset === 0 ? match : match.substr(1).toUpperCase(),
-        );
-    }
-}
 
-/**
- * Default implementation of [TableMappings]{@link module:mapping~TableMappings} that doesn't perform any conversion.
- * @alias module:mapping~DefaultTableMappings
- * @implements {module:mapping~TableMappings}
- */
-class DefaultTableMappings extends TableMappings {
-    /**
-     * Creates a new instance of {@link DefaultTableMappings}.
-     */
-    constructor() {
-        super();
-    }
 
-    /**  @override */
-    getColumnName(propName) {
-        return super.getColumnName(propName);
-    }
 
-    /** @override */
-    getPropertyName(columnName) {
-        return super.getPropertyName(columnName);
-    }
 
-    /**
-     * Creates a new object instance, using object initializer.
-     */
-    newObjectInstance() {
-        return super.newObjectInstance();
-    }
-}
 
-exports.TableMappings = TableMappings;
-exports.UnderscoreCqlToCamelCaseMappings = UnderscoreCqlToCamelCaseMappings;
-exports.DefaultTableMappings = DefaultTableMappings;
-</code></pre>
-        </article>
-    </section>
+
+
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="policies_load-balancing.js.html">policies/load-balancing.js</a>, <a href="policies_load-balancing.js.html#line747">line 747</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+    </div>
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+        <h3 class="subsection-title">Members</h3>
+
+        
+            
+<h4 class="name" id="enableShufflingReplicas"><span class="type-signature">(nullable) </span>enableShufflingReplicas<span class="type-signature"> :boolean</span></h4>
+
+
+
+
+<div class="description">
+    <p>Sets whether this policy should shuffle replicas when token-awareness
+is enabled. Shuffling can help distribute the load over replicas, but
+can reduce the effectiveness of caching on the database side (e.g.
+for reads).</p>
+<p>This option is enabled by default. If disabled, replicas will be chosen
+in some random order that is chosen when the load balancing policy
+is created and will not change over its lifetime.</p>
+</div>
+
+
+
+    <h5>Type:</h5>
+    <ul>
+        <li>
+            
+<span class="param-type">boolean</span>
+
+
+        </li>
+    </ul>
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="policies_load-balancing.js.html">policies/load-balancing.js</a>, <a href="policies_load-balancing.js.html#line838">line 838</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+        
+            
+<h4 class="name" id="permitDcFailover"><span class="type-signature">(nullable) </span>permitDcFailover<span class="type-signature"> :boolean</span></h4>
+
+
+
+
+<div class="description">
+    <p>Sets whether this policy permits datacenter failover, i.e. ever attempts
+to send requests to nodes from a non-preferred datacenter.</p>
+<p>In the event of a datacenter outage or network failure, the nodes
+in that datacenter may become unavailable, and clients may no longer
+be able to access data stored on those nodes. To address this,
+the <code>DefaultPolicy</code> supports datacenter failover, which allows routing
+requests to nodes in other datacenters if the local nodes are unavailable.</p>
+<p>Datacenter failover can be enabled in <code>DefaultPolicy</code> setting this flag.
+When it is set, the policy will prefer to return alive remote replicas
+if datacenter failover is permitted.</p>
+</div>
+
+
+
+    <h5>Type:</h5>
+    <ul>
+        <li>
+            
+<span class="param-type">boolean</span>
+
+
+        </li>
+    </ul>
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="policies_load-balancing.js.html">policies/load-balancing.js</a>, <a href="policies_load-balancing.js.html#line825">line 825</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+        
+            
+<h4 class="name" id="preferDatacenter"><span class="type-signature">(nullable) </span>preferDatacenter<span class="type-signature"> :string</span></h4>
+
+
+
+
+<div class="description">
+    <p>Sets the datacenter to be preferred by this policy.</p>
+<p>Allows the load balancing policy to prioritize nodes based on their location.
+When a preferred datacenter is set, the policy will treat nodes in that
+datacenter as &quot;local&quot; nodes, and nodes in other datacenters as &quot;remote&quot; nodes.
+This affects the order in which nodes are returned by the policy when
+selecting replicas for read or write operations. If no preferred datacenter
+is specified, the policy will treat all nodes as local nodes.</p>
+<p>When datacenter failover is disabled (<code>permitDcFailover</code> is set to false),
+the default policy will only include local nodes in load balancing plans.
+Remote nodes will be excluded, even if they are alive and available
+to serve requests.</p>
+</div>
+
+
+
+    <h5>Type:</h5>
+    <ul>
+        <li>
+            
+<span class="param-type">string</span>
+
+
+        </li>
+    </ul>
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="policies_load-balancing.js.html">policies/load-balancing.js</a>, <a href="policies_load-balancing.js.html#line767">line 767</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+        
+            
+<h4 class="name" id="preferRack"><span class="type-signature">(nullable) </span>preferRack<span class="type-signature"> :string</span></h4>
+
+
+
+
+<div class="description">
+    <p>This option cannot be used without setting <code>preferDatacenter</code>.</p>
+<p><code>preferDatacenter</code> and <code>preferRack</code> set the datacenter and rack to be preferred by this policy.</p>
+<p>Allows the load balancing policy to prioritize nodes based on their location
+as well as their availability zones in the preferred datacenter.</p>
+<p>When a preferred rack is set, the policy will first return replicas in the local rack
+in the preferred datacenter, and then the other replicas in the datacenter.</p>
+</div>
+
+
+
+    <h5>Type:</h5>
+    <ul>
+        <li>
+            
+<span class="param-type">string</span>
+
+
+        </li>
+    </ul>
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="policies_load-balancing.js.html">policies/load-balancing.js</a>, <a href="policies_load-balancing.js.html#line781">line 781</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+        
+            
+<h4 class="name" id="tokenAware"><span class="type-signature">(nullable) </span>tokenAware<span class="type-signature"> :boolean</span></h4>
+
+
+
+
+<div class="description">
+    <p>Sets whether this policy is token-aware (balances load more consciously) or not.</p>
+<p>Token awareness refers to a mechanism by which the driver is aware
+of the token range assigned to each node in the cluster. Tokens
+are assigned to nodes to partition the data and distribute it
+across the cluster.</p>
+<p>When a user wants to read or write data, the driver can use token awareness
+to route the request to the correct node based on the token range of the data
+being accessed. This can help to minimize network traffic and improve
+performance by ensuring that the data is accessed locally as much as possible.</p>
+<p>In the case of <code>DefaultPolicy</code>, token awareness is enabled by default,
+meaning that the policy will prefer to return alive local replicas
+if the token is available. This means that if the client is requesting data
+that falls within the token range of a particular node, the policy will try
+to route the request to that node first, assuming it is alive and responsive.</p>
+<p>Token awareness can significantly improve the performance and scalability
+of applications built on Scylla. By using token awareness, users can ensure
+that data is accessed locally as much as possible, reducing network overhead
+and improving throughput.</p>
+</div>
+
+
+
+    <h5>Type:</h5>
+    <ul>
+        <li>
+            
+<span class="param-type">boolean</span>
+
+
+        </li>
+    </ul>
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="policies_load-balancing.js.html">policies/load-balancing.js</a>, <a href="policies_load-balancing.js.html#line808">line 808</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+        
+    
+
+    
+
+    
+
+    
+</article>
+
+</section>
 
 
 
