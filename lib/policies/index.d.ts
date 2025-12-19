@@ -57,11 +57,23 @@ export namespace policies {
       constructor();
     }
 
-    class DefaultLoadBalancingPolicy extends LoadBalancingPolicy {
+    class LegacyDefaultLoadBalancingPolicy extends LoadBalancingPolicy {
       constructor(options?: {
         localDc?: string;
         filter?: (host: Host) => boolean;
       });
+    }
+    
+    class LoadBalancingConfig {
+      preferDatacenter?: string;
+      preferRack?: string;
+      tokenAware?: boolean;
+      permitDcFailover?: boolean;
+      enableShufflingReplicas?: boolean;
+    }
+    
+    class DefaultLoadBalancingPolicy extends LoadBalancingPolicy {
+      constructor(config?: LoadBalancingConfig);
     }
   }
 

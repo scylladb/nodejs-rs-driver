@@ -1,4 +1,4 @@
-use crate::session::{SessionOptions, SslOptions};
+use crate::session::{LoadBalancingConfig, SessionOptions, SslOptions};
 
 #[napi]
 pub fn tests_check_client_option(options: SessionOptions, case: i32) {
@@ -20,6 +20,13 @@ pub fn tests_check_client_option(options: SessionOptions, case: i32) {
                     cache_size: Some(2137),
                     ssl_options: Some(SslOptions {
                         reject_unauthorized: Some(false)
+                    }),
+                    load_balancing_config: Some(LoadBalancingConfig {
+                        prefer_datacenter: Some("Magic DC".to_owned()),
+                        prefer_rack: Some("Rack spec".to_owned()),
+                        token_aware: Some(true),
+                        permit_dc_failover: Some(false),
+                        enable_shuffling_replicas: Some(false)
                     })
                 }
             )
@@ -36,7 +43,8 @@ pub fn tests_check_client_option(options: SessionOptions, case: i32) {
                     credentials_username: None,
                     credentials_password: None,
                     cache_size: None,
-                    ssl_options: None
+                    ssl_options: None,
+                    load_balancing_config: None
                 }
             )
         }

@@ -510,19 +510,6 @@ describe("DefaultLoadBalancingPolicy", () => {
     });
 });
 
-describe("policies.defaultLoadBalancingPolicy()", () => {
-    [
-        { title: "without the local dc", localDc: undefined },
-        { title: "with a local dc", localDc: "my_dc" },
-    ].forEach(({ title, localDc }) => {
-        it(`should support creating a new instance ${title}`, () => {
-            const lbp = policies.defaultLoadBalancingPolicy(localDc);
-            assert.instanceOf(lbp, DefaultLoadBalancingPolicy);
-            assert.strictEqual(lbp.localDc, localDc);
-        });
-    });
-});
-
 function testPreferredHost(useReplicas, isPreferredRemote) {
     const localDcLength = 7;
     const replicaCondition = (h) => lastOctetOf(h) > 1;

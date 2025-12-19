@@ -3,7 +3,9 @@ use std::sync::Arc;
 use openssl::ssl::{SslContextBuilder, SslMethod, SslVerifyMode};
 use scylla::client::SelfIdentity;
 use scylla::client::caching_session::CachingSession;
+use scylla::client::execution_profile::ExecutionProfileBuilder;
 use scylla::client::session_builder::SessionBuilder;
+use scylla::policies::load_balancing::{self, LoadBalancingPolicy};
 use scylla::response::{PagingState, PagingStateResponse};
 use scylla::statement::batch::Batch;
 use scylla::statement::{Consistency, SerialConsistency, Statement};
@@ -27,9 +29,19 @@ const DEFAULT_CACHE_SIZE: u32 = 512;
 // In practice, user can provide more options to configure
 // the ssl connection (see: ConnectionOptions typescript class)
 // This specific option is added, as it's used in the existing integration tests
-#[rustfmt::skip] // fmt splits the struct definition into multiple lines
+#[rustfmt::skip] // fmt splits each field definition into multiple lines
 define_js_to_rust_convertible_object!(SslOptions {
     reject_unauthorized, rejectUnauthorized: bool,
+});
+
+#[rustfmt::skip] // fmt splits each field definition into multiple lines
+define_js_to_rust_convertible_object!(
+LoadBalancingConfig {
+    prefer_datacenter, preferDatacenter: String,
+    prefer_rack, preferRack: String,
+    token_aware, tokenAware: bool,
+    permit_dc_failover, permitDcFailover: bool,
+    enable_shuffling_replicas, enableShufflingReplicas: bool,
 });
 
 define_js_to_rust_convertible_object!(SessionOptions {
@@ -42,6 +54,7 @@ define_js_to_rust_convertible_object!(SessionOptions {
     credentials_password, credentialsPassword: String,
     cache_size, cacheSize: u32,
     ssl_options, sslOptions: SslOptions,
+    load_balancing_config, loadBalancingConfig: LoadBalancingConfig,
 });
 
 #[napi]
@@ -356,7 +369,50 @@ fn configure_session_builder(options: &SessionOptions) -> ConvertedResult<Sessio
 
         builder = builder.tls_context(Some(ssl_context_builder.build()));
     }
+    let mut exec_profile_builder = ExecutionProfileBuilder::default();
+    if let Some(load_balancing_policy) =
+        create_load_balancing_policy(&options.load_balancing_config)?
+    {
+        exec_profile_builder = exec_profile_builder.load_balancing_policy(load_balancing_policy);
+    }
+    builder = builder.default_execution_profile_handle(exec_profile_builder.build().into_handle());
     Ok(builder)
+}
+
+fn create_load_balancing_policy(
+    config: &Option<LoadBalancingConfig>,
+) -> napi::Result<Option<Arc<dyn LoadBalancingPolicy>>> {
+    let Some(config) = config else {
+        return Ok(None);
+    };
+
+    let mut builder = load_balancing::DefaultPolicyBuilder::new();
+
+    match (&config.prefer_datacenter, &config.prefer_rack) {
+        (Some(dc), None) => {
+            builder = builder.prefer_datacenter(dc.to_owned());
+        }
+        (Some(dc), Some(rack)) => {
+            builder = builder.prefer_datacenter_and_rack(dc.to_owned(), rack.to_owned());
+        }
+        (None, Some(_)) => {
+            return Err(make_js_error(
+                "Rack preference cannot be set without setting dc preference",
+            ));
+        }
+        (None, None) => {}
+    }
+
+    if let Some(token_aware) = config.token_aware {
+        builder = builder.token_aware(token_aware);
+    }
+    if let Some(permit_dc_failover) = config.permit_dc_failover {
+        builder = builder.permit_dc_failover(permit_dc_failover);
+    }
+    if let Some(enable_shuffling_replicas) = config.enable_shuffling_replicas {
+        builder = builder.enable_shuffling_replicas(enable_shuffling_replicas);
+    }
+    Ok(Some(builder.build()))
 }
 
 /// Macro to allow applying options to any query type

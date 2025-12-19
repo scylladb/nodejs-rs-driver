@@ -2,6 +2,9 @@
 
 const rust = require("../../index");
 const { setRustOptions } = require("../../lib/client-options");
+const {
+    DefaultLoadBalancingPolicy,
+} = require("../../lib/policies/load-balancing");
 
 describe("Client options", function () {
     it("should correctly convert client options", function () {
@@ -17,6 +20,15 @@ describe("Client options", function () {
                 password: "Unique password",
             },
             sslOptions: { rejectUnauthorized: false },
+            policies: {
+                loadBalancing: new DefaultLoadBalancingPolicy({
+                    preferDatacenter: "Magic DC",
+                    preferRack: "Rack spec",
+                    tokenAware: true,
+                    permitDcFailover: false,
+                    enableShufflingReplicas: false,
+                }),
+            },
         };
         rust.testsCheckClientOption(setRustOptions(options), 1);
     });
