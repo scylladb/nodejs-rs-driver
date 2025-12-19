@@ -4,7 +4,9 @@ env:
   APP_NAME: scylladb-javascript-driver
   PEDANTIC: true
 on:
-    workflow_dispatch:
+  release:
+    types: [published]
+  workflow_dispatch:
 
 permissions:
   id-token: write
