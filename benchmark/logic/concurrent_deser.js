@@ -24,20 +24,24 @@ async.series(
             next();
         },
         async function select(next) {
-
-            let allParameters = [];
-            for (let i = 0; i < iterCnt; i++) {
-                allParameters.push({
-                    query: 'SELECT * FROM benchmarks.basic',
-                });
-            }
-            try {
-                const result = await cassandra.concurrent.executeConcurrent(client, allParameters, { prepare: true, collectResults: true });
-                for (let singleResult of result.resultItems) {
-                    assert.equal(singleResult.rowLength, iterCnt);
+            let remaining = iterCnt;
+            while (remaining > 0) {
+                let currentStep = Math.min(remaining, 500);
+                remaining -= currentStep;
+                let allParameters = [];
+                for (let i = 0; i < currentStep; i++) {
+                    allParameters.push({
+                        query: 'SELECT * FROM benchmarks.basic',
+                    });
                 }
-            } catch (err) {
-                return next(err);
+                try {
+                    const result = await cassandra.concurrent.executeConcurrent(client, allParameters, { prepare: true, collectResults: true });
+                    for (let singleResult of result.resultItems) {
+                        assert.equal(singleResult.rowLength, iterCnt);
+                    }
+                } catch (err) {
+                    return next(err);
+                }
             }
             next();
         },
