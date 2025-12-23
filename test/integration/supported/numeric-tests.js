@@ -167,11 +167,7 @@ module.exports = function (keyspace, prepare) {
         });
     });
 
-    context("when BigInt is supported by the engine", () => {
-        if (typeof BigInt === "undefined") {
-            return;
-        }
-
+    context("with BigInt", () => {
         const client = new Client({
             contactPoints: helper.baseOptions.contactPoints,
             localDataCenter: helper.baseOptions.localDataCenter,
