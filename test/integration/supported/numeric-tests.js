@@ -133,11 +133,7 @@ module.exports = function (keyspace, prepare) {
                 contactPoints: helper.baseOptions.contactPoints,
                 localDataCenter: helper.baseOptions.localDataCenter,
                 keyspace,
-                encoding: {
-                    useBigIntAsVarint: true,
-                    useBigIntAsLong: true,
-                    set: Set,
-                },
+                encoding: { set: Set },
             });
 
             const insertQuery =
@@ -171,20 +167,12 @@ module.exports = function (keyspace, prepare) {
         });
     });
 
-    context("when BigInt is supported by the engine", () => {
-        if (typeof BigInt === "undefined") {
-            return;
-        }
-
+    context("with BigInt", () => {
         const client = new Client({
             contactPoints: helper.baseOptions.contactPoints,
             localDataCenter: helper.baseOptions.localDataCenter,
             keyspace,
-            encoding: {
-                useBigIntAsVarint: true,
-                useBigIntAsLong: true,
-                set: Set,
-            },
+            encoding: { set: Set },
         });
 
         before(() => client.connect());
@@ -221,10 +209,7 @@ module.exports = function (keyspace, prepare) {
             "-10151108322140118254172817715490",
         ];
 
-        // TODO: Fix those test
-        // No support for Set as lists
-
-        /* it("should insert and retrieve BigInt type values", () =>
+        it("should insert and retrieve BigInt type values", () =>
             Promise.all(
                 int64TextValues.map((textValue) => {
                     const insertQuery =
@@ -317,7 +302,7 @@ module.exports = function (keyspace, prepare) {
                                 .and.to.have.all.keys(value);
                         });
                 }),
-            )); */
+            ));
 
         it("should insert and retrieve timestamp values", () => {
             const insertQuery =
