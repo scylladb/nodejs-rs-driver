@@ -209,10 +209,7 @@ module.exports = function (keyspace, prepare) {
             "-10151108322140118254172817715490",
         ];
 
-        // TODO: Fix those test
-        // No support for Set as lists
-
-        /* it("should insert and retrieve BigInt type values", () =>
+        it("should insert and retrieve BigInt type values", () =>
             Promise.all(
                 int64TextValues.map((textValue) => {
                     const insertQuery =
@@ -305,7 +302,7 @@ module.exports = function (keyspace, prepare) {
                                 .and.to.have.all.keys(value);
                         });
                 }),
-            )); */
+            ));
 
         it("should insert and retrieve timestamp values", () => {
             const insertQuery =

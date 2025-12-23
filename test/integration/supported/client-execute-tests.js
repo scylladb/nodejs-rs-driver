@@ -328,9 +328,8 @@ describe("Client @SERVER_API", function () {
                 insertSelectTest(client, table, columns, values, hints, done);
             },
         );
-        // No support for map polyfills
-        // TODO: Fix this test
-        /* vit(
+
+        vit(
             "2.0",
             "should use parameter hints for custom map polyfills",
             function (done) {
@@ -344,7 +343,7 @@ describe("Client @SERVER_API", function () {
                 const client = newInstance({ encoding: { map: helper.Map } });
                 insertSelectTest(client, table, columns, values, hints, done);
             },
-        ); */
+        );
 
         vit("2.0", "should not autoPage", function (done) {
             const client = setupInfo.client;
