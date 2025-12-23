@@ -30,6 +30,9 @@ describe("Client @SERVER_API", function () {
 
         const setupInfo = helper.setup(3, {
             keyspace: commonKs,
+            clientOptions: {
+                encoding: { useBigIntAsLong: false, useBigIntAsVarint: false },
+            },
             queries: [
                 helper.createTableWithClusteringKeyCql(commonTable),
                 helper.createTableCql(commonTable2),

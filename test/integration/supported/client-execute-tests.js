@@ -26,6 +26,9 @@ describe("Client @SERVER_API", function () {
 
         const setupInfo = helper.setup(1, {
             keyspace: keyspace,
+            clientOptions: {
+                encoding: { useBigIntAsLong: false, useBigIntAsVarint: false },
+            },
             queries: [helper.createTableCql(table)],
             ccmOptions: { yaml: ["batch_size_warn_threshold_in_kb:5"] },
         });

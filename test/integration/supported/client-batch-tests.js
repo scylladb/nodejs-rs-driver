@@ -262,7 +262,9 @@ describe("Client @SERVER_API", function () {
             );
         });
         vit("2.0", "should use hints when provided", function (done) {
-            const client = newInstance();
+            const client = newInstance({
+                encoding: { useBigIntAsLong: false, useBigIntAsVarint: false },
+            });
             const id1 = types.Uuid.random();
             const id2 = types.Uuid.random();
             const queries = [
@@ -393,7 +395,9 @@ describe("Client @SERVER_API", function () {
                 "SELECT id, text_sample, writetime(text_sample) FROM %s WHERE id = %s";
             const id1 = types.Uuid.random();
             const id2 = types.Uuid.random();
-            const client = newInstance();
+            const client = newInstance({
+                encoding: { useBigIntAsLong: false, useBigIntAsVarint: false },
+            });
             const timestamp = types.Long.fromString("1428311323417123");
             const queries = [
                 {

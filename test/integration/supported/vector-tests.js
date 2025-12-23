@@ -24,6 +24,9 @@ vdescribe(["5.0.0", "scylla"], "Vector tests", function () {
         const createUdtCql = `CREATE TYPE ${keyspace}.my_udt (f1 text);`;
         const setupInfo = helper.setup(1, {
             keyspace: keyspace,
+            clientOptions: {
+                encoding: { useBigIntAsLong: false, useBigIntAsVarint: false },
+            },
             queries: [createUdtCql, createTableCql],
         });
 

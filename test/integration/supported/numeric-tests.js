@@ -133,11 +133,7 @@ module.exports = function (keyspace, prepare) {
                 contactPoints: helper.baseOptions.contactPoints,
                 localDataCenter: helper.baseOptions.localDataCenter,
                 keyspace,
-                encoding: {
-                    useBigIntAsVarint: true,
-                    useBigIntAsLong: true,
-                    set: Set,
-                },
+                encoding: { set: Set },
             });
 
             const insertQuery =
@@ -180,11 +176,7 @@ module.exports = function (keyspace, prepare) {
             contactPoints: helper.baseOptions.contactPoints,
             localDataCenter: helper.baseOptions.localDataCenter,
             keyspace,
-            encoding: {
-                useBigIntAsVarint: true,
-                useBigIntAsLong: true,
-                set: Set,
-            },
+            encoding: { set: Set },
         });
 
         before(() => client.connect());
