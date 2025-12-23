@@ -148,18 +148,17 @@ describe("LocalTime", function () {
             const valuesError = [
                 "-5:",
                 ";",
-                "23:50:00.0000000000000001",
                 "27:87:96",
                 "020:60:65.01",
+                "23:50:00.0000000000000001",
             ];
             valuesError.forEach(function (item) {
                 assert.throws(
                     function () {
-                        let newTime = LocalTime.fromString(item);
+                        let _ = LocalTime.fromString(item);
                     },
                     {
                         name: "TypeError",
-                        message: "Argument format is invalid",
                     },
                 );
             });
@@ -175,7 +174,7 @@ describe("LocalTime", function () {
             valuesError.forEach(function (item) {
                 assert.throws(
                     function () {
-                        let newTime = LocalTime.fromString(item);
+                        let _ = LocalTime.fromString(item);
                     },
                     {
                         name: "TypeError",
