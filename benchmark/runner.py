@@ -29,7 +29,11 @@ def parse_time(s):
     max_rss_match = re.search(r"Maximum resident set size \(kbytes\): (\d+)",
                               log)
     max_rss = int(max_rss_match.group(1)) if max_rss_match else None
-    return total_seconds, max_rss / 1024
+    if max_rss is not None:
+        max_rss_mib = max_rss / 1024
+    else:
+        max_rss_mib = None
+    return total_seconds, max_rss_mib
 
 
 # Function to parse build time from cargo run output. Cargo run always prints
@@ -41,8 +45,9 @@ def extract_build_time(output):
     if match:
         return float(match.group(1))
     else:
-        raise ValueError("Build time not found in the provided output.",
-                         output)
+        raise ValueError(
+            f"Build time not found in the provided output. Full output:\n{output}"
+        )
 
 
 def run_process(command):
@@ -52,7 +57,7 @@ def run_process(command):
 
 # --------- parameters ------------
 
-repeat = 3
+num_repeats = 3
 n_min = {}
 
 n_min["concurrent_insert.js"] = 4_000_000 / 64
@@ -70,7 +75,8 @@ n_min["large_select.js"] = 4_000 / 64
 
 steps = {}
 
-step = 4
+step_multiplier = 4
+scale_factor = 4
 
 # --------- libs and rust benchmark names ----------
 libs = ["scylladb-driver-alpha", "cassandra-driver"]
@@ -97,7 +103,7 @@ name_rust["large_select.js"] = "large_select_benchmark"
 df = {}
 df_mem = {}
 for ben in benchmarks:
-    steps[ben] = [n_min[ben] * (4 ** i) for i in range(step)]
+    steps[ben] = [n_min[ben] * (scale_factor ** i) for i in range(step_multiplier)]
 
     df[ben] = pd.DataFrame(columns=['n', libs[0], libs[1], 'rust-driver'])
     df_mem[ben] = pd.DataFrame(columns=['n', libs[0], libs[1], 'rust-driver'])
@@ -121,7 +127,7 @@ for ben in benchmarks:
         results = []
         results_mem = []
         # ------ rust -------
-        for _ in range(repeat):
+        for _ in range(num_repeats):
             data = run_process("CNT=" + str(int(n)) +
                                " /usr/bin/time -v cargo run -p benchmark --bin " +
                                name_rust[ben] + " -r ")
@@ -142,7 +148,7 @@ for ben in benchmarks:
         for lib in libs:
             results = []
             results_mem = []
-            for _ in range(repeat):
+            for _ in range(num_repeats):
                 data = run_process("/usr/bin/time -v node benchmark/logic/" +
                                    ben + " " + str(lib) + " " + str(int(n)))
 
