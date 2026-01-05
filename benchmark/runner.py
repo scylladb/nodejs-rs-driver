@@ -74,7 +74,7 @@ n_min["large_select.js"] = 4_000 / 64
 
 steps = {}
 
-step_multiplier = 4
+num_steps = 4
 scale_factor = 4
 
 # --------- libs and rust benchmark names ----------
@@ -102,7 +102,7 @@ name_rust["large_select.js"] = "large_select_benchmark"
 df = {}
 df_mem = {}
 for ben in benchmarks:
-    steps[ben] = [n_min[ben] * (scale_factor ** i) for i in range(step_multiplier)]
+    steps[ben] = [n_min[ben] * (scale_factor ** i) for i in range(num_steps)]
 
     df[ben] = pd.DataFrame(columns=['n', libs[0], libs[1], 'rust-driver'])
     df_mem[ben] = pd.DataFrame(columns=['n', libs[0], libs[1], 'rust-driver'])
