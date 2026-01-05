@@ -30,27 +30,14 @@
 const Long = require("long");
 const util = require("util");
 const utils = require("../utils");
-const rust = require("../../index");
-const { bigintToLong, longToBigint } = require("../new-utils");
-
 /** @module types */
 
-/**
- * @const
- * @private
- * */
 const maxNanos = Long.fromString("86399999999999");
-/**
- * Nanoseconds in a millisecond
- * @const
- * @private
- * */
+
+const nanoSecInSec = Long.fromNumber(1000000000);
+const millisInHour = 3600000;
+const millisInMin = 60000;
 const nanoSecInMillis = Long.fromNumber(1000000);
-/**
- * Milliseconds in day
- * @const
- * @private
- * */
 const millisInDay = 86400000;
 
 /**
@@ -61,18 +48,28 @@ const millisInDay = 86400000;
  */
 class LocalTime {
     /**
-     * @type {rust.LocalTimeWrapper}
-     * @private
+     * @type {Number}
      */
-    #internal;
-
+    #hour;
+    /**
+     * @type {Number}
+     */
+    #minute;
+    /**
+     * @type {Number}
+     */
+    #second;
+    /**
+     * @type {Number}
+     */
+    #nanosecond;
     /**
      * Creates a new instance of LocalTime.
      * @param {Long} totalNanoseconds Total nanoseconds since midnight.
      */
     constructor(totalNanoseconds) {
         if (!(totalNanoseconds instanceof Long)) {
-            throw new TypeError(
+            throw new Error(
                 "You must specify a Long value as totalNanoseconds",
             );
         }
@@ -80,12 +77,30 @@ class LocalTime {
             totalNanoseconds.lessThan(Long.ZERO) ||
             totalNanoseconds.greaterThan(maxNanos)
         ) {
-            throw new TypeError("Total nanoseconds out of range");
+            throw new Error("Total nanoseconds out of range");
         }
+        this.value = totalNanoseconds;
 
-        this.#internal = rust.LocalTimeWrapper.new(
-            longToBigint(totalNanoseconds),
-        );
+        /**
+         * Gets the hour component of the time represented by the current instance, a number from 0 to 23.
+         * @type Number
+         */
+        this.#hour = this.#getParts()[0];
+        /**
+         * Gets the minute component of the time represented by the current instance, a number from 0 to 59.
+         * @type Number
+         */
+        this.#minute = this.#getParts()[1];
+        /**
+         * Gets the second component of the time represented by the current instance, a number from 0 to 59.
+         * @type Number
+         */
+        this.#second = this.#getParts()[2];
+        /**
+         * Gets the nanoseconds component of the time represented by the current instance, a number from 0 to 999999999.
+         * @type Number
+         */
+        this.#nanosecond = this.#getParts()[3];
     }
 
     /**
@@ -94,7 +109,7 @@ class LocalTime {
      * @type {Number}
      */
     get nanosecond() {
-        return this.#internal.nanosecond;
+        return this.#nanosecond;
     }
 
     set nanosecond(_) {
@@ -107,7 +122,7 @@ class LocalTime {
      * @type {Number}
      */
     get second() {
-        return this.#internal.second;
+        return this.#second;
     }
 
     set second(_) {
@@ -120,7 +135,7 @@ class LocalTime {
      * @type {Number}
      */
     get minute() {
-        return this.#internal.minute;
+        return this.#minute;
     }
 
     set minute(_) {
@@ -133,7 +148,7 @@ class LocalTime {
      * @type {Number}
      */
     get hour() {
-        return this.#internal.hour;
+        return this.#hour;
     }
 
     set hour(_) {
@@ -142,8 +157,7 @@ class LocalTime {
 
     /**
      * Parses a string representation and returns a new LocalDate.
-     * @param {string} value
-     * accepted format: hh:MM:ss.ns
+     * @param {String} value
      * @returns {LocalTime}
      */
     static fromString(value) {
@@ -152,21 +166,52 @@ class LocalTime {
                 `Argument type invalid: ${util.inspect(value)}, expected string type`,
             );
         }
-        // This regex accepts the time in the format hh:MM:ss.ns
-        const regex = /^(?:[01]?\d|2[0-4]):[0-5]?\d:[0-5]?\d(?:\.\d{1,9})?$/;
-
-        if (!regex.test(value)) {
-            throw new TypeError(`Argument format is invalid`);
+        const parts = value.split(":");
+        if (parts.length > 3) {
+            throw new TypeError("Invalid value format");
         }
 
-        return new LocalTime(
-            bigintToLong(rust.LocalTimeWrapper.fromString(value)),
-        );
+        let hour = parseInt(parts[0], 10);
+        let minutes = parseInt(parts[1], 10);
+        if (hour &lt; 0 || hour >= 24) {
+            throw new TypeError(
+                `Invalid hour. Expected value between 0 and 23, got ${hour}`,
+            );
+        }
+        if (minutes &lt; 0 || minutes >= 60) {
+            throw new TypeError(
+                `Invalid minute. Expected value between 0 and 59, got ${minutes}`,
+            );
+        }
+        let millis = hour * millisInHour + minutes * millisInMin;
+
+        let nanos;
+        if (parts.length === 3) {
+            const secParts = parts[2].split(".");
+            const seconds = parseInt(secParts[0], 10);
+            if (seconds &lt; 0 || seconds >= 60) {
+                throw new TypeError(
+                    `Invalid second. Expected value between 0 and 59, got ${seconds}`,
+                );
+            }
+            millis += seconds * 1000;
+            if (secParts.length === 2) {
+                nanos = secParts[1];
+                if (nanos.length > 9) {
+                    throw new TypeError(
+                        "Invalid format for local time constructor. Cannot have sub nanosecond precision.",
+                    );
+                }
+                // add zeros at the end
+                nanos = nanos + utils.stringRepeat("0", 9 - nanos.length);
+            }
+        }
+        return LocalTime.fromMilliseconds(millis, parseInt(nanos, 10) || 0);
     }
 
     /**
      * Uses the current local time (in milliseconds) and the nanoseconds to create a new instance of LocalTime
-     * @param {Number} [nanoseconds=0] A Number from 0 to 999 999 999 representing the time nanosecond portion.
+     * @param {Number} [nanoseconds] A Number from 0 to 999,999,999, representing the time nanosecond portion.
      * @returns {LocalTime}
      */
     static now(nanoseconds) {
@@ -176,28 +221,32 @@ class LocalTime {
     /**
      * Uses the provided local time (in milliseconds) and the nanoseconds to create a new instance of LocalTime
      * @param {Date} date Local date portion to extract the time passed since midnight.
-     * @param {Number} [nanoseconds=0] A Number from 0 to 999 999 999 representing the nanosecond time portion.
+     * @param {Number} [nanoseconds] A Number from 0 to 999,999,999 representing the nanosecond time portion.
      * @returns {LocalTime}
      */
     static fromDate(date, nanoseconds) {
         if (!(date instanceof Date)) {
-            throw new TypeError("Not a valid date");
+            throw new Error("Not a valid date");
         }
-        // Uses the local date with the time zone, takes the number of milliseconds from midnight.
+        // Use the local representation, only the milliseconds portion
         const millis =
-            (date.getTime() + date.getTimezoneOffset() * -60000) % millisInDay;
+            (date.getTime() + date.getTimezoneOffset() * -millisInMin) %
+            millisInDay;
         return LocalTime.fromMilliseconds(millis, nanoseconds);
     }
 
     /**
      * Uses the provided local time (in milliseconds) and the nanoseconds to create a new instance of LocalTime
-     * @param {Number} milliseconds A Number from 0 to 86 399 999.
-     * @param {Number} [nanoseconds=0] A Number from 0 to 999 999 999 representing the time nanosecond portion.
+     * @param {Number} milliseconds A Number from 0 to 86,399,999.
+     * @param {Number} [nanoseconds] A Number from 0 to 999,999,999 representing the time nanosecond portion.
      * @returns {LocalTime}
      */
     static fromMilliseconds(milliseconds, nanoseconds) {
         if (typeof nanoseconds !== "number") {
             nanoseconds = 0;
+        }
+        if (isNaN(milliseconds) || isNaN(nanoseconds)) {
+            throw new TypeError("Cannot create local time from NaN");
         }
         return new LocalTime(
             Long.fromNumber(milliseconds)
@@ -214,7 +263,7 @@ class LocalTime {
     static fromBuffer(value) {
         if (!(value instanceof Buffer)) {
             throw new TypeError(
-                `Expected Buffer, obtained ${utils.util.inspect(value)}`,
+                "Expected Buffer, obtained " + util.inspect(value),
             );
         }
         return new LocalTime(
@@ -225,15 +274,15 @@ class LocalTime {
     /**
      * Compares this LocalTime with the given one.
      * @param {LocalTime} other time to compare against.
-     * @return {number} 0 if they are the same, 1 if this object is larger,
-     * -1 if the given object is larger.
+     * @return {number} 0 if they are the same, 1 if the this is greater, and -1
+     * if the given one is greater.
      */
     compare(other) {
-        return this.getTotalNanoseconds().compare(other.getTotalNanoseconds());
+        return this.value.compare(other.value);
     }
 
     /**
-     * Returns true if the objects are the same, false otherwise.
+     * Returns true if the value of the LocalTime instance and other are the same
      * @param {LocalTime} other
      * @returns {Boolean}
      */
@@ -243,16 +292,12 @@ class LocalTime {
 
     /**
      * Gets the total amount of nanoseconds since midnight for this instance.
-     * @return {Long}
+     * @returns {Long}
      */
     getTotalNanoseconds() {
-        return bigintToLong(this.#internal.getValue());
+        return this.value;
     }
 
-    /**
-     * Provide the name of the constructor and the string representation
-     * @returns {string}
-     */
     inspect() {
         return `${this.constructor.name}: ${this.toString()}`;
     }
@@ -263,51 +308,101 @@ class LocalTime {
      */
     toBuffer() {
         const buffer = utils.allocBufferUnsafe(8);
-        buffer.writeUInt32BE(
-            this.getTotalNanoseconds().getHighBitsUnsigned(),
-            0,
-        );
-        buffer.writeUInt32BE(
-            this.getTotalNanoseconds().getLowBitsUnsigned(),
-            4,
-        );
+        buffer.writeUInt32BE(this.value.getHighBitsUnsigned(), 0);
+        buffer.writeUInt32BE(this.value.getLowBitsUnsigned(), 4);
         return buffer;
     }
 
     /**
      * Returns the string representation of the instance in the form of hh:MM:ss.ns
-     * @returns {string}
+     * @returns {String}
      */
     toString() {
-        return this.#internal.toString();
+        return formatTime(this.#getParts());
     }
 
     /**
      * Gets the string representation of the instance in the form: hh:MM:ss.ns
-     * @returns {string}
+     * @returns {String}
      */
     toJSON() {
         return this.toString();
     }
 
     /**
-     * Get LocalTime from rust object. Not intended to be exposed in the API
-     * @package
-     * @param {rust.LocalTimeWrapper} arg
-     * @returns {LocalTime}
+     * @returns {Array.&lt;Number>}
+     * @ignore
      */
-    static fromRust(arg) {
-        return new LocalTime(bigintToLong(arg.getValue()));
-    }
-
-    /**
-     * @package
-     * @returns {rust.LocalTimeWrapper}
-     */
-    getInternal() {
-        return this.#internal;
+    #getParts() {
+        if (!this._partsCache) {
+            // hours, minutes, seconds and nanos
+            const parts = [0, 0, 0, 0];
+            const secs = this.value.div(nanoSecInSec);
+            // faster modulo
+            // total nanos
+            parts[3] = this.value
+                .subtract(secs.multiply(nanoSecInSec))
+                .toNumber();
+            // seconds
+            parts[2] = secs.toNumber();
+            if (parts[2] >= 60) {
+                // minutes
+                parts[1] = Math.floor(parts[2] / 60);
+                parts[2] = parts[2] % 60;
+            }
+            if (parts[1] >= 60) {
+                // hours
+                parts[0] = Math.floor(parts[1] / 60);
+                parts[1] = parts[1] % 60;
+            }
+            this._partsCache = parts;
+        }
+        return this._partsCache;
     }
 }
+
+/**
+ * @param {Array.&lt;Number>} values
+ * @private
+ */
+function formatTime(values) {
+    let result;
+    if (values[0] &lt; 10) {
+        result = "0" + values[0] + ":";
+    } else {
+        result = values[0] + ":";
+    }
+    if (values[1] &lt; 10) {
+        result += "0" + values[1] + ":";
+    } else {
+        result += values[1] + ":";
+    }
+    if (values[2] &lt; 10) {
+        result += "0" + values[2];
+    } else {
+        result += values[2];
+    }
+    if (values[3] > 0) {
+        let nanos = values[3].toString();
+        // nine digits
+        if (nanos.length &lt; 9) {
+            nanos = utils.stringRepeat("0", 9 - nanos.length) + nanos;
+        }
+        let lastPosition;
+        for (let i = nanos.length - 1; i > 0; i--) {
+            if (nanos[i] !== "0") {
+                break;
+            }
+            lastPosition = i;
+        }
+        if (lastPosition) {
+            nanos = nanos.substring(0, lastPosition);
+        }
+        result += "." + nanos;
+    }
+    return result;
+}
+
 module.exports = LocalTime;
 </code></pre>
         </article>
@@ -319,13 +414,13 @@ module.exports = LocalTime;
 </div>
 
 <nav>
-    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-auth.html">auth</a></li><li><a href="module-concurrent.html">concurrent</a></li><li><a href="module-datastax.html">datastax</a></li><li><a href="module-errors.html">errors</a></li><li><a href="module-geometry.html">geometry</a></li><li><a href="module-mapping.html">mapping</a></li><li><a href="module-metadata.html">metadata</a></li><li><a href="module-metrics.html">metrics</a></li><li><a href="module-policies.html">policies</a></li><li><a href="module-policies_addressResolution.html">policies/addressResolution</a></li><li><a href="module-policies_loadBalancing.html">policies/loadBalancing</a></li><li><a href="module-policies_reconnection.html">policies/reconnection</a></li><li><a href="module-policies_retry.html">policies/retry</a></li><li><a href="module-policies_speculativeExecution.html">policies/speculativeExecution</a></li><li><a href="module-policies_timestampGeneration.html">policies/timestampGeneration</a></li><li><a href="module-tracker.html">tracker</a></li><li><a href="module-types.html">types</a></li></ul><h3>Classes</h3><ul><li><a href="AddressResolver.html">AddressResolver</a></li><li><a href="ByteOrderedToken.html">ByteOrderedToken</a></li><li><a href="Client.html">Client</a></li><li><a href="Encoder.html">Encoder</a></li><li><a href="ExecutionOptions.html">ExecutionOptions</a></li><li><a href="ExecutionProfile.html">ExecutionProfile</a></li><li><a href="FrameReader.html">FrameReader</a></li><li><a href="HashSet.html">HashSet</a></li><li><a href="Host.html">Host</a></li><li><a href="HostMap.html">HostMap</a></li><li><a href="LineString.html">LineString</a></li><li><a href="Murmur3Token.html">Murmur3Token</a></li><li><a href="Point.html">Point</a></li><li><a href="Polygon.html">Polygon</a></li><li><a href="RandomToken.html">RandomToken</a></li><li><a href="Token.html">Token</a></li><li><a href="TokenRange.html">TokenRange</a></li><li><a href="module-auth-AuthProvider.html">AuthProvider</a></li><li><a href="module-auth-Authenticator.html">Authenticator</a></li><li><a href="module-auth-PlainTextAuthProvider.html">PlainTextAuthProvider</a></li><li><a href="module-errors-ArgumentError.html">ArgumentError</a></li><li><a href="module-errors-AuthenticationError.html">AuthenticationError</a></li><li><a href="module-errors-BusyConnectionError.html">BusyConnectionError</a></li><li><a href="module-errors-DriverInternalError.html">DriverInternalError</a></li><li><a href="module-errors-NoHostAvailableError.html">NoHostAvailableError</a></li><li><a href="module-errors-NotSupportedError.html">NotSupportedError</a></li><li><a href="module-errors-OperationTimedOutError.html">OperationTimedOutError</a></li><li><a href="module-errors-ResponseError.html">ResponseError</a></li><li><a href="module-mapping-DefaultTableMappings.html">DefaultTableMappings</a></li><li><a href="module-mapping-Mapper.html">Mapper</a></li><li><a href="module-mapping-ModelBatchItem.html">ModelBatchItem</a></li><li><a href="module-mapping-ModelMapper.html">ModelMapper</a></li><li><a href="module-mapping-Result.html">Result</a></li><li><a href="module-mapping-UnderscoreCqlToCamelCaseMappings.html">UnderscoreCqlToCamelCaseMappings</a></li><li><a href="module-metadata-Aggregate.html">Aggregate</a></li><li><a href="module-metadata-ClientState.html">ClientState</a></li><li><a href="module-metadata-DataCollection.html">DataCollection</a></li><li><a href="module-metadata-Index.html">Index</a></li><li><a href="module-metadata-MaterializedView.html">MaterializedView</a></li><li><a href="module-metadata-Metadata.html">Metadata</a></li><li><a href="module-metadata-SchemaFunction.html">SchemaFunction</a></li><li><a href="module-metadata-TableMetadata.html">TableMetadata</a></li><li><a href="module-metrics-DefaultMetrics.html">DefaultMetrics</a></li><li><a href="module-policies_addressResolution-AddressTranslator.html">AddressTranslator</a></li><li><a href="module-policies_addressResolution-EC2MultiRegionTranslator.html">EC2MultiRegionTranslator</a></li><li><a href="module-policies_loadBalancing-AllowListPolicy.html">AllowListPolicy</a></li><li><a href="module-policies_loadBalancing-DCAwareRoundRobinPolicy.html">DCAwareRoundRobinPolicy</a></li><li><a href="module-policies_loadBalancing-DefaultLoadBalancingPolicy.html">DefaultLoadBalancingPolicy</a></li><li><a href="module-policies_loadBalancing-LegacyDefaultLoadBalancingPolicy.html">LegacyDefaultLoadBalancingPolicy</a></li><li><a href="module-policies_loadBalancing-LoadBalancingConfig.html">LoadBalancingConfig</a></li><li><a href="module-policies_loadBalancing-LoadBalancingPolicy.html">LoadBalancingPolicy</a></li><li><a href="module-policies_loadBalancing-RoundRobinPolicy.html">RoundRobinPolicy</a></li><li><a href="module-policies_loadBalancing-TokenAwarePolicy.html">TokenAwarePolicy</a></li><li><a href="module-policies_reconnection-ConstantReconnectionPolicy.html">ConstantReconnectionPolicy</a></li><li><a href="module-policies_reconnection-ExponentialReconnectionPolicy.html">ExponentialReconnectionPolicy</a></li><li><a href="module-policies_reconnection-ReconnectionPolicy.html">ReconnectionPolicy</a></li><li><a href="module-policies_retry-FallthroughRetryPolicy.html">FallthroughRetryPolicy</a></li><li><a href="module-policies_retry-IdempotenceAwareRetryPolicy.html">IdempotenceAwareRetryPolicy</a></li><li><a href="module-policies_retry-RetryPolicy.html">RetryPolicy</a></li><li><a href="module-policies_speculativeExecution-ConstantSpeculativeExecutionPolicy.html">ConstantSpeculativeExecutionPolicy</a></li><li><a href="module-policies_speculativeExecution-NoSpeculativeExecutionPolicy.html">NoSpeculativeExecutionPolicy</a></li><li><a href="module-policies_speculativeExecution-SpeculativeExecutionPolicy.html">SpeculativeExecutionPolicy</a></li><li><a href="module-policies_timestampGeneration-MonotonicTimestampGenerator.html">MonotonicTimestampGenerator</a></li><li><a href="module-policies_timestampGeneration-TimestampGenerator.html">TimestampGenerator</a></li><li><a href="module-tracker-RequestLogger.html">RequestLogger</a></li><li><a href="module-types-BigDecimal.html">BigDecimal</a></li><li><a href="module-types-Duration.html">Duration</a></li><li><a href="module-types-InetAddress.html">InetAddress</a></li><li><a href="module-types-Integer.html">Integer</a></li><li><a href="module-types-LocalDate.html">LocalDate</a></li><li><a href="module-types-LocalTime.html">LocalTime</a></li><li><a href="module-types-Long.html">Long</a></li><li><a href="module-types-ResultSet.html">ResultSet</a></li><li><a href="module-types-ResultStream.html">ResultStream</a></li><li><a href="module-types-Row.html">Row</a></li><li><a href="module-types-TimeUuid.html">TimeUuid</a></li><li><a href="module-types-Tuple.html">Tuple</a></li><li><a href="module-types-Uuid.html">Uuid</a></li><li><a href="module-types-Vector.html">Vector</a></li></ul><h3>Interfaces</h3><ul><li><a href="module-mapping-TableMappings.html">TableMappings</a></li><li><a href="module-metrics-ClientMetrics.html">ClientMetrics</a></li><li><a href="module-tracker-RequestTracker.html">RequestTracker</a></li></ul><h3>Events</h3><ul><li><a href="Client.html#event:hostAdd">hostAdd</a></li><li><a href="Client.html#event:hostDown">hostDown</a></li><li><a href="Client.html#event:hostRemove">hostRemove</a></li><li><a href="Client.html#event:hostUp">hostUp</a></li></ul><h3>Global</h3><ul><li><a href="global.html#Integer">Integer</a></li><li><a href="global.html#VIntCoding">VIntCoding</a></li><li><a href="global.html#_parseUdtName">_parseUdtName</a></li><li><a href="global.html#adaptNamedParamsPrepared">adaptNamedParamsPrepared</a></li><li><a href="global.html#adaptNamedParamsWithHints">adaptNamedParamsWithHints</a></li><li><a href="global.html#allocBuffer">allocBuffer</a></li><li><a href="global.html#allocBufferFromArray">allocBufferFromArray</a></li><li><a href="global.html#allocBufferFromString">allocBufferFromString</a></li><li><a href="global.html#allocBufferUnsafe">allocBufferUnsafe</a></li><li><a href="global.html#arbitraryValueToBigInt">arbitraryValueToBigInt</a></li><li><a href="global.html#arrayIterator">arrayIterator</a></li><li><a href="global.html#bigintToLong">bigintToLong</a></li><li><a href="global.html#binarySearch">binarySearch</a></li><li><a href="global.html#callbackOnce">callbackOnce</a></li><li><a href="global.html#changedBehaviorWarning">changedBehaviorWarning</a></li><li><a href="global.html#convertComplexType">convertComplexType</a></li><li><a href="global.html#copyBuffer">copyBuffer</a></li><li><a href="global.html#coreConnectionsPerHostV2">coreConnectionsPerHostV2</a></li><li><a href="global.html#coreConnectionsPerHostV3">coreConnectionsPerHostV3</a></li><li><a href="global.html#decodeCustom">decodeCustom</a></li><li><a href="global.html#decodeVector">decodeVector</a></li><li><a href="global.html#deepExtend">deepExtend</a></li><li><a href="global.html#defaultOptions">defaultOptions</a></li><li><a href="global.html#defaultPromiseFactory">defaultPromiseFactory</a></li><li><a href="global.html#delay">delay</a></li><li><a href="global.html#each">each</a></li><li><a href="global.html#eachSeries">eachSeries</a></li><li><a href="global.html#emptyArray">emptyArray</a></li><li><a href="global.html#emptyObject">emptyObject</a></li><li><a href="global.html#encodeCustom">encodeCustom</a></li><li><a href="global.html#encodeParams">encodeParams</a></li><li><a href="global.html#encodeTuple">encodeTuple</a></li><li><a href="global.html#encodeUdt">encodeUdt</a></li><li><a href="global.html#encodeVector">encodeVector</a></li><li><a href="global.html#extend">extend</a></li><li><a href="global.html#fixStack">fixStack</a></li><li><a href="global.html#forEachOf">forEachOf</a></li><li><a href="global.html#fromCallback">fromCallback</a></li><li><a href="global.html#fromEvent">fromEvent</a></li><li><a href="global.html#getCallback">getCallback</a></li><li><a href="global.html#getColumnsMetadata">getColumnsMetadata</a></li><li><a href="global.html#getRowsFromResultsWrapper">getRowsFromResultsWrapper</a></li><li><a href="global.html#ifUndefined">ifUndefined</a></li><li><a href="global.html#ifUndefined3">ifUndefined3</a></li><li><a href="global.html#insertSorted">insertSorted</a></li><li><a href="global.html#iteratorToArray">iteratorToArray</a></li><li><a href="global.html#log">log</a></li><li><a href="global.html#longToBigint">longToBigint</a></li><li><a href="global.html#map">map</a></li><li><a href="global.html#mapSeries">mapSeries</a></li><li><a href="global.html#maxInt">maxInt</a></li><li><a href="global.html#maxRequestsPerConnectionV2">maxRequestsPerConnectionV2</a></li><li><a href="global.html#maxRequestsPerConnectionV3">maxRequestsPerConnectionV3</a></li><li><a href="global.html#napiErrorHandler">napiErrorHandler</a></li><li><a href="global.html#newQueryPlan">newQueryPlan</a></li><li><a href="global.html#objectValues">objectValues</a></li><li><a href="global.html#optionalCallback">optionalCallback</a></li><li><a href="global.html#parallel">parallel</a></li><li><a href="global.html#parseVectorTypeArgs">parseVectorTypeArgs</a></li><li><a href="global.html#promiseWrapper">promiseWrapper</a></li><li><a href="global.html#queryOptionsIntoWrapper">queryOptionsIntoWrapper</a></li><li><a href="global.html#serializationSizeIfFixed">serializationSizeIfFixed</a></li><li><a href="global.html#series">series</a></li><li><a href="global.html#setMetadataDependent">setMetadataDependent</a></li><li><a href="global.html#stringRepeat">stringRepeat</a></li><li><a href="global.html#throwNotSupported">throwNotSupported</a></li><li><a href="global.html#times">times</a></li><li><a href="global.html#timesLimit">timesLimit</a></li><li><a href="global.html#timesSeries">timesSeries</a></li><li><a href="global.html#toBackground">toBackground</a></li><li><a href="global.html#toCallback">toCallback</a></li><li><a href="global.html#toLowerCaseProperties">toLowerCaseProperties</a></li><li><a href="global.html#totalLength">totalLength</a></li><li><a href="global.html#validateFn">validateFn</a></li><li><a href="global.html#whilst">whilst</a></li></ul>
+    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-auth.html">auth</a></li><li><a href="module-concurrent.html">concurrent</a></li><li><a href="module-datastax.html">datastax</a></li><li><a href="module-errors.html">errors</a></li><li><a href="module-geometry.html">geometry</a></li><li><a href="module-mapping.html">mapping</a></li><li><a href="module-metadata.html">metadata</a></li><li><a href="module-metrics.html">metrics</a></li><li><a href="module-policies.html">policies</a></li><li><a href="module-policies_addressResolution.html">policies/addressResolution</a></li><li><a href="module-policies_loadBalancing.html">policies/loadBalancing</a></li><li><a href="module-policies_reconnection.html">policies/reconnection</a></li><li><a href="module-policies_retry.html">policies/retry</a></li><li><a href="module-policies_speculativeExecution.html">policies/speculativeExecution</a></li><li><a href="module-policies_timestampGeneration.html">policies/timestampGeneration</a></li><li><a href="module-tracker.html">tracker</a></li><li><a href="module-types.html">types</a></li></ul><h3>Classes</h3><ul><li><a href="AddressResolver.html">AddressResolver</a></li><li><a href="ByteOrderedToken.html">ByteOrderedToken</a></li><li><a href="Client.html">Client</a></li><li><a href="Encoder.html">Encoder</a></li><li><a href="ExecutionOptions.html">ExecutionOptions</a></li><li><a href="ExecutionProfile.html">ExecutionProfile</a></li><li><a href="FrameReader.html">FrameReader</a></li><li><a href="HashSet.html">HashSet</a></li><li><a href="Host.html">Host</a></li><li><a href="HostMap.html">HostMap</a></li><li><a href="LineString.html">LineString</a></li><li><a href="Murmur3Token.html">Murmur3Token</a></li><li><a href="Point.html">Point</a></li><li><a href="Polygon.html">Polygon</a></li><li><a href="RandomToken.html">RandomToken</a></li><li><a href="Token.html">Token</a></li><li><a href="TokenRange.html">TokenRange</a></li><li><a href="module-auth-AuthProvider.html">AuthProvider</a></li><li><a href="module-auth-Authenticator.html">Authenticator</a></li><li><a href="module-auth-PlainTextAuthProvider.html">PlainTextAuthProvider</a></li><li><a href="module-errors-ArgumentError.html">ArgumentError</a></li><li><a href="module-errors-AuthenticationError.html">AuthenticationError</a></li><li><a href="module-errors-BusyConnectionError.html">BusyConnectionError</a></li><li><a href="module-errors-DriverInternalError.html">DriverInternalError</a></li><li><a href="module-errors-NoHostAvailableError.html">NoHostAvailableError</a></li><li><a href="module-errors-NotSupportedError.html">NotSupportedError</a></li><li><a href="module-errors-OperationTimedOutError.html">OperationTimedOutError</a></li><li><a href="module-errors-ResponseError.html">ResponseError</a></li><li><a href="module-mapping-DefaultTableMappings.html">DefaultTableMappings</a></li><li><a href="module-mapping-Mapper.html">Mapper</a></li><li><a href="module-mapping-ModelBatchItem.html">ModelBatchItem</a></li><li><a href="module-mapping-ModelMapper.html">ModelMapper</a></li><li><a href="module-mapping-Result.html">Result</a></li><li><a href="module-mapping-UnderscoreCqlToCamelCaseMappings.html">UnderscoreCqlToCamelCaseMappings</a></li><li><a href="module-metadata-Aggregate.html">Aggregate</a></li><li><a href="module-metadata-ClientState.html">ClientState</a></li><li><a href="module-metadata-DataCollection.html">DataCollection</a></li><li><a href="module-metadata-Index.html">Index</a></li><li><a href="module-metadata-MaterializedView.html">MaterializedView</a></li><li><a href="module-metadata-Metadata.html">Metadata</a></li><li><a href="module-metadata-SchemaFunction.html">SchemaFunction</a></li><li><a href="module-metadata-TableMetadata.html">TableMetadata</a></li><li><a href="module-metrics-DefaultMetrics.html">DefaultMetrics</a></li><li><a href="module-policies_addressResolution-AddressTranslator.html">AddressTranslator</a></li><li><a href="module-policies_addressResolution-EC2MultiRegionTranslator.html">EC2MultiRegionTranslator</a></li><li><a href="module-policies_loadBalancing-AllowListPolicy.html">AllowListPolicy</a></li><li><a href="module-policies_loadBalancing-DCAwareRoundRobinPolicy.html">DCAwareRoundRobinPolicy</a></li><li><a href="module-policies_loadBalancing-DefaultLoadBalancingPolicy.html">DefaultLoadBalancingPolicy</a></li><li><a href="module-policies_loadBalancing-LegacyDefaultLoadBalancingPolicy.html">LegacyDefaultLoadBalancingPolicy</a></li><li><a href="module-policies_loadBalancing-LoadBalancingConfig.html">LoadBalancingConfig</a></li><li><a href="module-policies_loadBalancing-LoadBalancingPolicy.html">LoadBalancingPolicy</a></li><li><a href="module-policies_loadBalancing-RoundRobinPolicy.html">RoundRobinPolicy</a></li><li><a href="module-policies_loadBalancing-TokenAwarePolicy.html">TokenAwarePolicy</a></li><li><a href="module-policies_reconnection-ConstantReconnectionPolicy.html">ConstantReconnectionPolicy</a></li><li><a href="module-policies_reconnection-ExponentialReconnectionPolicy.html">ExponentialReconnectionPolicy</a></li><li><a href="module-policies_reconnection-ReconnectionPolicy.html">ReconnectionPolicy</a></li><li><a href="module-policies_retry-FallthroughRetryPolicy.html">FallthroughRetryPolicy</a></li><li><a href="module-policies_retry-IdempotenceAwareRetryPolicy.html">IdempotenceAwareRetryPolicy</a></li><li><a href="module-policies_retry-RetryPolicy.html">RetryPolicy</a></li><li><a href="module-policies_speculativeExecution-ConstantSpeculativeExecutionPolicy.html">ConstantSpeculativeExecutionPolicy</a></li><li><a href="module-policies_speculativeExecution-NoSpeculativeExecutionPolicy.html">NoSpeculativeExecutionPolicy</a></li><li><a href="module-policies_speculativeExecution-SpeculativeExecutionPolicy.html">SpeculativeExecutionPolicy</a></li><li><a href="module-policies_timestampGeneration-MonotonicTimestampGenerator.html">MonotonicTimestampGenerator</a></li><li><a href="module-policies_timestampGeneration-TimestampGenerator.html">TimestampGenerator</a></li><li><a href="module-tracker-RequestLogger.html">RequestLogger</a></li><li><a href="module-types-BigDecimal.html">BigDecimal</a></li><li><a href="module-types-Duration.html">Duration</a></li><li><a href="module-types-InetAddress.html">InetAddress</a></li><li><a href="module-types-Integer.html">Integer</a></li><li><a href="module-types-LocalDate.html">LocalDate</a></li><li><a href="module-types.html#~LocalTime">LocalTime</a></li><li><a href="module-types-Long.html">Long</a></li><li><a href="module-types-ResultSet.html">ResultSet</a></li><li><a href="module-types-ResultStream.html">ResultStream</a></li><li><a href="module-types-Row.html">Row</a></li><li><a href="module-types-TimeUuid.html">TimeUuid</a></li><li><a href="module-types-Tuple.html">Tuple</a></li><li><a href="module-types-Uuid.html">Uuid</a></li><li><a href="module-types-Vector.html">Vector</a></li></ul><h3>Interfaces</h3><ul><li><a href="module-mapping-TableMappings.html">TableMappings</a></li><li><a href="module-metrics-ClientMetrics.html">ClientMetrics</a></li><li><a href="module-tracker-RequestTracker.html">RequestTracker</a></li></ul><h3>Events</h3><ul><li><a href="Client.html#event:hostAdd">hostAdd</a></li><li><a href="Client.html#event:hostDown">hostDown</a></li><li><a href="Client.html#event:hostRemove">hostRemove</a></li><li><a href="Client.html#event:hostUp">hostUp</a></li></ul><h3>Global</h3><ul><li><a href="global.html#Integer">Integer</a></li><li><a href="global.html#VIntCoding">VIntCoding</a></li><li><a href="global.html#_parseUdtName">_parseUdtName</a></li><li><a href="global.html#adaptNamedParamsPrepared">adaptNamedParamsPrepared</a></li><li><a href="global.html#adaptNamedParamsWithHints">adaptNamedParamsWithHints</a></li><li><a href="global.html#allocBuffer">allocBuffer</a></li><li><a href="global.html#allocBufferFromArray">allocBufferFromArray</a></li><li><a href="global.html#allocBufferFromString">allocBufferFromString</a></li><li><a href="global.html#allocBufferUnsafe">allocBufferUnsafe</a></li><li><a href="global.html#arbitraryValueToBigInt">arbitraryValueToBigInt</a></li><li><a href="global.html#arrayIterator">arrayIterator</a></li><li><a href="global.html#bigintToLong">bigintToLong</a></li><li><a href="global.html#binarySearch">binarySearch</a></li><li><a href="global.html#callbackOnce">callbackOnce</a></li><li><a href="global.html#changedBehaviorWarning">changedBehaviorWarning</a></li><li><a href="global.html#convertComplexType">convertComplexType</a></li><li><a href="global.html#copyBuffer">copyBuffer</a></li><li><a href="global.html#coreConnectionsPerHostV2">coreConnectionsPerHostV2</a></li><li><a href="global.html#coreConnectionsPerHostV3">coreConnectionsPerHostV3</a></li><li><a href="global.html#decodeCustom">decodeCustom</a></li><li><a href="global.html#decodeVector">decodeVector</a></li><li><a href="global.html#deepExtend">deepExtend</a></li><li><a href="global.html#defaultOptions">defaultOptions</a></li><li><a href="global.html#defaultPromiseFactory">defaultPromiseFactory</a></li><li><a href="global.html#delay">delay</a></li><li><a href="global.html#each">each</a></li><li><a href="global.html#eachSeries">eachSeries</a></li><li><a href="global.html#emptyArray">emptyArray</a></li><li><a href="global.html#emptyObject">emptyObject</a></li><li><a href="global.html#encodeCustom">encodeCustom</a></li><li><a href="global.html#encodeParams">encodeParams</a></li><li><a href="global.html#encodeTuple">encodeTuple</a></li><li><a href="global.html#encodeUdt">encodeUdt</a></li><li><a href="global.html#encodeVector">encodeVector</a></li><li><a href="global.html#extend">extend</a></li><li><a href="global.html#fixStack">fixStack</a></li><li><a href="global.html#forEachOf">forEachOf</a></li><li><a href="global.html#fromCallback">fromCallback</a></li><li><a href="global.html#fromEvent">fromEvent</a></li><li><a href="global.html#getCallback">getCallback</a></li><li><a href="global.html#getColumnsMetadata">getColumnsMetadata</a></li><li><a href="global.html#getRowsFromResultsWrapper">getRowsFromResultsWrapper</a></li><li><a href="global.html#ifUndefined">ifUndefined</a></li><li><a href="global.html#ifUndefined3">ifUndefined3</a></li><li><a href="global.html#insertSorted">insertSorted</a></li><li><a href="global.html#iteratorToArray">iteratorToArray</a></li><li><a href="global.html#log">log</a></li><li><a href="global.html#longToBigint">longToBigint</a></li><li><a href="global.html#map">map</a></li><li><a href="global.html#mapSeries">mapSeries</a></li><li><a href="global.html#maxInt">maxInt</a></li><li><a href="global.html#maxRequestsPerConnectionV2">maxRequestsPerConnectionV2</a></li><li><a href="global.html#maxRequestsPerConnectionV3">maxRequestsPerConnectionV3</a></li><li><a href="global.html#napiErrorHandler">napiErrorHandler</a></li><li><a href="global.html#newQueryPlan">newQueryPlan</a></li><li><a href="global.html#objectValues">objectValues</a></li><li><a href="global.html#optionalCallback">optionalCallback</a></li><li><a href="global.html#parallel">parallel</a></li><li><a href="global.html#parseVectorTypeArgs">parseVectorTypeArgs</a></li><li><a href="global.html#promiseWrapper">promiseWrapper</a></li><li><a href="global.html#queryOptionsIntoWrapper">queryOptionsIntoWrapper</a></li><li><a href="global.html#serializationSizeIfFixed">serializationSizeIfFixed</a></li><li><a href="global.html#series">series</a></li><li><a href="global.html#setMetadataDependent">setMetadataDependent</a></li><li><a href="global.html#stringRepeat">stringRepeat</a></li><li><a href="global.html#throwNotSupported">throwNotSupported</a></li><li><a href="global.html#times">times</a></li><li><a href="global.html#timesLimit">timesLimit</a></li><li><a href="global.html#timesSeries">timesSeries</a></li><li><a href="global.html#toBackground">toBackground</a></li><li><a href="global.html#toCallback">toCallback</a></li><li><a href="global.html#toLowerCaseProperties">toLowerCaseProperties</a></li><li><a href="global.html#totalLength">totalLength</a></li><li><a href="global.html#validateFn">validateFn</a></li><li><a href="global.html#whilst">whilst</a></li></ul>
 </nav>
 
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Mon Dec 22 2025 15:32:18 GMT+0000 (Coordinated Universal Time)
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Mon Jan 05 2026 11:18:26 GMT+0000 (Coordinated Universal Time)
 </footer>
 
 <script> prettyPrint(); </script>

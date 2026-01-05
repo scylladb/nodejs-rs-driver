@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>JSDoc: Class: ExecutionOptions</title>
+    <title>JSDoc: Class: LocalTime</title>
 
     <script src="scripts/prettify/prettify.js"> </script>
     <script src="scripts/prettify/lang-css.js"> </script>
@@ -17,7 +17,7 @@
 
 <div id="main">
 
-    <h1 class="page-title">Class: ExecutionOptions</h1>
+    <h1 class="page-title">Class: LocalTime</h1>
 
     
 
@@ -28,12 +28,13 @@
 
 <header>
     
-        <h2><span class="attribs"><span class="type-signature"></span></span>ExecutionOptions<span class="signature">()</span><span class="type-signature"></span></h2>
+        <h2><span class="attribs"><span class="type-signature"></span></span>
+            <span class="ancestors"><a href="module-types.html">types</a>~</span>LocalTime<span class="signature">(totalNanoseconds)</span><span class="type-signature"></span></h2>
         
-            <div class="class-description"><p>A base class that represents a wrapper around the user provided query options with getter methods and proper
-default values.</p>
-<p>Note that getter methods might return <code>undefined</code> when not set on the query options or default
-<a href="Client.html">Client</a> options.</p></div>
+            <div class="class-description"><p>A time without a time-zone in the ISO-8601 calendar system, such as 10:30:05.
+LocalTime is an immutable date-time object that represents a time,
+often viewed as hour-minute-second. Time is represented to nanosecond precision.
+For example, the value &quot;13:45.30.123456789&quot; can be stored in a LocalTime.</p></div>
         
     
 </header>
@@ -48,7 +49,7 @@ default values.</p>
     
 
     
-    <h4 class="name" id="ExecutionOptions"><span class="type-signature"></span>new ExecutionOptions<span class="signature">()</span><span class="type-signature"></span></h4>
+    <h4 class="name" id="~LocalTime"><span class="type-signature"></span>new LocalTime<span class="signature">(totalNanoseconds)</span><span class="type-signature"></span></h4>
     
 
     
@@ -56,7 +57,7 @@ default values.</p>
 
 
 <div class="description">
-    <p>Creates a new instance of <a href="ExecutionOptions.html">ExecutionOptions</a>.</p>
+    <p>Creates a new instance of LocalTime.</p>
 </div>
 
 
@@ -65,6 +66,55 @@ default values.</p>
 
 
 
+
+
+    <h5>Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>totalNanoseconds</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Long</span>
+
+
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last"><p>Total nanoseconds since midnight.</p></td>
+        </tr>
+
+    
+    </tbody>
+</table>
 
 
 
@@ -100,7 +150,7 @@ default values.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="execution-options.js.html">execution-options.js</a>, <a href="execution-options.js.html#line18">line 18</a>
+        <a href="types_local-time.js.html">types/local-time.js</a>, <a href="types_local-time.js.html#line21">line 21</a>
     </li></ul></dd>
     
 
@@ -146,6 +196,298 @@ default values.</p>
     
 
     
+        <h3 class="subsection-title">Members</h3>
+
+        
+            
+<h4 class="name" id="hour"><span class="type-signature">(readonly) </span>hour<span class="type-signature"> :Number</span></h4>
+
+
+
+
+<div class="description">
+    <p>Gets the hours, a number from 0 to 24.</p>
+</div>
+
+
+
+    <h5>Type:</h5>
+    <ul>
+        <li>
+            
+<span class="param-type">Number</span>
+
+
+        </li>
+    </ul>
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="types_local-time.js.html">types/local-time.js</a>, <a href="types_local-time.js.html#line122">line 122</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+        
+            
+<h4 class="name" id="minute"><span class="type-signature">(readonly) </span>minute<span class="type-signature"> :Number</span></h4>
+
+
+
+
+<div class="description">
+    <p>Gets the minutes, a number from 0 to 59.</p>
+</div>
+
+
+
+    <h5>Type:</h5>
+    <ul>
+        <li>
+            
+<span class="param-type">Number</span>
+
+
+        </li>
+    </ul>
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="types_local-time.js.html">types/local-time.js</a>, <a href="types_local-time.js.html#line109">line 109</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+        
+            
+<h4 class="name" id="nanosecond"><span class="type-signature">(readonly) </span>nanosecond<span class="type-signature"> :Number</span></h4>
+
+
+
+
+<div class="description">
+    <p>Gets the nanoseconds, a number from 0 to 999 999 999.</p>
+</div>
+
+
+
+    <h5>Type:</h5>
+    <ul>
+        <li>
+            
+<span class="param-type">Number</span>
+
+
+        </li>
+    </ul>
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="types_local-time.js.html">types/local-time.js</a>, <a href="types_local-time.js.html#line83">line 83</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+        
+            
+<h4 class="name" id="second"><span class="type-signature">(readonly) </span>second<span class="type-signature"> :Number</span></h4>
+
+
+
+
+<div class="description">
+    <p>Gets the seconds, a number from 0 to 59.</p>
+</div>
+
+
+
+    <h5>Type:</h5>
+    <ul>
+        <li>
+            
+<span class="param-type">Number</span>
+
+
+        </li>
+    </ul>
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="types_local-time.js.html">types/local-time.js</a>, <a href="types_local-time.js.html#line96">line 96</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+        
+    
 
     
         <h3 class="subsection-title">Methods</h3>
@@ -156,7 +498,7 @@ default values.</p>
     
 
     
-    <h4 class="name" id="getCaptureStackTrace"><span class="type-signature">(abstract) </span>getCaptureStackTrace<span class="signature">()</span><span class="type-signature"> &rarr; {Boolean}</span></h4>
+    <h4 class="name" id="compare"><span class="type-signature"></span>compare<span class="signature">(other)</span><span class="type-signature"> &rarr; {number}</span></h4>
     
 
     
@@ -164,7 +506,7 @@ default values.</p>
 
 
 <div class="description">
-    <p>Determines if the stack trace before the query execution should be maintained.</p>
+    <p>Compares this LocalTime with the given one.</p>
 </div>
 
 
@@ -173,6 +515,55 @@ default values.</p>
 
 
 
+
+
+    <h5>Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>other</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">LocalTime</span>
+
+
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last"><p>time to compare against.</p></td>
+        </tr>
+
+    
+    </tbody>
+</table>
 
 
 
@@ -208,7 +599,167 @@ default values.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="execution-options.js.html">execution-options.js</a>, <a href="execution-options.js.html#line64">line 64</a>
+        <a href="types_local-time.js.html">types/local-time.js</a>, <a href="types_local-time.js.html#line252">line 252</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5>Returns:</h5>
+
+        
+<div class="param-desc">
+    <p>0 if they are the same, 1 if the this is greater, and -1
+if the given one is greater.</p>
+</div>
+
+
+
+<dl>
+    <dt>
+        Type
+    </dt>
+    <dd>
+        
+<span class="param-type">number</span>
+
+
+    </dd>
+</dl>
+
+    
+
+
+
+
+
+        
+            
+
+    
+
+    
+    <h4 class="name" id="equals"><span class="type-signature"></span>equals<span class="signature">(other)</span><span class="type-signature"> &rarr; {Boolean}</span></h4>
+    
+
+    
+
+
+
+<div class="description">
+    <p>Returns true if the value of the LocalTime instance and other are the same</p>
+</div>
+
+
+
+
+
+
+
+
+
+    <h5>Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>other</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">LocalTime</span>
+
+
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last"></td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="types_local-time.js.html">types/local-time.js</a>, <a href="types_local-time.js.html#line261">line 261</a>
     </li></ul></dd>
     
 
@@ -262,7 +813,7 @@ default values.</p>
     
 
     
-    <h4 class="name" id="getConsistency"><span class="type-signature">(abstract) </span>getConsistency<span class="signature">()</span><span class="type-signature"> &rarr; {Number}</span></h4>
+    <h4 class="name" id="getTotalNanoseconds"><span class="type-signature"></span>getTotalNanoseconds<span class="signature">()</span><span class="type-signature"> &rarr; {Long}</span></h4>
     
 
     
@@ -270,7 +821,7 @@ default values.</p>
 
 
 <div class="description">
-    <p>Gets the <a href="module-types.html#~consistencies">Consistency level</a> to be used for the execution.</p>
+    <p>Gets the total amount of nanoseconds since midnight for this instance.</p>
 </div>
 
 
@@ -314,7 +865,7 @@ default values.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="execution-options.js.html">execution-options.js</a>, <a href="execution-options.js.html#line71">line 71</a>
+        <a href="types_local-time.js.html">types/local-time.js</a>, <a href="types_local-time.js.html#line269">line 269</a>
     </li></ul></dd>
     
 
@@ -350,7 +901,7 @@ default values.</p>
     </dt>
     <dd>
         
-<span class="param-type">Number</span>
+<span class="param-type">Long</span>
 
 
     </dd>
@@ -368,7 +919,7 @@ default values.</p>
     
 
     
-    <h4 class="name" id="getCustomPayload"><span class="type-signature">(abstract) </span>getCustomPayload<span class="signature">()</span><span class="type-signature"> &rarr; {Object}</span></h4>
+    <h4 class="name" id="toBuffer"><span class="type-signature"></span>toBuffer<span class="signature">()</span><span class="type-signature"> &rarr; {Buffer}</span></h4>
     
 
     
@@ -376,8 +927,7 @@ default values.</p>
 
 
 <div class="description">
-    <p>Key-value payload to be passed to the server. On the server side, implementations of QueryHandler can use
-this data.</p>
+    <p>Returns a big-endian bytes representation of the instance</p>
 </div>
 
 
@@ -421,7 +971,7 @@ this data.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="execution-options.js.html">execution-options.js</a>, <a href="execution-options.js.html#line79">line 79</a>
+        <a href="types_local-time.js.html">types/local-time.js</a>, <a href="types_local-time.js.html#line281">line 281</a>
     </li></ul></dd>
     
 
@@ -457,7 +1007,7 @@ this data.</p>
     </dt>
     <dd>
         
-<span class="param-type">Object</span>
+<span class="param-type">Buffer</span>
 
 
     </dd>
@@ -475,7 +1025,7 @@ this data.</p>
     
 
     
-    <h4 class="name" id="getFetchSize"><span class="type-signature">(abstract) </span>getFetchSize<span class="signature">()</span><span class="type-signature"> &rarr; {Number}</span></h4>
+    <h4 class="name" id="toJSON"><span class="type-signature"></span>toJSON<span class="signature">()</span><span class="type-signature"> &rarr; {String}</span></h4>
     
 
     
@@ -483,7 +1033,7 @@ this data.</p>
 
 
 <div class="description">
-    <p>Gets the amount of rows to retrieve per page.</p>
+    <p>Gets the string representation of the instance in the form: hh:MM:ss.ns</p>
 </div>
 
 
@@ -527,332 +1077,7 @@ this data.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="execution-options.js.html">execution-options.js</a>, <a href="execution-options.js.html#line86">line 86</a>
-    </li></ul></dd>
-    
-
-    
-
-    
-
-    
-</dl>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-<h5>Returns:</h5>
-
-        
-
-
-<dl>
-    <dt>
-        Type
-    </dt>
-    <dd>
-        
-<span class="param-type">Number</span>
-
-
-    </dd>
-</dl>
-
-    
-
-
-
-
-
-        
-            
-
-    
-
-    
-    <h4 class="name" id="getFixedHost"><span class="type-signature"></span>getFixedHost<span class="signature">()</span><span class="type-signature"> &rarr; {<a href="Host.html">Host</a>}</span></h4>
-    
-
-    
-
-
-
-<div class="description">
-    <p>When a fixed host is set on the query options and the query plan for the load-balancing policy is not used, it
-gets the host that should handle the query.</p>
-</div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-<dl class="details">
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-    <dt class="tag-source">Source:</dt>
-    <dd class="tag-source"><ul class="dummy"><li>
-        <a href="execution-options.js.html">execution-options.js</a>, <a href="execution-options.js.html#line93">line 93</a>
-    </li></ul></dd>
-    
-
-    
-
-    
-
-    
-</dl>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-<h5>Returns:</h5>
-
-        
-
-
-<dl>
-    <dt>
-        Type
-    </dt>
-    <dd>
-        
-<span class="param-type"><a href="Host.html">Host</a></span>
-
-
-    </dd>
-</dl>
-
-    
-
-
-
-
-
-        
-            
-
-    
-
-    
-    <h4 class="name" id="getHints"><span class="type-signature">(abstract) </span>getHints<span class="signature">()</span><span class="type-signature"> &rarr; {Array|Array.&lt;Array>}</span></h4>
-    
-
-    
-
-
-
-<div class="description">
-    <p>Gets the type hints for parameters given in the query, ordered as for the parameters.</p>
-</div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-<dl class="details">
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-    <dt class="tag-source">Source:</dt>
-    <dd class="tag-source"><ul class="dummy"><li>
-        <a href="execution-options.js.html">execution-options.js</a>, <a href="execution-options.js.html#line100">line 100</a>
-    </li></ul></dd>
-    
-
-    
-
-    
-
-    
-</dl>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-<h5>Returns:</h5>
-
-        
-
-
-<dl>
-    <dt>
-        Type
-    </dt>
-    <dd>
-        
-<span class="param-type">Array</span>
-|
-
-<span class="param-type">Array.&lt;Array></span>
-
-
-    </dd>
-</dl>
-
-    
-
-
-
-
-
-        
-            
-
-    
-
-    
-    <h4 class="name" id="getKeyspace"><span class="type-signature">(abstract) </span>getKeyspace<span class="signature">()</span><span class="type-signature"> &rarr; {String}</span></h4>
-    
-
-    
-
-
-
-<div class="description">
-    <p>Gets the keyspace for the query when set at query options level.</p>
-<p>Note that this method will return <code>undefined</code> when the keyspace is not set at query options level.
-It will only return the keyspace name when the user provided a different keyspace than the current
-<a href="Client.html">Client</a> keyspace.</p>
-</div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-<dl class="details">
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-    <dt class="tag-source">Source:</dt>
-    <dd class="tag-source"><ul class="dummy"><li>
-        <a href="execution-options.js.html">execution-options.js</a>, <a href="execution-options.js.html#line158">line 158</a>
+        <a href="types_local-time.js.html">types/local-time.js</a>, <a href="types_local-time.js.html#line300">line 300</a>
     </li></ul></dd>
     
 
@@ -906,7 +1131,7 @@ It will only return the keyspace name when the user provided a different keyspac
     
 
     
-    <h4 class="name" id="getLoadBalancingPolicy"><span class="type-signature"></span>getLoadBalancingPolicy<span class="signature">()</span><span class="type-signature"> &rarr; {LoadBalancingPolicy}</span></h4>
+    <h4 class="name" id="toString"><span class="type-signature"></span>toString<span class="signature">()</span><span class="type-signature"> &rarr; {String}</span></h4>
     
 
     
@@ -914,7 +1139,7 @@ It will only return the keyspace name when the user provided a different keyspac
 
 
 <div class="description">
-    <p>Gets the load balancing policy used for this execution.</p>
+    <p>Returns the string representation of the instance in the form of hh:MM:ss.ns</p>
 </div>
 
 
@@ -958,7 +1183,7 @@ It will only return the keyspace name when the user provided a different keyspac
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="execution-options.js.html">execution-options.js</a>, <a href="execution-options.js.html#line164">line 164</a>
+        <a href="types_local-time.js.html">types/local-time.js</a>, <a href="types_local-time.js.html#line292">line 292</a>
     </li></ul></dd>
     
 
@@ -986,10 +1211,6 @@ It will only return the keyspace name when the user provided a different keyspac
 <h5>Returns:</h5>
 
         
-<div class="param-desc">
-    <p>A <code>LoadBalancingPolicy</code> instance, it can't be <code>undefined</code>.</p>
-</div>
-
 
 
 <dl>
@@ -998,7 +1219,7 @@ It will only return the keyspace name when the user provided a different keyspac
     </dt>
     <dd>
         
-<span class="param-type">LoadBalancingPolicy</span>
+<span class="param-type">String</span>
 
 
     </dd>
@@ -1016,7 +1237,7 @@ It will only return the keyspace name when the user provided a different keyspac
     
 
     
-    <h4 class="name" id="getPageState"><span class="type-signature">(abstract) </span>getPageState<span class="signature">()</span><span class="type-signature"> &rarr; {Buffer}</span></h4>
+    <h4 class="name" id=".fromBuffer"><span class="type-signature">(static) </span>fromBuffer<span class="signature">(value)</span><span class="type-signature"> &rarr; {LocalTime}</span></h4>
     
 
     
@@ -1024,7 +1245,7 @@ It will only return the keyspace name when the user provided a different keyspac
 
 
 <div class="description">
-    <p>Gets the Buffer representing the paging state.</p>
+    <p>Creates a new instance of LocalTime from the bytes representation.</p>
 </div>
 
 
@@ -1035,110 +1256,53 @@ It will only return the keyspace name when the user provided a different keyspac
 
 
 
-
-
-
-
-<dl class="details">
-
+    <h5>Parameters:</h5>
     
 
-    
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
 
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-    <dt class="tag-source">Source:</dt>
-    <dd class="tag-source"><ul class="dummy"><li>
-        <a href="execution-options.js.html">execution-options.js</a>, <a href="execution-options.js.html#line178">line 178</a>
-    </li></ul></dd>
-    
-
-    
-
-    
-
-    
-</dl>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-<h5>Returns:</h5>
+        <th>Type</th>
 
         
 
-
-<dl>
-    <dt>
-        Type
-    </dt>
-    <dd>
         
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>value</code></td>
+            
+
+            <td class="type">
+            
+                
 <span class="param-type">Buffer</span>
 
 
-    </dd>
-</dl>
+            
+            </td>
 
-    
-
-
-
-
-
-        
             
 
-    
+            
+
+            <td class="description last"></td>
+        </tr>
 
     
-    <h4 class="name" id="getRawQueryOptions"><span class="type-signature"></span>getRawQueryOptions<span class="signature">()</span><span class="type-signature"> &rarr; {<a href="global.html#QueryOptions">QueryOptions</a>}</span></h4>
-    
-
-    
-
-
-
-<div class="description">
-    <p>Gets the query options as provided to the execution method without setting the default values.</p>
-</div>
-
-
-
-
-
-
-
+    </tbody>
+</table>
 
 
 
@@ -1174,7 +1338,7 @@ It will only return the keyspace name when the user provided a different keyspac
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="execution-options.js.html">execution-options.js</a>, <a href="execution-options.js.html#line191">line 191</a>
+        <a href="types_local-time.js.html">types/local-time.js</a>, <a href="types_local-time.js.html#line235">line 235</a>
     </li></ul></dd>
     
 
@@ -1210,7 +1374,7 @@ It will only return the keyspace name when the user provided a different keyspac
     </dt>
     <dd>
         
-<span class="param-type"><a href="global.html#QueryOptions">QueryOptions</a></span>
+<span class="param-type">LocalTime</span>
 
 
     </dd>
@@ -1228,7 +1392,7 @@ It will only return the keyspace name when the user provided a different keyspac
     
 
     
-    <h4 class="name" id="getReadTimeout"><span class="type-signature">(abstract) </span>getReadTimeout<span class="signature">()</span><span class="type-signature"> &rarr; {Number}</span></h4>
+    <h4 class="name" id=".fromDate"><span class="type-signature">(static) </span>fromDate<span class="signature">(date, nanoseconds<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {LocalTime}</span></h4>
     
 
     
@@ -1236,8 +1400,7 @@ It will only return the keyspace name when the user provided a different keyspac
 
 
 <div class="description">
-    <p>Gets the timeout in milliseconds to be used for the execution per coordinator.</p>
-<p>A value of <code>0</code> disables client side read timeout for the execution. Default: <code>undefined</code>.</p>
+    <p>Uses the provided local time (in milliseconds) and the nanoseconds to create a new instance of LocalTime</p>
 </div>
 
 
@@ -1248,110 +1411,96 @@ It will only return the keyspace name when the user provided a different keyspac
 
 
 
-
-
-
-
-<dl class="details">
-
+    <h5>Parameters:</h5>
     
 
-    
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
 
-    
+        <th>Type</th>
 
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-    <dt class="tag-source">Source:</dt>
-    <dd class="tag-source"><ul class="dummy"><li>
-        <a href="execution-options.js.html">execution-options.js</a>, <a href="execution-options.js.html#line200">line 200</a>
-    </li></ul></dd>
-    
-
-    
-
-    
-
-    
-</dl>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-<h5>Returns:</h5>
+        
+        <th>Attributes</th>
+        
 
         
 
+        <th class="last">Description</th>
+    </tr>
+    </thead>
 
-<dl>
-    <dt>
-        Type
-    </dt>
-    <dd>
-        
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>date</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Date</span>
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+
+                
+
+                
+                </td>
+            
+
+            
+
+            <td class="description last"><p>Local date portion to extract the time passed since midnight.</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>nanoseconds</code></td>
+            
+
+            <td class="type">
+            
+                
 <span class="param-type">Number</span>
 
 
-    </dd>
-</dl>
+            
+            </td>
 
-    
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
 
+                
 
-
-
-
-        
+                
+                </td>
             
 
-    
+            
+
+            <td class="description last"><p>A Number from 0 to 999,999,999 representing the nanosecond time portion.</p></td>
+        </tr>
 
     
-    <h4 class="name" id="getRetryPolicy"><span class="type-signature">(abstract) </span>getRetryPolicy<span class="signature">()</span><span class="type-signature"> &rarr; {RetryPolicy}</span></h4>
-    
-
-    
-
-
-
-<div class="description">
-    <p>Gets the <a href="module-policies_retry.html">retry policy</a> to be used.</p>
-</div>
-
-
-
-
-
-
-
+    </tbody>
+</table>
 
 
 
@@ -1387,7 +1536,7 @@ It will only return the keyspace name when the user provided a different keyspac
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="execution-options.js.html">execution-options.js</a>, <a href="execution-options.js.html#line207">line 207</a>
+        <a href="types_local-time.js.html">types/local-time.js</a>, <a href="types_local-time.js.html#line199">line 199</a>
     </li></ul></dd>
     
 
@@ -1415,10 +1564,6 @@ It will only return the keyspace name when the user provided a different keyspac
 <h5>Returns:</h5>
 
         
-<div class="param-desc">
-    <p>A <code>RetryPolicy</code> instance, it can't be <code>undefined</code>.</p>
-</div>
-
 
 
 <dl>
@@ -1427,7 +1572,7 @@ It will only return the keyspace name when the user provided a different keyspac
     </dt>
     <dd>
         
-<span class="param-type">RetryPolicy</span>
+<span class="param-type">LocalTime</span>
 
 
     </dd>
@@ -1445,7 +1590,7 @@ It will only return the keyspace name when the user provided a different keyspac
     
 
     
-    <h4 class="name" id="getRoutingKey"><span class="type-signature">(abstract) </span>getRoutingKey<span class="signature">()</span><span class="type-signature"> &rarr; {Buffer|Array.&lt;Buffer>}</span></h4>
+    <h4 class="name" id=".fromMilliseconds"><span class="type-signature">(static) </span>fromMilliseconds<span class="signature">(milliseconds, nanoseconds<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {LocalTime}</span></h4>
     
 
     
@@ -1453,7 +1598,7 @@ It will only return the keyspace name when the user provided a different keyspac
 
 
 <div class="description">
-    <p>Gets the partition key(s) to determine which coordinator should be used for the query.</p>
+    <p>Uses the provided local time (in milliseconds) and the nanoseconds to create a new instance of LocalTime</p>
 </div>
 
 
@@ -1464,442 +1609,96 @@ It will only return the keyspace name when the user provided a different keyspac
 
 
 
-
-
-
-
-<dl class="details">
-
+    <h5>Parameters:</h5>
     
 
-    
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
 
-    
+        <th>Type</th>
 
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-    <dt class="tag-source">Source:</dt>
-    <dd class="tag-source"><ul class="dummy"><li>
-        <a href="execution-options.js.html">execution-options.js</a>, <a href="execution-options.js.html#line236">line 236</a>
-    </li></ul></dd>
-    
-
-    
-
-    
-
-    
-</dl>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-<h5>Returns:</h5>
+        
+        <th>Attributes</th>
+        
 
         
 
+        <th class="last">Description</th>
+    </tr>
+    </thead>
 
-<dl>
-    <dt>
-        Type
-    </dt>
-    <dd>
-        
-<span class="param-type">Buffer</span>
-|
-
-<span class="param-type">Array.&lt;Buffer></span>
-
-
-    </dd>
-</dl>
-
+    <tbody>
     
 
-
-
-
-
-        
+        <tr>
+            
+                <td class="name"><code>milliseconds</code></td>
             
 
-    
-
-    
-    <h4 class="name" id="getRustOptions"><span class="type-signature">(package) </span>getRustOptions<span class="signature">()</span><span class="type-signature"> &rarr; {_rust.QueryOptionsWrapper}</span></h4>
-    
-
-    
-
-
-
-<div class="description">
-    <p>Get this options as rust wrapper.</p>
-</div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-<dl class="details">
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-    <dt class="tag-source">Source:</dt>
-    <dd class="tag-source"><ul class="dummy"><li>
-        <a href="execution-options.js.html">execution-options.js</a>, <a href="execution-options.js.html#line45">line 45</a>
-    </li></ul></dd>
-    
-
-    
-
-    
-
-    
-</dl>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-<h5>Returns:</h5>
-
-        
-
-
-<dl>
-    <dt>
-        Type
-    </dt>
-    <dd>
-        
-<span class="param-type">_rust.QueryOptionsWrapper</span>
-
-
-    </dd>
-</dl>
-
-    
-
-
-
-
-
-        
+            <td class="type">
             
-
-    
-
-    
-    <h4 class="name" id="getSerialConsistency"><span class="type-signature">(abstract) </span>getSerialConsistency<span class="signature">()</span><span class="type-signature"> &rarr; {Number}</span></h4>
-    
-
-    
-
-
-
-<div class="description">
-    <p>Gets the the consistency level to be used for the serial phase of conditional updates.</p>
-</div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-<dl class="details">
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-    <dt class="tag-source">Source:</dt>
-    <dd class="tag-source"><ul class="dummy"><li>
-        <a href="execution-options.js.html">execution-options.js</a>, <a href="execution-options.js.html#line251">line 251</a>
-    </li></ul></dd>
-    
-
-    
-
-    
-
-    
-</dl>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-<h5>Returns:</h5>
-
-        
-
-
-<dl>
-    <dt>
-        Type
-    </dt>
-    <dd>
-        
+                
 <span class="param-type">Number</span>
 
 
-    </dd>
-</dl>
+            
+            </td>
 
-    
+            
+                <td class="attributes">
+                
 
+                
 
-
-
-
-        
+                
+                </td>
             
 
-    
+            
 
-    
-    <h4 class="name" id="getTimestamp"><span class="type-signature">(abstract) </span>getTimestamp<span class="signature">()</span><span class="type-signature"> &rarr; {Number|Long|undefined|null}</span></h4>
-    
-
-    
-
-
-
-<div class="description">
-    <p>Gets the provided timestamp for the execution in microseconds from the unix epoch (00:00:00, January 1st, 1970).</p>
-<p>When a timestamp generator is used, this method returns <code>undefined</code>.</p>
-</div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-<dl class="details">
+            <td class="description last"><p>A Number from 0 to 86,399,999.</p></td>
+        </tr>
 
     
 
-    
+        <tr>
+            
+                <td class="name"><code>nanoseconds</code></td>
+            
 
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-    <dt class="tag-source">Source:</dt>
-    <dd class="tag-source"><ul class="dummy"><li>
-        <a href="execution-options.js.html">execution-options.js</a>, <a href="execution-options.js.html#line260">line 260</a>
-    </li></ul></dd>
-    
-
-    
-
-    
-
-    
-</dl>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-<h5>Returns:</h5>
-
-        
-
-
-<dl>
-    <dt>
-        Type
-    </dt>
-    <dd>
-        
+            <td class="type">
+            
+                
 <span class="param-type">Number</span>
-|
-
-<span class="param-type">Long</span>
-|
-
-<span class="param-type">undefined</span>
-|
-
-<span class="param-type">null</span>
 
 
-    </dd>
-</dl>
+            
+            </td>
 
-    
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
 
+                
 
-
-
-
-        
+                
+                </td>
             
 
-    
+            
+
+            <td class="description last"><p>A Number from 0 to 999,999,999 representing the time nanosecond portion.</p></td>
+        </tr>
 
     
-    <h4 class="name" id="isAutoPage"><span class="type-signature">(abstract) </span>isAutoPage<span class="signature">()</span><span class="type-signature"> &rarr; {Boolean}</span></h4>
-    
-
-    
-
-
-
-<div class="description">
-    <p>Determines whether the driver must retrieve the following result pages automatically.</p>
-<p>This setting is only considered by the <a href="Client.html#eachRow">Client#eachRow()</a> method.</p>
-</div>
-
-
-
-
-
-
-
+    </tbody>
+</table>
 
 
 
@@ -1935,7 +1734,7 @@ It will only return the keyspace name when the user provided a different keyspac
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="execution-options.js.html">execution-options.js</a>, <a href="execution-options.js.html#line109">line 109</a>
+        <a href="types_local-time.js.html">types/local-time.js</a>, <a href="types_local-time.js.html#line216">line 216</a>
     </li></ul></dd>
     
 
@@ -1971,7 +1770,7 @@ It will only return the keyspace name when the user provided a different keyspac
     </dt>
     <dd>
         
-<span class="param-type">Boolean</span>
+<span class="param-type">LocalTime</span>
 
 
     </dd>
@@ -1989,7 +1788,7 @@ It will only return the keyspace name when the user provided a different keyspac
     
 
     
-    <h4 class="name" id="isBatchCounter"><span class="type-signature">(abstract) </span>isBatchCounter<span class="signature">()</span><span class="type-signature"> &rarr; {Boolean}</span></h4>
+    <h4 class="name" id=".fromString"><span class="type-signature">(static) </span>fromString<span class="signature">(value)</span><span class="type-signature"> &rarr; {LocalTime}</span></h4>
     
 
     
@@ -1997,8 +1796,7 @@ It will only return the keyspace name when the user provided a different keyspac
 
 
 <div class="description">
-    <p>Determines whether its a counter batch. Only valid for <a href="Client.html#batch">Client#batch()</a>, it will be ignored by
-other methods.</p>
+    <p>Parses a string representation and returns a new LocalDate.</p>
 </div>
 
 
@@ -2007,6 +1805,55 @@ other methods.</p>
 
 
 
+
+
+    <h5>Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>value</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">String</span>
+
+
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last"></td>
+        </tr>
+
+    
+    </tbody>
+</table>
 
 
 
@@ -2042,229 +1889,7 @@ other methods.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="execution-options.js.html">execution-options.js</a>, <a href="execution-options.js.html#line117">line 117</a>
-    </li></ul></dd>
-    
-
-    
-
-    
-
-    
-</dl>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-<h5>Returns:</h5>
-
-        
-<div class="param-desc">
-    <p>A <code>Boolean</code> value, it can't be <code>undefined</code>.</p>
-</div>
-
-
-
-<dl>
-    <dt>
-        Type
-    </dt>
-    <dd>
-        
-<span class="param-type">Boolean</span>
-
-
-    </dd>
-</dl>
-
-    
-
-
-
-
-
-        
-            
-
-    
-
-    
-    <h4 class="name" id="isBatchLogged"><span class="type-signature">(abstract) </span>isBatchLogged<span class="signature">()</span><span class="type-signature"> &rarr; {Boolean}</span></h4>
-    
-
-    
-
-
-
-<div class="description">
-    <p>Determines whether the batch should be written to the batchlog. Only valid for
-<a href="Client.html#batch">Client#batch()</a>, it will be ignored by other methods.</p>
-</div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-<dl class="details">
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-    <dt class="tag-source">Source:</dt>
-    <dd class="tag-source"><ul class="dummy"><li>
-        <a href="execution-options.js.html">execution-options.js</a>, <a href="execution-options.js.html#line125">line 125</a>
-    </li></ul></dd>
-    
-
-    
-
-    
-
-    
-</dl>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-<h5>Returns:</h5>
-
-        
-<div class="param-desc">
-    <p>A <code>Boolean</code> value, it can't be <code>undefined</code>.</p>
-</div>
-
-
-
-<dl>
-    <dt>
-        Type
-    </dt>
-    <dd>
-        
-<span class="param-type">Boolean</span>
-
-
-    </dd>
-</dl>
-
-    
-
-
-
-
-
-        
-            
-
-    
-
-    
-    <h4 class="name" id="isIdempotent"><span class="type-signature">(abstract) </span>isIdempotent<span class="signature">()</span><span class="type-signature"> &rarr; {Boolean}</span></h4>
-    
-
-    
-
-
-
-<div class="description">
-    <p>Determines whether the query can be applied multiple times without changing the result beyond the initial
-application.</p>
-</div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-<dl class="details">
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-    <dt class="tag-source">Source:</dt>
-    <dd class="tag-source"><ul class="dummy"><li>
-        <a href="execution-options.js.html">execution-options.js</a>, <a href="execution-options.js.html#line133">line 133</a>
+        <a href="types_local-time.js.html">types/local-time.js</a>, <a href="types_local-time.js.html#line135">line 135</a>
     </li></ul></dd>
     
 
@@ -2300,7 +1925,7 @@ application.</p>
     </dt>
     <dd>
         
-<span class="param-type">Boolean</span>
+<span class="param-type">LocalTime</span>
 
 
     </dd>
@@ -2318,7 +1943,7 @@ application.</p>
     
 
     
-    <h4 class="name" id="isPaged"><span class="type-signature">(abstract) </span>isPaged<span class="signature">()</span><span class="type-signature"> &rarr; {boolean}</span></h4>
+    <h4 class="name" id=".now"><span class="type-signature">(static) </span>now<span class="signature">(nanoseconds<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {LocalTime}</span></h4>
     
 
     
@@ -2326,7 +1951,7 @@ application.</p>
 
 
 <div class="description">
-    <p>Determines if the query should be paged.</p>
+    <p>Uses the current local time (in milliseconds) and the nanoseconds to create a new instance of LocalTime</p>
 </div>
 
 
@@ -2335,6 +1960,67 @@ application.</p>
 
 
 
+
+
+    <h5>Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+        <th>Attributes</th>
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>nanoseconds</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Number</span>
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+
+            <td class="description last"><p>A Number from 0 to 999,999,999, representing the time nanosecond portion.</p></td>
+        </tr>
+
+    
+    </tbody>
+</table>
 
 
 
@@ -2370,7 +2056,7 @@ application.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="execution-options.js.html">execution-options.js</a>, <a href="execution-options.js.html#line171">line 171</a>
+        <a href="types_local-time.js.html">types/local-time.js</a>, <a href="types_local-time.js.html#line189">line 189</a>
     </li></ul></dd>
     
 
@@ -2406,318 +2092,13 @@ application.</p>
     </dt>
     <dd>
         
-<span class="param-type">boolean</span>
+<span class="param-type">LocalTime</span>
 
 
     </dd>
 </dl>
 
     
-
-
-
-
-
-        
-            
-
-    
-
-    
-    <h4 class="name" id="isPrepared"><span class="type-signature">(abstract) </span>isPrepared<span class="signature">()</span><span class="type-signature"> &rarr; {Boolean}</span></h4>
-    
-
-    
-
-
-
-<div class="description">
-    <p>Determines whether the query must be prepared beforehand.</p>
-</div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-<dl class="details">
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-    <dt class="tag-source">Source:</dt>
-    <dd class="tag-source"><ul class="dummy"><li>
-        <a href="execution-options.js.html">execution-options.js</a>, <a href="execution-options.js.html#line140">line 140</a>
-    </li></ul></dd>
-    
-
-    
-
-    
-
-    
-</dl>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-<h5>Returns:</h5>
-
-        
-<div class="param-desc">
-    <p>A <code>Boolean</code> value, it can't be <code>undefined</code>.</p>
-</div>
-
-
-
-<dl>
-    <dt>
-        Type
-    </dt>
-    <dd>
-        
-<span class="param-type">Boolean</span>
-
-
-    </dd>
-</dl>
-
-    
-
-
-
-
-
-        
-            
-
-    
-
-    
-    <h4 class="name" id="isQueryTracing"><span class="type-signature">(abstract) </span>isQueryTracing<span class="signature">()</span><span class="type-signature"> &rarr; {Boolean}</span></h4>
-    
-
-    
-
-
-
-<div class="description">
-    <p>Determines whether query tracing is enabled for the execution.</p>
-</div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-<dl class="details">
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-    <dt class="tag-source">Source:</dt>
-    <dd class="tag-source"><ul class="dummy"><li>
-        <a href="execution-options.js.html">execution-options.js</a>, <a href="execution-options.js.html#line147">line 147</a>
-    </li></ul></dd>
-    
-
-    
-
-    
-
-    
-</dl>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-<h5>Returns:</h5>
-
-        
-
-
-<dl>
-    <dt>
-        Type
-    </dt>
-    <dd>
-        
-<span class="param-type">Boolean</span>
-
-
-    </dd>
-</dl>
-
-    
-
-
-
-
-
-        
-            
-
-    
-
-    
-    <h4 class="name" id="wrapOptionsIfNotWrappedYet"><span class="type-signature">(package) </span>wrapOptionsIfNotWrappedYet<span class="signature">()</span><span class="type-signature"></span></h4>
-    
-
-    
-
-
-
-<div class="description">
-    <p>Creates rust options wrapper for this execution options unless it already exists.
-Goal of this function is to avoid wrapping the same options multiple times.</p>
-</div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-<dl class="details">
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-    <dt class="tag-source">Source:</dt>
-    <dd class="tag-source"><ul class="dummy"><li>
-        <a href="execution-options.js.html">execution-options.js</a>, <a href="execution-options.js.html#line34">line 34</a>
-    </li></ul></dd>
-    
-
-    
-
-    
-
-    
-</dl>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
