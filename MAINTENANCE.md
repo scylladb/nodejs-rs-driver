@@ -22,7 +22,7 @@ if the deleted file / directory was present in `.npmignore` file.
 
 1. Bump the package version. Remember to update the version in `package-lock.json` in
 main directory, examples and benchmarks
-(see [example commit](https://github.com/scylladb/nodejs-rs-driver/pull/363) on how to do that).
+(see [example commit](https://github.com/scylladb/nodejs-rs-driver/commit/41250609737052975129c7514439869324478008) on how to do that).
 2. Create a release notes on GitHub. The version tag must match version from `package.json` with `v` prefix (for example: `v0.2.0`).
 Once you publish release notes, CI action will trigger automatically. This action will build and publish the npm package.
 3. Once the CI action finishes, check if it succeeded. If it failed, you will have to fix the underlying issue, and re-run the CI action.
