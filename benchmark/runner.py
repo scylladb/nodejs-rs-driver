@@ -28,11 +28,10 @@ def parse_time(s):
     # Extract max resident set size
     max_rss_match = re.search(r"Maximum resident set size \(kbytes\): (\d+)",
                               log)
-    max_rss = int(max_rss_match.group(1)) if max_rss_match else None
-    if max_rss is not None:
-        max_rss_mib = max_rss / 1024
-    else:
-        max_rss_mib = None
+    if not max_rss_match:
+        raise ValueError(f"Maximum resident set size not found in time output. Log:\n{log}")
+    max_rss = int(max_rss_match.group(1))
+    max_rss_mib = max_rss / 1024
     return total_seconds, max_rss_mib
 
 
