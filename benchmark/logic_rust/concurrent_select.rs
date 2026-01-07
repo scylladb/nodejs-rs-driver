@@ -9,7 +9,7 @@ use crate::common::SIMPLE_INSERT_QUERY;
 
 mod common;
 
-const CONCURRENCY: usize = 2000;
+const CONCURRENCY: usize = 100;
 
 async fn select_data(
     session: Arc<Session>,

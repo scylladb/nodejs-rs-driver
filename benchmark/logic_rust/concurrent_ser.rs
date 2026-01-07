@@ -7,7 +7,7 @@ use crate::common::DESER_INSERT_QUERY;
 
 mod common;
 
-const CONCURRENCY: usize = 2000;
+const CONCURRENCY: usize = 100;
 
 async fn insert_data(
     session: Arc<Session>,
