@@ -30,6 +30,9 @@ describe("Client @SERVER_API", function () {
 
         const setupInfo = helper.setup(3, {
             keyspace: commonKs,
+            clientOptions: {
+                encoding: { useBigIntAsLong: false, useBigIntAsVarint: false },
+            },
             queries: [
                 helper.createTableWithClusteringKeyCql(commonTable),
                 helper.createTableCql(commonTable2),
@@ -625,10 +628,14 @@ describe("Client @SERVER_API", function () {
             );
         }); */
 
-        // No support for polyfills
-        // TODO: fix this test
-        /* it("should encode and decode maps using Map polyfills", function (done) {
-            const client = newInstance({ encoding: { map: helper.Map } });
+        it("should encode and decode maps using Map polyfills", function (done) {
+            const client = newInstance({
+                encoding: {
+                    map: helper.Map,
+                    useBigIntAsLong: false,
+                    useBigIntAsVarint: false,
+                },
+            });
             const table = commonKs + "." + helper.getRandomName("table");
             const MapPF = helper.Map;
             const values = [
@@ -745,8 +752,15 @@ describe("Client @SERVER_API", function () {
                 done,
             );
         });
+
         it("should encode and decode sets using Set polyfills", function (done) {
-            const client = newInstance({ encoding: { set: helper.Set } });
+            const client = newInstance({
+                encoding: {
+                    set: helper.Set,
+                    useBigIntAsLong: false,
+                    useBigIntAsVarint: false,
+                },
+            });
             const table = commonKs + "." + helper.getRandomName("table");
             const SetPF = helper.Set;
             const values = [
@@ -862,7 +876,6 @@ describe("Client @SERVER_API", function () {
                 done,
             );
         });
- */
 
         vit("2.1", "should support protocol level timestamp", function (done) {
             const client = setupInfo.client;
@@ -2517,6 +2530,7 @@ describe("Client @SERVER_API", function () {
 });
 
 /**
+ * @param {ClientOptions} options
  * @returns {Client}
  */
 function newInstance(options) {
