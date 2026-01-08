@@ -13,6 +13,7 @@ const temp = require("temp").track(true);
 const Client = require("../lib/client");
 const { HostMap } = require("../lib/host");
 const promiseUtils = require("../lib/promise-utils");
+const rust = require("../index");
 const Vector = types.Vector;
 
 util.inherits(RetryMultipleTimes, policies.retry.RetryPolicy);
@@ -1036,6 +1037,22 @@ const helper = {
             req.on("error", (err) => reject(err));
             req.setTimeout(timeoutMs, () => req.abort());
         });
+    },
+
+    /**
+     * Updates the keyspace schema to disable tables, when running tests against ScyllaDB,
+     * that has support for tablets.
+     * @param {Client} session
+     * @param {string} keyspaceSchema
+     */
+    keyspaceDefinitionWithTabletsDisabled: function (session, keyspaceSchema) {
+        if (
+            this.getServerInfo().isScylla &&
+            rust.scyllaSupportsTablets(session.rustClient)
+        ) {
+            keyspaceSchema += " AND TABLETS = {'enabled': false}";
+        }
+        return keyspaceSchema;
     },
 };
 

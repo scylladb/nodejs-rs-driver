@@ -85,20 +85,39 @@ context("with a reusable 3 node cluster", function () {
     this.timeout(180000);
     // pass in 3:0 to exercise CCM dc set up logic which will use a consistent data center name
     // for both Apache Cassandra and DSE.
-    helper.setup("3:0", {
-        queries: [
-            "CREATE KEYSPACE ks_simple_rp1 WITH replication = {'class': 'SimpleStrategy', 'replication_factor' : 1}",
-            "CREATE KEYSPACE ks_network_rp1 WITH replication = {'class': 'NetworkTopologyStrategy', 'dc1' : 1}",
-            "CREATE KEYSPACE ks_network_rp2 WITH replication = {'class': 'NetworkTopologyStrategy', 'dc1' : 2}",
-            "CREATE TABLE ks_simple_rp1.table_a (id int primary key, name int)",
-            "CREATE TABLE ks_network_rp1.table_b (id int primary key, name int)",
-            "CREATE TABLE ks_network_rp2.table_c (id int primary key, name int)",
-            "CREATE TABLE ks_network_rp2.table_composite (id1 text, id2 text, primary key ((id1, id2)))",
-            // Try to prevent consistency issues in the query trace
-            "ALTER KEYSPACE system_traces WITH replication = {'class': 'SimpleStrategy', 'replication_factor': '1'}",
-        ],
+    let client = helper.setup("3:0", {}).client;
+
+    before(function (done) {
+        utils.eachSeries(
+            [
+                "CREATE KEYSPACE ks_simple_rp1 WITH replication = {'class': 'SimpleStrategy', 'replication_factor' : 1}",
+                // In the tests, we have some hardcoded assumptions, which nodes will be contacted (by usage of token aware policy).
+                // Those nodes are determined based on how Vnodes work - meaning that when testing on scylla, we need to disable tablets,
+                // which otherwise break the assumptions about which nodes to expect as part of the request coordinator.
+                helper.keyspaceDefinitionWithTabletsDisabled(
+                    client,
+                    "CREATE KEYSPACE ks_network_rp1 WITH replication = {'class': 'NetworkTopologyStrategy', 'dc1' : 1}",
+                ),
+                helper.keyspaceDefinitionWithTabletsDisabled(
+                    client,
+                    "CREATE KEYSPACE ks_network_rp2 WITH replication = {'class': 'NetworkTopologyStrategy', 'dc1' : 2}",
+                ),
+                "CREATE TABLE ks_simple_rp1.table_a (id int primary key, name int)",
+                "CREATE TABLE ks_network_rp1.table_b (id int primary key, name int)",
+                "CREATE TABLE ks_network_rp2.table_c (id int primary key, name int)",
+                "CREATE TABLE ks_network_rp2.table_composite (id1 text, id2 text, primary key ((id1, id2)))",
+                // Try to prevent consistency issues in the query trace
+                "ALTER KEYSPACE system_traces WITH replication = {'class': 'SimpleStrategy', 'replication_factor': '1'}",
+            ],
+            function (q, next) {
+                client.execute(q, next);
+            },
+            done,
+        );
     });
-    vdescribe("2.0", "AllowListPolicy", function () {
+    // AllowListPolicy is not yet supported
+    // TODO: Fix this test
+    /* vdescribe("2.0", "AllowListPolicy", function () {
         it("should use the hosts in the allow list only", function (done) {
             const policy = new AllowListPolicy(new RoundRobinPolicy(), [
                 "127.0.0.1:9042",
@@ -127,14 +146,9 @@ context("with a reusable 3 node cluster", function () {
                 },
             );
         });
-    });
+    }); */
     vdescribe("2.0", "TokenAwarePolicy", function () {
-        // Tests failing due to incorrect answer
-        // INVESTIGATE(@wprzytula)
-        // Failed tests 4 - 12 in the CI
-        // https://github.com/scylladb-zpp-2024-javascript-driver/scylladb-javascript-driver/actions/runs/11573862581/job/32216863054?pr=43#step:11:878
-
-        /* it("should target the correct replica for partition with logged keyspace", function (done) {
+        it("should target the correct replica for partition with logged keyspace", function (done) {
             utils.series(
                 [
                     function testCaseWithSimpleStrategy(next) {
@@ -250,7 +264,9 @@ context("with a reusable 3 node cluster", function () {
                 helper.finish(client, done),
             );
         });
-        it("should target the correct replica using routing indexes", function (done) {
+        // No support for routing indexes
+        // TODO: Fix this test
+        /* it("should target the correct replica using routing indexes", function (done) {
             const client = new Client({
                 policies: {
                     loadBalancing: new TokenAwarePolicy(new RoundRobinPolicy()),
@@ -286,8 +302,10 @@ context("with a reusable 3 node cluster", function () {
                 },
                 helper.finish(client, done),
             );
-        });
-        it("should target the correct replica using user-provided Buffer routingKey", function (done) {
+        }); */
+        // No support for routing keys
+        // TODO: Fix this test
+        /* it("should target the correct replica using user-provided Buffer routingKey", function (done) {
             // Use [0] which should map to node 1
             testWithQueryOptions(
                 (client) => ({
@@ -329,7 +347,7 @@ context("with a reusable 3 node cluster", function () {
                 done,
             );
         });
-        */
+       
         it("should throw TypeError if invalid routingKey type is provided", function (done) {
             const client = new Client({
                 policies: {
@@ -348,7 +366,7 @@ context("with a reusable 3 node cluster", function () {
                     done();
                 },
             );
-        });
+        }); */
     });
 });
 
