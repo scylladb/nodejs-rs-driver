@@ -1,6 +1,6 @@
 "use strict";
 const { assert } = require("chai");
-const { bigintToLong, longToBigint } = require("../../lib/new-utils");
+const { bigintToLong } = require("../../lib/new-utils");
 const Long = require("long");
 
 const values = [
@@ -33,7 +33,7 @@ describe("Numeric types conversions", function () {
         it("should convert correctly", function () {
             values.forEach((value) => {
                 let long = Long.fromString(value);
-                let bigInt = longToBigint(long);
+                let bigInt = long.toBigInt();
                 assert.strictEqual(value, bigInt.toString());
             });
         });
