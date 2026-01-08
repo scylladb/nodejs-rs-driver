@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-30100ce2.js";
+            window.path_to_searchindex_js = "searchindex-c346bdd5.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-b4d60cb1.js"></script>
+        <script src="toc-5561e063.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -187,6 +187,51 @@ shuts down the connection when the value representing given session is dropped.<
 This endpoint is marked as deprecated and may be removed in the future. Currently the only functionality
 it provides is preventing execution of any new queries with the given client. It does <strong>not</strong> close connection
 to the database nor deallocate any structures related to that connection nor stop any queries being currently executed.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="migration-guide"><a class="header" href="#migration-guide">Migration guide</a></h1>
+<h2 id="query-options"><a class="header" href="#query-options">Query options</a></h2>
+<p>The following options’ remain unchanged:</p>
+<ul>
+<li><code>autoPage</code></li>
+<li><code>consistency</code></li>
+<li><code>fetchSize</code></li>
+<li><code>hints</code></li>
+<li><code>prepare</code></li>
+<li><code>serialConsistency</code></li>
+<li><code>timestamp</code></li>
+</ul>
+<p>The following option is no longer supported:</p>
+<ul>
+<li><code>graphOptions</code>: those options configure DSx specific features, that are not supported in this driver</li>
+</ul>
+<h2 id="client-options"><a class="header" href="#client-options">Client options</a></h2>
+<p>The following options remain unchanged:</p>
+<ul>
+<li><code>contactPoints</code></li>
+<li><code>keyspace</code></li>
+<li><code>credentials</code></li>
+<li><code>credentials.username</code></li>
+<li><code>credentials.password</code></li>
+<li><code>applicationName</code></li>
+<li><code>applicationVersion</code></li>
+<li><code>encoding.map</code></li>
+<li><code>encoding.set</code></li>
+<li><code>encoding.copyBuffer</code></li>
+<li><code>encoding.useUndefinedAsUnset</code></li>
+<li><code>maxPrepared</code></li>
+</ul>
+<p>The following option implementation has changed significantly,
+but the meaning of those option remains unchanged:</p>
+<ul>
+<li><code>id</code>: Now accepts both uuid and string types. When uuid is provided, it will be passed to the database in standard string representation.</li>
+</ul>
+<p>The following options’ default values have changes:</p>
+<ul>
+<li><code>encoding.useBigIntAsLong</code>: New default - <code>true</code> (previously - <code>false</code>),</li>
+<li><code>encoding.useBigIntAsVarint</code>: New default - <code>true</code> (previously - <code>false</code>)</li>
+</ul>
+<p>With the update of encoding options, we encourage usage of the builtin types.
+The ability to use the driver with types is kept as a legacy option, and may be removed in the future.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="summary"><a class="header" href="#summary">Summary</a></h1>
 <ul>
