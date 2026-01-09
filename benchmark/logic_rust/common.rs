@@ -8,7 +8,7 @@ use chrono::Local;
 use scylla::{
     DeserializeValue, SerializeValue,
     client::{caching_session::CachingSession, session::Session, session_builder::SessionBuilder},
-    value::CqlTimeuuid,
+    value::{CqlDuration, CqlTimeuuid},
 };
 use uuid::Uuid;
 
@@ -17,7 +17,7 @@ const DEFAULT_CACHE_SIZE: u32 = 512;
 #[allow(unused)]
 pub(crate) const SIMPLE_INSERT_QUERY: &str = "INSERT INTO benchmarks.basic (id, val) VALUES (?, ?)";
 #[allow(unused)]
-pub(crate) const DESER_INSERT_QUERY: &str = "INSERT INTO benchmarks.basic (id, val, tuuid, ip, date, time, tuple, udt, set1) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+pub(crate) const DESER_INSERT_QUERY: &str = "INSERT INTO benchmarks.basic (id, val, tuuid, ip, date, time, tuple, udt, set1, duration) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
 async fn init_common(schema: &str) -> Result<Session, Box<dyn std::error::Error>> {
     let uri: String = env::var("SCYLLA_URI").unwrap_or_else(|_| "172.42.0.2:9042".to_string());
@@ -60,7 +60,7 @@ pub(crate) async fn init_deser_table() -> Result<Session, Box<dyn std::error::Er
     let session =
         init_common("CREATE TYPE IF NOT EXISTS benchmarks.udt1 (field1 text, field2 int)").await;
     if let Ok(s) = &session {
-        s.query_unpaged("CREATE TABLE benchmarks.basic (id uuid, val int, tuuid timeuuid, ip inet, date date, time time, tuple frozen<tuple<text, int>>, udt frozen<udt1>, set1 set<int>, PRIMARY KEY(id))", &[]).await?;
+        s.query_unpaged("CREATE TABLE benchmarks.basic (id uuid, val int, tuuid timeuuid, ip inet, date date, time time, tuple frozen<tuple<text, int>>, udt frozen<udt1>, set1 set<int>, duration duration, PRIMARY KEY(id))", &[]).await?;
     }
 
     session
@@ -84,6 +84,7 @@ pub(crate) fn get_deser_data() -> (
     (&'static str, i32),
     Udt1,
     Vec<i32>,
+    CqlDuration,
 ) {
     let id = Uuid::new_v4();
     let tuuid = CqlTimeuuid::from_str("8e14e760-7fa8-11eb-bc66-000000000001").unwrap();
@@ -97,7 +98,12 @@ pub(crate) fn get_deser_data() -> (
     );
     let udt = Udt1{ field1: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Duis congue egestas sapien id maximus eget.".to_owned(), field2: 4321 };
     let set = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 11];
-    (id, 100, tuuid, ip, date, time, tuple, udt, set)
+    let duration = CqlDuration {
+        months: 1,
+        days: 2,
+        nanoseconds: 3,
+    };
+    (id, 100, tuuid, ip, date, time, tuple, udt, set, duration)
 }
 
 pub(crate) fn get_cnt() -> i32 {

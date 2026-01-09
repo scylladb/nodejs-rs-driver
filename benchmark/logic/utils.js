@@ -9,8 +9,8 @@ const { exit } = require("process");
 
 const tableSchemaBasic = "CREATE TABLE benchmarks.basic (id uuid, val int, PRIMARY KEY(id))";
 const tableSchemaDeSer = ["CREATE TYPE IF NOT EXISTS benchmarks.udt1 (field1 text, field2 int)",
-    "CREATE TABLE benchmarks.basic (id uuid, val int, tuuid timeuuid, ip inet, date date, time time, tuple frozen<tuple<text, int>>, udt frozen<udt1>, set1 set<int>, PRIMARY KEY(id))"];
-const DesSerInsertStatement = "INSERT INTO benchmarks.basic (id, val, tuuid, ip, date, time, tuple, udt, set1) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    "CREATE TABLE benchmarks.basic (id uuid, val int, tuuid timeuuid, ip inet, date date, time time, tuple frozen<tuple<text, int>>, udt frozen<udt1>, set1 set<int>, duration duration, PRIMARY KEY(id))"];
+const DesSerInsertStatement = "INSERT INTO benchmarks.basic (id, val, tuuid, ip, date, time, tuple, udt, set1, duration) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 const singleStepCount = 1000000;
 
 function getClientArgs() {
@@ -111,8 +111,9 @@ function insertDeSer(cassandra) {
     );
     const udt = { field1: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Duis congue egestas sapien id maximus eget.", field2: 4321 };
     const set = [1, 2, 3, 4, 5, 6, 7, 8, 9, 11];
+    const duration = new cassandra.types.Duration(1, 2, 3);
 
-    return [id, 100, tuid, ip, date, time, tuple, udt, set];
+    return [id, 100, tuid, ip, date, time, tuple, udt, set, duration];
 }
 
 function insertConcurrentDeSer(cassandra, n) {
