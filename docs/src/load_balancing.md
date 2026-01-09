@@ -5,7 +5,7 @@ While some of the other built-in policies that were present in the DataStax driv
 are still supported by this driver, usage of those policies in new projects is discouraged.
 
 If you are transferring from the DataStax driver, and would like to continue using
-existing policies, see <!-- TODO: link to specific part of migration guide --> for more information.
+existing policies, see [migration guide](./migration_guide.md#load-balancing-policies) for more information.
 
 ## Configuring a DefaultLoadBalancingPolicy
 
