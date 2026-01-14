@@ -40,10 +40,16 @@ jobs:
         run: ${{ matrix.settings.build }}
         shell: bash
       # Scylla docker setup copied from https://github.com/scylladb/scylla-rust-driver/blob/main/.github/workflows/rust.yml
+      # Here, we have two different commands, one for linux, other for macOS, as we cannot increase aio-max-nr on macOS runners
       - name: Setup 3-node Scylla cluster
+        if: runner.os != 'macOS'
         run: |
           sudo sh -c "echo 2097152 >> /proc/sys/fs/aio-max-nr"
           docker compose -f .github/docker-compose.yml up -d --wait
+      - name: Setup 3-node Scylla cluster (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          docker compose -f .github/docker-compose.yml up -d --wait --reactor-backend=epoll
       - name: Install examples dependencies
         run: |
           cd examples
