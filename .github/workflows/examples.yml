@@ -46,13 +46,12 @@ jobs:
         run: |
           sudo sh -c "echo 2097152 >> /proc/sys/fs/aio-max-nr"
           docker compose -f .github/docker-compose.yml up -d --wait
-      - name: Setup Docker on macOS
-        id: setup-docker
-        uses: douglascamata/setup-docker-macos-action@v1.0.1
-        with:
-          lima: v2.0.3
-          colima: v0.9.1
-          colima-network-address: false
+      - name: Install Docker & Colima
+        if: runner.os == 'macOS'
+        run: |
+          brew update
+          brew install docker colima
+          colima start --cpu 4 --memory 8
       - name: Setup 3-node Scylla cluster (macOS)
         if: runner.os == 'macOS'
         run: |
