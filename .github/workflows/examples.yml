@@ -46,12 +46,9 @@ jobs:
         run: |
           sudo sh -c "echo 2097152 >> /proc/sys/fs/aio-max-nr"
           docker compose -f .github/docker-compose.yml up -d --wait
-      - name: Install Docker & Colima
+      - name: Install Docker
         if: runner.os == 'macOS'
-        run: |
-          brew update
-          brew install docker colima
-          colima start --cpu 4 --memory 8
+        uses: docker/setup-docker-action@v4
       - name: Setup 3-node Scylla cluster (macOS)
         if: runner.os == 'macOS'
         run: |
