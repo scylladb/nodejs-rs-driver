@@ -139,23 +139,24 @@ describe("Duration", function () {
     });
     describe("constructor type validation (invalid types)", function () {
         it("should throw error when creating from invalid types", function () {
-            let ns_keys = [
+            let nsKeys = [
                 "0",
+                // eslint-disable-next-line no-loss-of-precision
                 0xfffffffffffffffff,
                 { _: 1 },
                 [0],
                 BigInt("213769213769213769213769"),
             ];
-            ns_keys.forEach(function (item) {
+            nsKeys.forEach(function (item) {
                 assert.throws(() => {
                     new Duration(0, 0, item);
-                }, Error);
+                }, TypeError);
             });
-            let days_keys = ["0", Long.ZERO, BigInt(0), { _: 1 }, [0]];
-            days_keys.forEach(function (item) {
+            let daysKeys = ["0", Long.ZERO, BigInt(0), { _: 1 }, [0]];
+            daysKeys.forEach(function (item) {
                 assert.throws(() => {
                     new Duration(0, item, 0);
-                }, Error);
+                }, TypeError);
             });
         });
     });
