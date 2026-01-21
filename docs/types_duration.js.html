@@ -30,8 +30,11 @@
 const Long = require("long");
 const util = require("util");
 const utils = require("../utils");
-const rust = require("../../index");
-const { bigintToLong } = require("../new-utils");
+const {
+    bigintToLong,
+    ensure32SignedInteger,
+    ensure64SignedInteger,
+} = require("../new-utils");
 
 /** @module types */
 
@@ -64,10 +67,17 @@ const iso8601AlternateRegex =
  */
 class Duration {
     /**
-     * @type {rust.DurationWrapper}
-     * @private
+     * @type {Number}
      */
-    #internal;
+    #months;
+    /**
+     * @type {Number}
+     */
+    #days;
+    /**
+     * @type {BigInt}
+     */
+    #nanoseconds;
     /**
      * Creates a new instance of {@link Duration}.
      * @param {Number} months The number of months.
@@ -76,29 +86,36 @@ class Duration {
      * @constructor
      */
     constructor(months, days, nanoseconds) {
+        if (typeof months !== "number") {
+            throw new TypeError(
+                `Expected months to be a number, got ${typeof months}`,
+            );
+        }
+        if (typeof days !== "number") {
+            throw new TypeError(
+                `Expected days to be a number, got ${typeof days}`,
+            );
+        }
+
+        ensure32SignedInteger(months, "months");
+        ensure32SignedInteger(days, "days");
+
+        this.#months = months;
+        this.#days = days;
+
         if (typeof nanoseconds === "bigint") {
-            this.#internal = rust.DurationWrapper.new(
-                months,
-                days,
-                nanoseconds,
-            );
+            this.#nanoseconds = nanoseconds;
         } else if (nanoseconds instanceof Long) {
-            this.#internal = rust.DurationWrapper.new(
-                months,
-                days,
-                nanoseconds.toBigInt(),
-            );
+            this.#nanoseconds = nanoseconds.toBigInt();
         } else if (typeof nanoseconds === "number") {
-            this.#internal = rust.DurationWrapper.new(
-                months,
-                days,
-                BigInt(nanoseconds),
-            );
+            this.#nanoseconds = BigInt(nanoseconds);
         } else {
             throw new TypeError(
                 `Invalid nanosecond argument type: ${typeof nanoseconds}`,
             );
         }
+
+        ensure64SignedInteger(this.#nanoseconds, "nanoseconds");
     }
 
     equals(other) {
@@ -129,7 +146,7 @@ class Duration {
      * @type {Number}
      */
     get months() {
-        return this.#internal.months;
+        return this.#months;
     }
 
     set months(_) {
@@ -142,7 +159,7 @@ class Duration {
      * @type {Number}
      */
     get days() {
-        return this.#internal.days;
+        return this.#days;
     }
 
     set days(_) {
@@ -155,7 +172,7 @@ class Duration {
      * @type {Long}
      */
     get nanoseconds() {
-        return bigintToLong(this.#internal.getNanoseconds());
+        return bigintToLong(this.#nanoseconds);
     }
 
     set nanoseconds(_) {
@@ -167,13 +184,13 @@ class Duration {
      * @returns {Buffer}
      */
     toBuffer() {
-        let nanoseconds = bigintToLong(this.#internal.getNanoseconds());
+        let nanoseconds = bigintToLong(this.#nanoseconds);
         const lengthMonths = utils.VIntCoding.writeVInt(
-            Long.fromNumber(this.#internal.months),
+            Long.fromNumber(this.#months),
             reusableBuffers.months,
         );
         const lengthDays = utils.VIntCoding.writeVInt(
-            Long.fromNumber(this.#internal.days),
+            Long.fromNumber(this.#days),
             reusableBuffers.days,
         );
         const lengthNanoseconds = utils.VIntCoding.writeVInt(
@@ -196,7 +213,7 @@ class Duration {
      * @return {string}
      */
     toString() {
-        let nanoseconds = bigintToLong(this.#internal.getNanoseconds());
+        let nanoseconds = bigintToLong(this.#nanoseconds);
         let value = "";
         function append(dividend, divisor, unit) {
             if (dividend === 0 || dividend &lt; divisor) {
@@ -214,20 +231,12 @@ class Duration {
             value += dividend.divide(divisor).toString() + unit;
             return dividend.modulo(divisor);
         }
-        if (
-            this.#internal.months &lt; 0 ||
-            this.#internal.days &lt; 0 ||
-            nanoseconds.isNegative()
-        ) {
+        if (this.#months &lt; 0 || this.#days &lt; 0 || nanoseconds.isNegative()) {
             value = "-";
         }
-        let remainder = append(
-            Math.abs(this.#internal.months),
-            monthsPerYear,
-            "y",
-        );
+        let remainder = append(Math.abs(this.#months), monthsPerYear, "y");
         append(remainder, 1, "mo");
-        append(Math.abs(this.#internal.days), 1, "d");
+        append(Math.abs(this.#days), 1, "d");
 
         if (!nanoseconds.equals(Long.ZERO)) {
             const nanos = nanoseconds.isNegative()
@@ -296,14 +305,6 @@ class Duration {
             return parseIso8601Format(isNegative, source);
         }
         return parseStandardFormat(isNegative, source);
-    }
-
-    /**
-     * @package
-     * @returns {rust.DurationWrapper}
-     */
-    getInternal() {
-        return this.#internal;
     }
 }
 /**
@@ -403,275 +404,274 @@ function parseIso8601AlternativeFormat(isNegative, source) {
  * @private
  * @constructor
  */
-function Builder(isNegative) {
-    this._isNegative = isNegative;
-    this._unitIndex = 0;
-    this._months = 0;
-    this._days = 0;
-    this._nanoseconds = Long.ZERO;
-    this._addMethods = {
-        y: this.addYears,
-        mo: this.addMonths,
-        w: this.addWeeks,
-        d: this.addDays,
-        h: this.addHours,
-        m: this.addMinutes,
-        s: this.addSeconds,
-        ms: this.addMillis,
-        // µs
-        "\u00B5s": this.addMicros,
-        us: this.addMicros,
-        ns: this.addNanos,
-    };
-    this._unitByIndex = [
-        null,
-        "years",
-        "months",
-        "weeks",
-        "days",
-        "hours",
-        "minutes",
-        "seconds",
-        "milliseconds",
-        "microseconds",
-        "nanoseconds",
-    ];
+class Builder {
+    constructor(isNegative) {
+        this._isNegative = isNegative;
+        this._unitIndex = 0;
+        this._months = 0;
+        this._days = 0;
+        this._nanoseconds = Long.ZERO;
+        this._addMethods = {
+            y: this.addYears,
+            mo: this.addMonths,
+            w: this.addWeeks,
+            d: this.addDays,
+            h: this.addHours,
+            m: this.addMinutes,
+            s: this.addSeconds,
+            ms: this.addMillis,
+            // µs
+            "\u00B5s": this.addMicros,
+            us: this.addMicros,
+            ns: this.addNanos,
+        };
+        this._unitByIndex = [
+            null,
+            "years",
+            "months",
+            "weeks",
+            "days",
+            "hours",
+            "minutes",
+            "seconds",
+            "milliseconds",
+            "microseconds",
+            "nanoseconds",
+        ];
+    }
+    #validateOrder(unitIndex) {
+        if (unitIndex === this._unitIndex) {
+            throw new TypeError(
+                util.format(
+                    "Invalid duration. The %s are specified multiple times",
+                    this.#getUnitName(unitIndex),
+                ),
+            );
+        }
+
+        if (unitIndex &lt;= this._unitIndex) {
+            throw new TypeError(
+                util.format(
+                    "Invalid duration. The %s should be after %s",
+                    this.#getUnitName(this._unitIndex),
+                    this.#getUnitName(unitIndex),
+                ),
+            );
+        }
+        this._unitIndex = unitIndex;
+    }
+    /**
+     * @param {Number} units
+     * @param {Number} monthsPerUnit
+     */
+    #validateMonths(units, monthsPerUnit) {
+        this.#validate32(
+            units,
+            (maxInt32 - this._months) / monthsPerUnit,
+            "months",
+        );
+    }
+    /**
+     * @param {Number} units
+     * @param {Number} daysPerUnit
+     */
+    #validateDays(units, daysPerUnit) {
+        this.#validate32(units, (maxInt32 - this._days) / daysPerUnit, "days");
+    }
+    /**
+     * @param {Long} units
+     * @param {Long} nanosPerUnit
+     */
+    #validateNanos(units, nanosPerUnit) {
+        this.#validate64(
+            units,
+            Long.MAX_VALUE.subtract(this._nanoseconds).divide(nanosPerUnit),
+            "nanoseconds",
+        );
+    }
+    /**
+     * @param {Number} units
+     * @param {Number} limit
+     * @param {String} unitName
+     */
+    #validate32(units, limit, unitName) {
+        if (units > limit) {
+            throw new TypeError(
+                util.format(
+                    "Invalid duration. The total number of %s must be less or equal to %s",
+                    unitName,
+                    maxInt32,
+                ),
+            );
+        }
+    }
+    /**
+     * @param {Long} units
+     * @param {Long} limit
+     * @param {String} unitName
+     */
+    #validate64(units, limit, unitName) {
+        if (units.greaterThan(limit)) {
+            throw new TypeError(
+                util.format(
+                    "Invalid duration. The total number of %s must be less or equal to %s",
+                    unitName,
+                    Long.MAX_VALUE.toString(),
+                ),
+            );
+        }
+    }
+    #getUnitName(unitIndex) {
+        const name = this._unitByIndex[+unitIndex];
+        if (!name) {
+            throw new Error("unknown unit index: " + unitIndex);
+        }
+        return name;
+    }
+    add(textValue, symbol) {
+        const addMethod = this._addMethods[symbol.toLowerCase()];
+        if (!addMethod) {
+            throw new TypeError(
+                util.format("Unknown duration symbol '%s'", symbol),
+            );
+        }
+        return addMethod.call(this, textValue);
+    }
+    /**
+     * @param {String|Number} years
+     * @return {Builder}
+     */
+    addYears(years) {
+        const value = +years;
+        this.#validateOrder(1);
+        this.#validateMonths(value, monthsPerYear);
+        this._months += value * monthsPerYear;
+        return this;
+    }
+    /**
+     * @param {String|Number} months
+     * @return {Builder}
+     */
+    addMonths(months) {
+        const value = +months;
+        this.#validateOrder(2);
+        this.#validateMonths(value, 1);
+        this._months += value;
+        return this;
+    }
+    /**
+     * @param {String|Number} weeks
+     * @return {Builder}
+     */
+    addWeeks(weeks) {
+        const value = +weeks;
+        this.#validateOrder(3);
+        this.#validateDays(value, daysPerWeek);
+        this._days += value * daysPerWeek;
+        return this;
+    }
+    /**
+     * @param {String|Number} days
+     * @return {Builder}
+     */
+    addDays(days) {
+        const value = +days;
+        this.#validateOrder(4);
+        this.#validateDays(value, 1);
+        this._days += value;
+        return this;
+    }
+    /**
+     * @param {String|Long} hours
+     * @return {Builder}
+     */
+    addHours(hours) {
+        const value =
+            typeof hours === "string" ? Long.fromString(hours) : hours;
+        this.#validateOrder(5);
+        this.#validateNanos(value, nanosPerHour);
+        this._nanoseconds = this._nanoseconds.add(value.multiply(nanosPerHour));
+        return this;
+    }
+    /**
+     * @param {String|Long} minutes
+     * @return {Builder}
+     */
+    addMinutes(minutes) {
+        const value =
+            typeof minutes === "string" ? Long.fromString(minutes) : minutes;
+        this.#validateOrder(6);
+        this.#validateNanos(value, nanosPerMinute);
+        this._nanoseconds = this._nanoseconds.add(
+            value.multiply(nanosPerMinute),
+        );
+        return this;
+    }
+    /**
+     * @param {String|Long} seconds
+     * @return {Builder}
+     */
+    addSeconds(seconds) {
+        const value =
+            typeof seconds === "string" ? Long.fromString(seconds) : seconds;
+        this.#validateOrder(7);
+        this.#validateNanos(value, nanosPerSecond);
+        this._nanoseconds = this._nanoseconds.add(
+            value.multiply(nanosPerSecond),
+        );
+        return this;
+    }
+    /**
+     * @param {String|Long} millis
+     * @return {Builder}
+     */
+    addMillis(millis) {
+        const value =
+            typeof millis === "string" ? Long.fromString(millis) : millis;
+        this.#validateOrder(8);
+        this.#validateNanos(value, nanosPerMilli);
+        this._nanoseconds = this._nanoseconds.add(
+            value.multiply(nanosPerMilli),
+        );
+        return this;
+    }
+    /**
+     * @param {String|Long} micros
+     * @return {Builder}
+     */
+    addMicros(micros) {
+        const value =
+            typeof micros === "string" ? Long.fromString(micros) : micros;
+        this.#validateOrder(9);
+        this.#validateNanos(value, nanosPerMicro);
+        this._nanoseconds = this._nanoseconds.add(
+            value.multiply(nanosPerMicro),
+        );
+        return this;
+    }
+    /**
+     * @param {String|Long} nanos
+     * @return {Builder}
+     */
+    addNanos(nanos) {
+        const value =
+            typeof nanos === "string" ? Long.fromString(nanos) : nanos;
+        this.#validateOrder(10);
+        this.#validateNanos(value, Long.ONE);
+        this._nanoseconds = this._nanoseconds.add(value);
+        return this;
+    }
+    /** @return {Duration} */
+    build() {
+        return this._isNegative
+            ? new Duration(
+                  -this._months,
+                  -this._days,
+                  this._nanoseconds.negate(),
+              )
+            : new Duration(this._months, this._days, this._nanoseconds);
+    }
 }
-
-Builder.prototype._validateOrder = function (unitIndex) {
-    if (unitIndex === this._unitIndex) {
-        throw new TypeError(
-            util.format(
-                "Invalid duration. The %s are specified multiple times",
-                this._getUnitName(unitIndex),
-            ),
-        );
-    }
-
-    if (unitIndex &lt;= this._unitIndex) {
-        throw new TypeError(
-            util.format(
-                "Invalid duration. The %s should be after %s",
-                this._getUnitName(this._unitIndex),
-                this._getUnitName(unitIndex),
-            ),
-        );
-    }
-    this._unitIndex = unitIndex;
-};
-
-/**
- * @param {Number} units
- * @param {Number} monthsPerUnit
- */
-Builder.prototype._validateMonths = function (units, monthsPerUnit) {
-    this._validate32(
-        units,
-        (maxInt32 - this._months) / monthsPerUnit,
-        "months",
-    );
-};
-
-/**
- * @param {Number} units
- * @param {Number} daysPerUnit
- */
-Builder.prototype._validateDays = function (units, daysPerUnit) {
-    this._validate32(units, (maxInt32 - this._days) / daysPerUnit, "days");
-};
-
-/**
- * @param {Long} units
- * @param {Long} nanosPerUnit
- */
-Builder.prototype._validateNanos = function (units, nanosPerUnit) {
-    this._validate64(
-        units,
-        Long.MAX_VALUE.subtract(this._nanoseconds).divide(nanosPerUnit),
-        "nanoseconds",
-    );
-};
-
-/**
- * @param {Number} units
- * @param {Number} limit
- * @param {String} unitName
- */
-Builder.prototype._validate32 = function (units, limit, unitName) {
-    if (units > limit) {
-        throw new TypeError(
-            util.format(
-                "Invalid duration. The total number of %s must be less or equal to %s",
-                unitName,
-                maxInt32,
-            ),
-        );
-    }
-};
-
-/**
- * @param {Long} units
- * @param {Long} limit
- * @param {String} unitName
- */
-Builder.prototype._validate64 = function (units, limit, unitName) {
-    if (units.greaterThan(limit)) {
-        throw new TypeError(
-            util.format(
-                "Invalid duration. The total number of %s must be less or equal to %s",
-                unitName,
-                Long.MAX_VALUE.toString(),
-            ),
-        );
-    }
-};
-
-Builder.prototype._getUnitName = function (unitIndex) {
-    const name = this._unitByIndex[+unitIndex];
-    if (!name) {
-        throw new Error("unknown unit index: " + unitIndex);
-    }
-    return name;
-};
-
-Builder.prototype.add = function (textValue, symbol) {
-    const addMethod = this._addMethods[symbol.toLowerCase()];
-    if (!addMethod) {
-        throw new TypeError(
-            util.format("Unknown duration symbol '%s'", symbol),
-        );
-    }
-    return addMethod.call(this, textValue);
-};
-
-/**
- * @param {String|Number} years
- * @return {Builder}
- */
-Builder.prototype.addYears = function (years) {
-    const value = +years;
-    this._validateOrder(1);
-    this._validateMonths(value, monthsPerYear);
-    this._months += value * monthsPerYear;
-    return this;
-};
-
-/**
- * @param {String|Number} months
- * @return {Builder}
- */
-Builder.prototype.addMonths = function (months) {
-    const value = +months;
-    this._validateOrder(2);
-    this._validateMonths(value, 1);
-    this._months += value;
-    return this;
-};
-
-/**
- * @param {String|Number} weeks
- * @return {Builder}
- */
-Builder.prototype.addWeeks = function (weeks) {
-    const value = +weeks;
-    this._validateOrder(3);
-    this._validateDays(value, daysPerWeek);
-    this._days += value * daysPerWeek;
-    return this;
-};
-
-/**
- * @param {String|Number} days
- * @return {Builder}
- */
-Builder.prototype.addDays = function (days) {
-    const value = +days;
-    this._validateOrder(4);
-    this._validateDays(value, 1);
-    this._days += value;
-    return this;
-};
-
-/**
- * @param {String|Long} hours
- * @return {Builder}
- */
-Builder.prototype.addHours = function (hours) {
-    const value = typeof hours === "string" ? Long.fromString(hours) : hours;
-    this._validateOrder(5);
-    this._validateNanos(value, nanosPerHour);
-    this._nanoseconds = this._nanoseconds.add(value.multiply(nanosPerHour));
-    return this;
-};
-
-/**
- * @param {String|Long} minutes
- * @return {Builder}
- */
-Builder.prototype.addMinutes = function (minutes) {
-    const value =
-        typeof minutes === "string" ? Long.fromString(minutes) : minutes;
-    this._validateOrder(6);
-    this._validateNanos(value, nanosPerMinute);
-    this._nanoseconds = this._nanoseconds.add(value.multiply(nanosPerMinute));
-    return this;
-};
-
-/**
- * @param {String|Long} seconds
- * @return {Builder}
- */
-Builder.prototype.addSeconds = function (seconds) {
-    const value =
-        typeof seconds === "string" ? Long.fromString(seconds) : seconds;
-    this._validateOrder(7);
-    this._validateNanos(value, nanosPerSecond);
-    this._nanoseconds = this._nanoseconds.add(value.multiply(nanosPerSecond));
-    return this;
-};
-
-/**
- * @param {String|Long} millis
- * @return {Builder}
- */
-Builder.prototype.addMillis = function (millis) {
-    const value = typeof millis === "string" ? Long.fromString(millis) : millis;
-    this._validateOrder(8);
-    this._validateNanos(value, nanosPerMilli);
-    this._nanoseconds = this._nanoseconds.add(value.multiply(nanosPerMilli));
-    return this;
-};
-
-/**
- * @param {String|Long} micros
- * @return {Builder}
- */
-Builder.prototype.addMicros = function (micros) {
-    const value = typeof micros === "string" ? Long.fromString(micros) : micros;
-    this._validateOrder(9);
-    this._validateNanos(value, nanosPerMicro);
-    this._nanoseconds = this._nanoseconds.add(value.multiply(nanosPerMicro));
-    return this;
-};
-
-/**
- * @param {String|Long} nanos
- * @return {Builder}
- */
-Builder.prototype.addNanos = function (nanos) {
-    const value = typeof nanos === "string" ? Long.fromString(nanos) : nanos;
-    this._validateOrder(10);
-    this._validateNanos(value, Long.ONE);
-    this._nanoseconds = this._nanoseconds.add(value);
-    return this;
-};
-
-/** @return {Duration} */
-Builder.prototype.build = function () {
-    return this._isNegative
-        ? new Duration(-this._months, -this._days, this._nanoseconds.negate())
-        : new Duration(this._months, this._days, this._nanoseconds);
-};
 
 module.exports = Duration;
 </code></pre>
@@ -684,13 +684,13 @@ module.exports = Duration;
 </div>
 
 <nav>
-    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-auth.html">auth</a></li><li><a href="module-concurrent.html">concurrent</a></li><li><a href="module-datastax.html">datastax</a></li><li><a href="module-errors.html">errors</a></li><li><a href="module-geometry.html">geometry</a></li><li><a href="module-mapping.html">mapping</a></li><li><a href="module-metadata.html">metadata</a></li><li><a href="module-metrics.html">metrics</a></li><li><a href="module-policies.html">policies</a></li><li><a href="module-policies_addressResolution.html">policies/addressResolution</a></li><li><a href="module-policies_loadBalancing.html">policies/loadBalancing</a></li><li><a href="module-policies_reconnection.html">policies/reconnection</a></li><li><a href="module-policies_retry.html">policies/retry</a></li><li><a href="module-policies_speculativeExecution.html">policies/speculativeExecution</a></li><li><a href="module-policies_timestampGeneration.html">policies/timestampGeneration</a></li><li><a href="module-tracker.html">tracker</a></li><li><a href="module-types.html">types</a></li></ul><h3>Classes</h3><ul><li><a href="AddressResolver.html">AddressResolver</a></li><li><a href="ByteOrderedToken.html">ByteOrderedToken</a></li><li><a href="Client.html">Client</a></li><li><a href="Encoder.html">Encoder</a></li><li><a href="ExecutionOptions.html">ExecutionOptions</a></li><li><a href="ExecutionProfile.html">ExecutionProfile</a></li><li><a href="FrameReader.html">FrameReader</a></li><li><a href="HashSet.html">HashSet</a></li><li><a href="Host.html">Host</a></li><li><a href="HostMap.html">HostMap</a></li><li><a href="LineString.html">LineString</a></li><li><a href="Murmur3Token.html">Murmur3Token</a></li><li><a href="Point.html">Point</a></li><li><a href="Polygon.html">Polygon</a></li><li><a href="RandomToken.html">RandomToken</a></li><li><a href="Token.html">Token</a></li><li><a href="TokenRange.html">TokenRange</a></li><li><a href="module-auth-AuthProvider.html">AuthProvider</a></li><li><a href="module-auth-Authenticator.html">Authenticator</a></li><li><a href="module-auth-PlainTextAuthProvider.html">PlainTextAuthProvider</a></li><li><a href="module-errors-ArgumentError.html">ArgumentError</a></li><li><a href="module-errors-AuthenticationError.html">AuthenticationError</a></li><li><a href="module-errors-BusyConnectionError.html">BusyConnectionError</a></li><li><a href="module-errors-DriverInternalError.html">DriverInternalError</a></li><li><a href="module-errors-NoHostAvailableError.html">NoHostAvailableError</a></li><li><a href="module-errors-NotSupportedError.html">NotSupportedError</a></li><li><a href="module-errors-OperationTimedOutError.html">OperationTimedOutError</a></li><li><a href="module-errors-ResponseError.html">ResponseError</a></li><li><a href="module-mapping-DefaultTableMappings.html">DefaultTableMappings</a></li><li><a href="module-mapping-Mapper.html">Mapper</a></li><li><a href="module-mapping-ModelBatchItem.html">ModelBatchItem</a></li><li><a href="module-mapping-ModelMapper.html">ModelMapper</a></li><li><a href="module-mapping-Result.html">Result</a></li><li><a href="module-mapping-UnderscoreCqlToCamelCaseMappings.html">UnderscoreCqlToCamelCaseMappings</a></li><li><a href="module-metadata-Aggregate.html">Aggregate</a></li><li><a href="module-metadata-ClientState.html">ClientState</a></li><li><a href="module-metadata-DataCollection.html">DataCollection</a></li><li><a href="module-metadata-Index.html">Index</a></li><li><a href="module-metadata-MaterializedView.html">MaterializedView</a></li><li><a href="module-metadata-Metadata.html">Metadata</a></li><li><a href="module-metadata-SchemaFunction.html">SchemaFunction</a></li><li><a href="module-metadata-TableMetadata.html">TableMetadata</a></li><li><a href="module-metrics-DefaultMetrics.html">DefaultMetrics</a></li><li><a href="module-policies_addressResolution-AddressTranslator.html">AddressTranslator</a></li><li><a href="module-policies_addressResolution-EC2MultiRegionTranslator.html">EC2MultiRegionTranslator</a></li><li><a href="module-policies_loadBalancing-AllowListPolicy.html">AllowListPolicy</a></li><li><a href="module-policies_loadBalancing-DCAwareRoundRobinPolicy.html">DCAwareRoundRobinPolicy</a></li><li><a href="module-policies_loadBalancing-DefaultLoadBalancingPolicy.html">DefaultLoadBalancingPolicy</a></li><li><a href="module-policies_loadBalancing-LegacyDefaultLoadBalancingPolicy.html">LegacyDefaultLoadBalancingPolicy</a></li><li><a href="module-policies_loadBalancing-LoadBalancingConfig.html">LoadBalancingConfig</a></li><li><a href="module-policies_loadBalancing-LoadBalancingPolicy.html">LoadBalancingPolicy</a></li><li><a href="module-policies_loadBalancing-RoundRobinPolicy.html">RoundRobinPolicy</a></li><li><a href="module-policies_loadBalancing-TokenAwarePolicy.html">TokenAwarePolicy</a></li><li><a href="module-policies_reconnection-ConstantReconnectionPolicy.html">ConstantReconnectionPolicy</a></li><li><a href="module-policies_reconnection-ExponentialReconnectionPolicy.html">ExponentialReconnectionPolicy</a></li><li><a href="module-policies_reconnection-ReconnectionPolicy.html">ReconnectionPolicy</a></li><li><a href="module-policies_retry-FallthroughRetryPolicy.html">FallthroughRetryPolicy</a></li><li><a href="module-policies_retry-IdempotenceAwareRetryPolicy.html">IdempotenceAwareRetryPolicy</a></li><li><a href="module-policies_retry-RetryPolicy.html">RetryPolicy</a></li><li><a href="module-policies_speculativeExecution-ConstantSpeculativeExecutionPolicy.html">ConstantSpeculativeExecutionPolicy</a></li><li><a href="module-policies_speculativeExecution-NoSpeculativeExecutionPolicy.html">NoSpeculativeExecutionPolicy</a></li><li><a href="module-policies_speculativeExecution-SpeculativeExecutionPolicy.html">SpeculativeExecutionPolicy</a></li><li><a href="module-policies_timestampGeneration-MonotonicTimestampGenerator.html">MonotonicTimestampGenerator</a></li><li><a href="module-policies_timestampGeneration-TimestampGenerator.html">TimestampGenerator</a></li><li><a href="module-tracker-RequestLogger.html">RequestLogger</a></li><li><a href="module-types-BigDecimal.html">BigDecimal</a></li><li><a href="module-types-Duration.html">Duration</a></li><li><a href="module-types-InetAddress.html">InetAddress</a></li><li><a href="module-types-Integer.html">Integer</a></li><li><a href="module-types-LocalDate.html">LocalDate</a></li><li><a href="module-types.html#~LocalTime">LocalTime</a></li><li><a href="module-types-Long.html">Long</a></li><li><a href="module-types-ResultSet.html">ResultSet</a></li><li><a href="module-types-ResultStream.html">ResultStream</a></li><li><a href="module-types-Row.html">Row</a></li><li><a href="module-types-TimeUuid.html">TimeUuid</a></li><li><a href="module-types-Tuple.html">Tuple</a></li><li><a href="module-types-Uuid.html">Uuid</a></li><li><a href="module-types-Vector.html">Vector</a></li></ul><h3>Interfaces</h3><ul><li><a href="module-mapping-TableMappings.html">TableMappings</a></li><li><a href="module-metrics-ClientMetrics.html">ClientMetrics</a></li><li><a href="module-tracker-RequestTracker.html">RequestTracker</a></li></ul><h3>Events</h3><ul><li><a href="Client.html#event:hostAdd">hostAdd</a></li><li><a href="Client.html#event:hostDown">hostDown</a></li><li><a href="Client.html#event:hostRemove">hostRemove</a></li><li><a href="Client.html#event:hostUp">hostUp</a></li></ul><h3>Global</h3><ul><li><a href="global.html#Integer">Integer</a></li><li><a href="global.html#VIntCoding">VIntCoding</a></li><li><a href="global.html#_parseUdtName">_parseUdtName</a></li><li><a href="global.html#adaptNamedParamsPrepared">adaptNamedParamsPrepared</a></li><li><a href="global.html#adaptNamedParamsWithHints">adaptNamedParamsWithHints</a></li><li><a href="global.html#allocBuffer">allocBuffer</a></li><li><a href="global.html#allocBufferFromArray">allocBufferFromArray</a></li><li><a href="global.html#allocBufferFromString">allocBufferFromString</a></li><li><a href="global.html#allocBufferUnsafe">allocBufferUnsafe</a></li><li><a href="global.html#arbitraryValueToBigInt">arbitraryValueToBigInt</a></li><li><a href="global.html#arrayIterator">arrayIterator</a></li><li><a href="global.html#bigintToLong">bigintToLong</a></li><li><a href="global.html#binarySearch">binarySearch</a></li><li><a href="global.html#callbackOnce">callbackOnce</a></li><li><a href="global.html#changedBehaviorWarning">changedBehaviorWarning</a></li><li><a href="global.html#convertComplexType">convertComplexType</a></li><li><a href="global.html#copyBuffer">copyBuffer</a></li><li><a href="global.html#coreConnectionsPerHostV2">coreConnectionsPerHostV2</a></li><li><a href="global.html#coreConnectionsPerHostV3">coreConnectionsPerHostV3</a></li><li><a href="global.html#decodeCustom">decodeCustom</a></li><li><a href="global.html#decodeVector">decodeVector</a></li><li><a href="global.html#deepExtend">deepExtend</a></li><li><a href="global.html#defaultOptions">defaultOptions</a></li><li><a href="global.html#defaultPromiseFactory">defaultPromiseFactory</a></li><li><a href="global.html#delay">delay</a></li><li><a href="global.html#each">each</a></li><li><a href="global.html#eachSeries">eachSeries</a></li><li><a href="global.html#emptyArray">emptyArray</a></li><li><a href="global.html#emptyObject">emptyObject</a></li><li><a href="global.html#encodeCustom">encodeCustom</a></li><li><a href="global.html#encodeParams">encodeParams</a></li><li><a href="global.html#encodeTuple">encodeTuple</a></li><li><a href="global.html#encodeUdt">encodeUdt</a></li><li><a href="global.html#encodeVector">encodeVector</a></li><li><a href="global.html#extend">extend</a></li><li><a href="global.html#fixStack">fixStack</a></li><li><a href="global.html#forEachOf">forEachOf</a></li><li><a href="global.html#fromCallback">fromCallback</a></li><li><a href="global.html#fromEvent">fromEvent</a></li><li><a href="global.html#getCallback">getCallback</a></li><li><a href="global.html#getColumnsMetadata">getColumnsMetadata</a></li><li><a href="global.html#getRowsFromResultsWrapper">getRowsFromResultsWrapper</a></li><li><a href="global.html#ifUndefined">ifUndefined</a></li><li><a href="global.html#ifUndefined3">ifUndefined3</a></li><li><a href="global.html#insertSorted">insertSorted</a></li><li><a href="global.html#iteratorToArray">iteratorToArray</a></li><li><a href="global.html#log">log</a></li><li><a href="global.html#map">map</a></li><li><a href="global.html#mapSeries">mapSeries</a></li><li><a href="global.html#maxInt">maxInt</a></li><li><a href="global.html#maxRequestsPerConnectionV2">maxRequestsPerConnectionV2</a></li><li><a href="global.html#maxRequestsPerConnectionV3">maxRequestsPerConnectionV3</a></li><li><a href="global.html#napiErrorHandler">napiErrorHandler</a></li><li><a href="global.html#newQueryPlan">newQueryPlan</a></li><li><a href="global.html#objectValues">objectValues</a></li><li><a href="global.html#optionalCallback">optionalCallback</a></li><li><a href="global.html#parallel">parallel</a></li><li><a href="global.html#parseVectorTypeArgs">parseVectorTypeArgs</a></li><li><a href="global.html#promiseWrapper">promiseWrapper</a></li><li><a href="global.html#queryOptionsIntoWrapper">queryOptionsIntoWrapper</a></li><li><a href="global.html#serializationSizeIfFixed">serializationSizeIfFixed</a></li><li><a href="global.html#series">series</a></li><li><a href="global.html#setMetadataDependent">setMetadataDependent</a></li><li><a href="global.html#stringRepeat">stringRepeat</a></li><li><a href="global.html#throwNotSupported">throwNotSupported</a></li><li><a href="global.html#times">times</a></li><li><a href="global.html#timesLimit">timesLimit</a></li><li><a href="global.html#timesSeries">timesSeries</a></li><li><a href="global.html#toBackground">toBackground</a></li><li><a href="global.html#toCallback">toCallback</a></li><li><a href="global.html#toLowerCaseProperties">toLowerCaseProperties</a></li><li><a href="global.html#totalLength">totalLength</a></li><li><a href="global.html#validateFn">validateFn</a></li><li><a href="global.html#whilst">whilst</a></li></ul>
+    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-auth.html">auth</a></li><li><a href="module-concurrent.html">concurrent</a></li><li><a href="module-datastax.html">datastax</a></li><li><a href="module-errors.html">errors</a></li><li><a href="module-geometry.html">geometry</a></li><li><a href="module-mapping.html">mapping</a></li><li><a href="module-metadata.html">metadata</a></li><li><a href="module-metrics.html">metrics</a></li><li><a href="module-policies.html">policies</a></li><li><a href="module-policies_addressResolution.html">policies/addressResolution</a></li><li><a href="module-policies_loadBalancing.html">policies/loadBalancing</a></li><li><a href="module-policies_reconnection.html">policies/reconnection</a></li><li><a href="module-policies_retry.html">policies/retry</a></li><li><a href="module-policies_speculativeExecution.html">policies/speculativeExecution</a></li><li><a href="module-policies_timestampGeneration.html">policies/timestampGeneration</a></li><li><a href="module-tracker.html">tracker</a></li><li><a href="module-types.html">types</a></li></ul><h3>Classes</h3><ul><li><a href="AddressResolver.html">AddressResolver</a></li><li><a href="ByteOrderedToken.html">ByteOrderedToken</a></li><li><a href="Client.html">Client</a></li><li><a href="Encoder.html">Encoder</a></li><li><a href="ExecutionOptions.html">ExecutionOptions</a></li><li><a href="ExecutionProfile.html">ExecutionProfile</a></li><li><a href="FrameReader.html">FrameReader</a></li><li><a href="HashSet.html">HashSet</a></li><li><a href="Host.html">Host</a></li><li><a href="HostMap.html">HostMap</a></li><li><a href="LineString.html">LineString</a></li><li><a href="Murmur3Token.html">Murmur3Token</a></li><li><a href="Point.html">Point</a></li><li><a href="Polygon.html">Polygon</a></li><li><a href="RandomToken.html">RandomToken</a></li><li><a href="Token.html">Token</a></li><li><a href="TokenRange.html">TokenRange</a></li><li><a href="module-auth-AuthProvider.html">AuthProvider</a></li><li><a href="module-auth-Authenticator.html">Authenticator</a></li><li><a href="module-auth-PlainTextAuthProvider.html">PlainTextAuthProvider</a></li><li><a href="module-errors-ArgumentError.html">ArgumentError</a></li><li><a href="module-errors-AuthenticationError.html">AuthenticationError</a></li><li><a href="module-errors-BusyConnectionError.html">BusyConnectionError</a></li><li><a href="module-errors-DriverInternalError.html">DriverInternalError</a></li><li><a href="module-errors-NoHostAvailableError.html">NoHostAvailableError</a></li><li><a href="module-errors-NotSupportedError.html">NotSupportedError</a></li><li><a href="module-errors-OperationTimedOutError.html">OperationTimedOutError</a></li><li><a href="module-errors-ResponseError.html">ResponseError</a></li><li><a href="module-mapping-DefaultTableMappings.html">DefaultTableMappings</a></li><li><a href="module-mapping-Mapper.html">Mapper</a></li><li><a href="module-mapping-ModelBatchItem.html">ModelBatchItem</a></li><li><a href="module-mapping-ModelMapper.html">ModelMapper</a></li><li><a href="module-mapping-Result.html">Result</a></li><li><a href="module-mapping-UnderscoreCqlToCamelCaseMappings.html">UnderscoreCqlToCamelCaseMappings</a></li><li><a href="module-metadata-Aggregate.html">Aggregate</a></li><li><a href="module-metadata-ClientState.html">ClientState</a></li><li><a href="module-metadata-DataCollection.html">DataCollection</a></li><li><a href="module-metadata-Index.html">Index</a></li><li><a href="module-metadata-MaterializedView.html">MaterializedView</a></li><li><a href="module-metadata-Metadata.html">Metadata</a></li><li><a href="module-metadata-SchemaFunction.html">SchemaFunction</a></li><li><a href="module-metadata-TableMetadata.html">TableMetadata</a></li><li><a href="module-metrics-DefaultMetrics.html">DefaultMetrics</a></li><li><a href="module-policies_addressResolution-AddressTranslator.html">AddressTranslator</a></li><li><a href="module-policies_addressResolution-EC2MultiRegionTranslator.html">EC2MultiRegionTranslator</a></li><li><a href="module-policies_loadBalancing-AllowListPolicy.html">AllowListPolicy</a></li><li><a href="module-policies_loadBalancing-DCAwareRoundRobinPolicy.html">DCAwareRoundRobinPolicy</a></li><li><a href="module-policies_loadBalancing-DefaultLoadBalancingPolicy.html">DefaultLoadBalancingPolicy</a></li><li><a href="module-policies_loadBalancing-LegacyDefaultLoadBalancingPolicy.html">LegacyDefaultLoadBalancingPolicy</a></li><li><a href="module-policies_loadBalancing-LoadBalancingConfig.html">LoadBalancingConfig</a></li><li><a href="module-policies_loadBalancing-LoadBalancingPolicy.html">LoadBalancingPolicy</a></li><li><a href="module-policies_loadBalancing-RoundRobinPolicy.html">RoundRobinPolicy</a></li><li><a href="module-policies_loadBalancing-TokenAwarePolicy.html">TokenAwarePolicy</a></li><li><a href="module-policies_reconnection-ConstantReconnectionPolicy.html">ConstantReconnectionPolicy</a></li><li><a href="module-policies_reconnection-ExponentialReconnectionPolicy.html">ExponentialReconnectionPolicy</a></li><li><a href="module-policies_reconnection-ReconnectionPolicy.html">ReconnectionPolicy</a></li><li><a href="module-policies_retry-FallthroughRetryPolicy.html">FallthroughRetryPolicy</a></li><li><a href="module-policies_retry-IdempotenceAwareRetryPolicy.html">IdempotenceAwareRetryPolicy</a></li><li><a href="module-policies_retry-RetryPolicy.html">RetryPolicy</a></li><li><a href="module-policies_speculativeExecution-ConstantSpeculativeExecutionPolicy.html">ConstantSpeculativeExecutionPolicy</a></li><li><a href="module-policies_speculativeExecution-NoSpeculativeExecutionPolicy.html">NoSpeculativeExecutionPolicy</a></li><li><a href="module-policies_speculativeExecution-SpeculativeExecutionPolicy.html">SpeculativeExecutionPolicy</a></li><li><a href="module-policies_timestampGeneration-MonotonicTimestampGenerator.html">MonotonicTimestampGenerator</a></li><li><a href="module-policies_timestampGeneration-TimestampGenerator.html">TimestampGenerator</a></li><li><a href="module-tracker-RequestLogger.html">RequestLogger</a></li><li><a href="module-types-BigDecimal.html">BigDecimal</a></li><li><a href="module-types-Duration.html">Duration</a></li><li><a href="module-types-InetAddress.html">InetAddress</a></li><li><a href="module-types-Integer.html">Integer</a></li><li><a href="module-types-LocalDate.html">LocalDate</a></li><li><a href="module-types.html#~LocalTime">LocalTime</a></li><li><a href="module-types-Long.html">Long</a></li><li><a href="module-types-ResultSet.html">ResultSet</a></li><li><a href="module-types-ResultStream.html">ResultStream</a></li><li><a href="module-types-Row.html">Row</a></li><li><a href="module-types-TimeUuid.html">TimeUuid</a></li><li><a href="module-types-Tuple.html">Tuple</a></li><li><a href="module-types-Uuid.html">Uuid</a></li><li><a href="module-types-Vector.html">Vector</a></li></ul><h3>Interfaces</h3><ul><li><a href="module-mapping-TableMappings.html">TableMappings</a></li><li><a href="module-metrics-ClientMetrics.html">ClientMetrics</a></li><li><a href="module-tracker-RequestTracker.html">RequestTracker</a></li></ul><h3>Events</h3><ul><li><a href="Client.html#event:hostAdd">hostAdd</a></li><li><a href="Client.html#event:hostDown">hostDown</a></li><li><a href="Client.html#event:hostRemove">hostRemove</a></li><li><a href="Client.html#event:hostUp">hostUp</a></li></ul><h3>Global</h3><ul><li><a href="global.html#Integer">Integer</a></li><li><a href="global.html#VIntCoding">VIntCoding</a></li><li><a href="global.html#_parseUdtName">_parseUdtName</a></li><li><a href="global.html#adaptNamedParamsPrepared">adaptNamedParamsPrepared</a></li><li><a href="global.html#adaptNamedParamsWithHints">adaptNamedParamsWithHints</a></li><li><a href="global.html#allocBuffer">allocBuffer</a></li><li><a href="global.html#allocBufferFromArray">allocBufferFromArray</a></li><li><a href="global.html#allocBufferFromString">allocBufferFromString</a></li><li><a href="global.html#allocBufferUnsafe">allocBufferUnsafe</a></li><li><a href="global.html#arbitraryValueToBigInt">arbitraryValueToBigInt</a></li><li><a href="global.html#arrayIterator">arrayIterator</a></li><li><a href="global.html#bigintToLong">bigintToLong</a></li><li><a href="global.html#binarySearch">binarySearch</a></li><li><a href="global.html#callbackOnce">callbackOnce</a></li><li><a href="global.html#changedBehaviorWarning">changedBehaviorWarning</a></li><li><a href="global.html#convertComplexType">convertComplexType</a></li><li><a href="global.html#copyBuffer">copyBuffer</a></li><li><a href="global.html#coreConnectionsPerHostV2">coreConnectionsPerHostV2</a></li><li><a href="global.html#coreConnectionsPerHostV3">coreConnectionsPerHostV3</a></li><li><a href="global.html#decodeCustom">decodeCustom</a></li><li><a href="global.html#decodeVector">decodeVector</a></li><li><a href="global.html#deepExtend">deepExtend</a></li><li><a href="global.html#defaultOptions">defaultOptions</a></li><li><a href="global.html#defaultPromiseFactory">defaultPromiseFactory</a></li><li><a href="global.html#delay">delay</a></li><li><a href="global.html#each">each</a></li><li><a href="global.html#eachSeries">eachSeries</a></li><li><a href="global.html#emptyArray">emptyArray</a></li><li><a href="global.html#emptyObject">emptyObject</a></li><li><a href="global.html#encodeCustom">encodeCustom</a></li><li><a href="global.html#encodeParams">encodeParams</a></li><li><a href="global.html#encodeTuple">encodeTuple</a></li><li><a href="global.html#encodeUdt">encodeUdt</a></li><li><a href="global.html#encodeVector">encodeVector</a></li><li><a href="global.html#ensure32SignedInteger">ensure32SignedInteger</a></li><li><a href="global.html#ensure64SignedInteger">ensure64SignedInteger</a></li><li><a href="global.html#extend">extend</a></li><li><a href="global.html#fixStack">fixStack</a></li><li><a href="global.html#forEachOf">forEachOf</a></li><li><a href="global.html#fromCallback">fromCallback</a></li><li><a href="global.html#fromEvent">fromEvent</a></li><li><a href="global.html#getCallback">getCallback</a></li><li><a href="global.html#getColumnsMetadata">getColumnsMetadata</a></li><li><a href="global.html#getRowsFromResultsWrapper">getRowsFromResultsWrapper</a></li><li><a href="global.html#ifUndefined">ifUndefined</a></li><li><a href="global.html#ifUndefined3">ifUndefined3</a></li><li><a href="global.html#insertSorted">insertSorted</a></li><li><a href="global.html#iteratorToArray">iteratorToArray</a></li><li><a href="global.html#log">log</a></li><li><a href="global.html#map">map</a></li><li><a href="global.html#mapSeries">mapSeries</a></li><li><a href="global.html#maxInt">maxInt</a></li><li><a href="global.html#maxRequestsPerConnectionV2">maxRequestsPerConnectionV2</a></li><li><a href="global.html#maxRequestsPerConnectionV3">maxRequestsPerConnectionV3</a></li><li><a href="global.html#napiErrorHandler">napiErrorHandler</a></li><li><a href="global.html#newQueryPlan">newQueryPlan</a></li><li><a href="global.html#objectValues">objectValues</a></li><li><a href="global.html#optionalCallback">optionalCallback</a></li><li><a href="global.html#parallel">parallel</a></li><li><a href="global.html#parseVectorTypeArgs">parseVectorTypeArgs</a></li><li><a href="global.html#promiseWrapper">promiseWrapper</a></li><li><a href="global.html#queryOptionsIntoWrapper">queryOptionsIntoWrapper</a></li><li><a href="global.html#serializationSizeIfFixed">serializationSizeIfFixed</a></li><li><a href="global.html#series">series</a></li><li><a href="global.html#setMetadataDependent">setMetadataDependent</a></li><li><a href="global.html#stringRepeat">stringRepeat</a></li><li><a href="global.html#throwNotSupported">throwNotSupported</a></li><li><a href="global.html#times">times</a></li><li><a href="global.html#timesLimit">timesLimit</a></li><li><a href="global.html#timesSeries">timesSeries</a></li><li><a href="global.html#toBackground">toBackground</a></li><li><a href="global.html#toCallback">toCallback</a></li><li><a href="global.html#toLowerCaseProperties">toLowerCaseProperties</a></li><li><a href="global.html#totalLength">totalLength</a></li><li><a href="global.html#validateFn">validateFn</a></li><li><a href="global.html#whilst">whilst</a></li></ul>
 </nav>
 
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Fri Jan 16 2026 10:07:24 GMT+0000 (Coordinated Universal Time)
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Wed Jan 21 2026 08:50:13 GMT+0000 (Coordinated Universal Time)
 </footer>
 
 <script> prettyPrint(); </script>
