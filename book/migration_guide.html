@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-c346bdd5.js";
+            window.path_to_searchindex_js = "searchindex-7800d3a0.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-5561e063.js"></script>
+        <script src="toc-9e992bdf.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -218,6 +218,60 @@ but the meaning of those option remains unchanged:</p>
 </ul>
 <p>With the update of encoding options, we encourage usage of the builtin types.
 The ability to use the driver with types is kept as a legacy option, and may be removed in the future.</p>
+<h2 id="load-balancing-policies"><a class="header" href="#load-balancing-policies">Load balancing policies</a></h2>
+<h3 id="supported-load-balancing-policies"><a class="header" href="#supported-load-balancing-policies">Supported load balancing policies</a></h3>
+<p>The following policies are still supported by the driver:</p>
+<ul>
+<li><code>AllowListPolicy</code></li>
+<li><code>DCAwareRoundRobinPolicy</code></li>
+<li><code>RoundRobinPolicy</code></li>
+<li><code>TokenAwarePolicy</code></li>
+</ul>
+<p>For the <code>DCAwareRoundRobinPolicy</code> and <code>RoundRobinPolicy</code> the following change was made to their behavior:
+Instead of trying hosts in a fixed order, the next host is chosen at random. This is done to avoid situations,
+where a traffic from a closed node is redirected to a single next node, potentially overloading it.</p>
+<p>If for some reason you rely on this specific order of queueing hosts, you may still replicate old
+behavior of those policies through proper configuration of (new) <code>DefaultLoadBalancingPolicy</code>.
+The (new) <code>DefaultLoadBalancingPolicy</code> can be used as a child policy to <code>TokenAwarePolicy</code> and <code>AllowListPolicy</code> policies.</p>
+<h3 id="not-supported-load-balancing-policies"><a class="header" href="#not-supported-load-balancing-policies">Not supported load balancing policies</a></h3>
+<p>The following policies, that were present in the DataStax driver are not supported:</p>
+<ul>
+<li><code>WhiteListPolicy</code></li>
+<li>(legacy) <code>DefaultLoadBalancingPolicy</code></li>
+<li>custom load balancing policies</li>
+</ul>
+<h4 id="whitelistpolicy"><a class="header" href="#whitelistpolicy">WhiteListPolicy</a></h4>
+<p>This policy was deprecated in the DataStax driver, and for this reason was removed from this driver.
+You can use <code>AllowListPolicy</code> instead.</p>
+<h4 id="legacy-defaultloadbalancingpolicy"><a class="header" href="#legacy-defaultloadbalancingpolicy">legacy DefaultLoadBalancingPolicy</a></h4>
+<p>The <code>DefaultLoadBalancingPolicy</code> as present in the DataStax driver is no longer supported.
+It was replaced with a <a href="./load_balancing.html">new implementation</a>. There are no plans for
+re-creating its functionality.</p>
+<p>To achieve similar behavior, you can update your code in the following way:</p>
+<pre><code class="language-js">const DefaultLoadBalancingPolicy = require("scylladb-driver-alpha").policies.loadBalancing.DefaultLoadBalancingPolicy;
+
+// Old version
+let policy = new DefaultLoadBalancingPolicy({
+    localDc: "my_dc",
+    filter: filterAsFunction
+});
+
+// New version
+let policy = new DefaultLoadBalancingPolicy({
+    preferDatacenter: "my_dc",
+    // The new policy no longer accepts the filter as a function
+    // You must convert it to a list of hosts that are accepted (in the `ip:port` format)
+    allowList: filterAsListOfAcceptedHosts
+});
+</code></pre>
+<h2 id="defaultloadbalancingpolicy"><a class="header" href="#defaultloadbalancingpolicy">defaultLoadBalancingPolicy()</a></h2>
+<p>The policy returned from <code>defaultLoadBalancingPolicy()</code> is changed from
+legacy to new <code>DefaultLoadBalancingPolicy</code>. When <code>localDc</code> option is provided,
+the load balancing will be set to allow connection to the provided datacenter.
+When <code>localDc</code> is not provided connections to all nodes will be allowed.</p>
+<p><strong>WARNING</strong>:
+This is a change in behavior. In the DataStax driver, when <code>localDc</code> would not be provided,
+<code>localDataCenter</code> from client options would be used.</p>
 
                     </main>
 
@@ -227,7 +281,7 @@ The ability to use the driver with types is kept as a legacy option, and may be 
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="internal/SUMMARY.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="load_balancing.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -241,7 +295,7 @@ The ability to use the driver with types is kept as a legacy option, and may be 
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="internal/SUMMARY.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="load_balancing.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

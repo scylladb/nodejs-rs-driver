@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-c346bdd5.js";
+            window.path_to_searchindex_js = "searchindex-7800d3a0.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-5561e063.js"></script>
+        <script src="toc-9e992bdf.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -232,6 +232,161 @@ but the meaning of those option remains unchanged:</p>
 </ul>
 <p>With the update of encoding options, we encourage usage of the builtin types.
 The ability to use the driver with types is kept as a legacy option, and may be removed in the future.</p>
+<h2 id="load-balancing-policies"><a class="header" href="#load-balancing-policies">Load balancing policies</a></h2>
+<h3 id="supported-load-balancing-policies"><a class="header" href="#supported-load-balancing-policies">Supported load balancing policies</a></h3>
+<p>The following policies are still supported by the driver:</p>
+<ul>
+<li><code>AllowListPolicy</code></li>
+<li><code>DCAwareRoundRobinPolicy</code></li>
+<li><code>RoundRobinPolicy</code></li>
+<li><code>TokenAwarePolicy</code></li>
+</ul>
+<p>For the <code>DCAwareRoundRobinPolicy</code> and <code>RoundRobinPolicy</code> the following change was made to their behavior:
+Instead of trying hosts in a fixed order, the next host is chosen at random. This is done to avoid situations,
+where a traffic from a closed node is redirected to a single next node, potentially overloading it.</p>
+<p>If for some reason you rely on this specific order of queueing hosts, you may still replicate old
+behavior of those policies through proper configuration of (new) <code>DefaultLoadBalancingPolicy</code>.
+The (new) <code>DefaultLoadBalancingPolicy</code> can be used as a child policy to <code>TokenAwarePolicy</code> and <code>AllowListPolicy</code> policies.</p>
+<h3 id="not-supported-load-balancing-policies"><a class="header" href="#not-supported-load-balancing-policies">Not supported load balancing policies</a></h3>
+<p>The following policies, that were present in the DataStax driver are not supported:</p>
+<ul>
+<li><code>WhiteListPolicy</code></li>
+<li>(legacy) <code>DefaultLoadBalancingPolicy</code></li>
+<li>custom load balancing policies</li>
+</ul>
+<h4 id="whitelistpolicy"><a class="header" href="#whitelistpolicy">WhiteListPolicy</a></h4>
+<p>This policy was deprecated in the DataStax driver, and for this reason was removed from this driver.
+You can use <code>AllowListPolicy</code> instead.</p>
+<h4 id="legacy-defaultloadbalancingpolicy"><a class="header" href="#legacy-defaultloadbalancingpolicy">legacy DefaultLoadBalancingPolicy</a></h4>
+<p>The <code>DefaultLoadBalancingPolicy</code> as present in the DataStax driver is no longer supported.
+It was replaced with a <a href="#load-balancing">new implementation</a>. There are no plans for
+re-creating its functionality.</p>
+<p>To achieve similar behavior, you can update your code in the following way:</p>
+<pre><code class="language-js">const DefaultLoadBalancingPolicy = require("scylladb-driver-alpha").policies.loadBalancing.DefaultLoadBalancingPolicy;
+
+// Old version
+let policy = new DefaultLoadBalancingPolicy({
+    localDc: "my_dc",
+    filter: filterAsFunction
+});
+
+// New version
+let policy = new DefaultLoadBalancingPolicy({
+    preferDatacenter: "my_dc",
+    // The new policy no longer accepts the filter as a function
+    // You must convert it to a list of hosts that are accepted (in the `ip:port` format)
+    allowList: filterAsListOfAcceptedHosts
+});
+</code></pre>
+<h2 id="defaultloadbalancingpolicy"><a class="header" href="#defaultloadbalancingpolicy">defaultLoadBalancingPolicy()</a></h2>
+<p>The policy returned from <code>defaultLoadBalancingPolicy()</code> is changed from
+legacy to new <code>DefaultLoadBalancingPolicy</code>. When <code>localDc</code> option is provided,
+the load balancing will be set to allow connection to the provided datacenter.
+When <code>localDc</code> is not provided connections to all nodes will be allowed.</p>
+<p><strong>WARNING</strong>:
+This is a change in behavior. In the DataStax driver, when <code>localDc</code> would not be provided,
+<code>localDataCenter</code> from client options would be used.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="load-balancing"><a class="header" href="#load-balancing">Load balancing</a></h1>
+<p>We recommend to configure load balancing options using only <code>DefaultLoadBalancingPolicy</code>.
+While some of the other built-in policies that were present in the DataStax driver,
+are still supported by this driver, usage of those policies in new projects is discouraged.</p>
+<p>If you are transferring from the DataStax driver, and would like to continue using
+existing policies, see <a href="#load-balancing-policies">migration guide</a> for more information.</p>
+<h2 id="configuring-a-defaultloadbalancingpolicy"><a class="header" href="#configuring-a-defaultloadbalancingpolicy">Configuring a DefaultLoadBalancingPolicy</a></h2>
+<p><code>DefaultLoadBalancingPolicy</code> can be configured only at its creation.
+The following fields can be configured:</p>
+<ul>
+<li><code>preferDatacenter</code> (default: <code>null</code> - no preference)</li>
+<li><code>preferRack</code> (default: <code>null</code> - no preference)</li>
+<li><code>tokenAware</code> (default: <code>true</code>)</li>
+<li><code>permitDcFailover</code> (default: <code>false</code>)</li>
+<li><code>enableShufflingReplicas</code> (default: <code>true</code>)</li>
+<li><code>allowList</code> (default: <code>null</code> - all hosts are accepted)</li>
+</ul>
+<p>You can assume <code>undefined</code> is equivalent to <code>null</code> for the purpose of all configurations.</p>
+<p>You can set all, or only some of those options:</p>
+<pre><code class="language-js">const DefaultLoadBalancingPolicy = require("scylladb-driver-alpha").policies.loadBalancing.DefaultLoadBalancingPolicy;
+
+let policy = new DefaultLoadBalancingPolicy({
+    preferDatacenter: "my_dc",
+    preferRack: "my_rack",
+    permitDcFailover: true,
+    enableShufflingReplicas: true
+});
+
+</code></pre>
+<h2 id="semantics-of-defaultloadbalancingpolicy"><a class="header" href="#semantics-of-defaultloadbalancingpolicy">Semantics of DefaultLoadBalancingPolicy</a></h2>
+<h3 id="preferences"><a class="header" href="#preferences">Preferences</a></h3>
+<p>The <code>preferDatacenter</code> and <code>preferRack</code> fields in <code>DefaultLoadBalancingPolicy</code> allow the load balancing
+policy to prioritize nodes based on their location. It has three modes:</p>
+<ul>
+<li>no preference (none of the fields are provided)</li>
+<li>preferred datacenter (only <code>preferDatacenter</code> is provided)</li>
+<li>preferred datacenter and rack (both fields are provided)</li>
+</ul>
+<p>When a datacenter <code>"my_dc"</code> is preferred, the policy will treat nodes in <code>"my_dc"</code>
+as “local” nodes, and nodes in other datacenters as “remote” nodes. This affects
+the order in which nodes are returned by the policy when selecting nodes for
+read or write operations. If no datacenter is preferred, the policy will treat
+all nodes as local nodes.</p>
+<p>Preferences allow the load balancing policy to prioritize nodes based on their
+availability zones (racks) in the preferred datacenter, too. When a datacenter
+and a rack are preferred, the policy will first return replicas in the local rack
+in the preferred datacenter, and then the other replicas in the datacenter
+(followed by remote replicas). After replicas, the other nodes will be ordered
+similarly, too (local rack nodes, local datacenter nodes, remote nodes).</p>
+<p>When datacenter failover is disabled (<code>permitDcFailover</code> is set to
+false), the default policy will only include local nodes in load balancing
+plans. Remote nodes will be excluded, even if they are alive and available to
+serve requests.</p>
+<h3 id="datacenter-failover"><a class="header" href="#datacenter-failover">Datacenter Failover</a></h3>
+<p>In the event of a datacenter outage or network failure, the nodes in that
+datacenter may become unavailable, and clients may no longer be able to access
+the data stored on those nodes. To address this, the <code>DefaultLoadBalancingPolicy</code>
+supports datacenter failover, which allows to route requests to nodes in other
+datacenters if the local nodes are unavailable.</p>
+<p>Datacenter failover can be enabled in <code>DefaultLoadBalancingPolicy</code> by
+<code>permitDcFailover</code> option. When this option is set to <code>true</code>, the policy will
+prefer to return alive remote replicas if datacenter failover is permitted and
+possible due to consistency constraints.</p>
+<h3 id="token-awareness"><a class="header" href="#token-awareness">Token awareness</a></h3>
+<p>Token awareness refers to a mechanism by which the driver is aware of the token
+range assigned to each node in the cluster. Tokens are assigned to nodes to
+partition the data and distribute it across the cluster.</p>
+<p>When a user wants to read or write data, the driver can use token awareness to
+route the request to the correct node based on the token range of the data
+being accessed. This can help to minimize network traffic and improve
+performance by ensuring that the data is accessed locally as much as possible.</p>
+<p>In the case of <code>DefaultLoadBalancingPolicy</code>, token awareness is enabled by default,
+meaning that the policy will prefer to return alive local replicas if the token is
+available. This means that if the client is requesting data that falls within
+the token range of a particular node, the policy will try to route the request
+to that node first, assuming it is alive and responsive.</p>
+<p>Token awareness can significantly improve the performance and scalability of
+applications built on Scylla. By using token awareness, users can ensure that
+data is accessed locally as much as possible, reducing network overhead and
+improving throughput.</p>
+<p>Please note that for token awareness to be applied, a statement must be
+prepared before being executed.</p>
+<h3 id="replica-shuffling"><a class="header" href="#replica-shuffling">Replica shuffling</a></h3>
+<p>Setting <code>enableShufflingReplicas</code> to <code>false</code> (default: <code>true</code>) does something
+slightly different than its name suggests. It will cause all randomness-based
+operations on replicas, like selecting random one or shuffling a list of them,
+to always use PRNG with the same seed.
+The setting has no effect for non-replica nodes. Those are always shuffled
+randomly, without predefined seed. For that reason, this setting has no effect
+if token awareness is disabled.
+This is mostly useful in testing, to make sure subsequent calls to the policy
+return replicas in the same order. We discourage its use in production setting.</p>
+<h3 id="allow-list"><a class="header" href="#allow-list">Allow list</a></h3>
+<p>You may want to limit the driver ability to connect to certain nodes.
+It can be achieved by providing an allow list - list of hosts in
+<code>ip:port</code> format, that can be used, when connecting to the database.
+When this option is provided, any of the hosts that is not on the allow
+list will be ignored when connecting to the database.
+When this option is empty (set to <code>null</code>), all hosts (unless filtered by other load balancing options)
+can be used when connecting to the database.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="summary"><a class="header" href="#summary">Summary</a></h1>
 <ul>

@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Documentation - ScyllaDB JavaScript Driver</title>
+        <title>Load balancing - ScyllaDB JavaScript Driver</title>
 
 
         <!-- Custom HTML head -->
@@ -12,33 +12,33 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff">
 
-        <link rel="icon" href="../favicon-de23e50b.svg">
-        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
-        <link rel="stylesheet" href="../css/variables-8adf115d.css">
-        <link rel="stylesheet" href="../css/general-2459343d.css">
-        <link rel="stylesheet" href="../css/chrome-ae938929.css">
-        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+        <link rel="icon" href="favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="favicon-8114d1fc.png">
+        <link rel="stylesheet" href="css/variables-8adf115d.css">
+        <link rel="stylesheet" href="css/general-2459343d.css">
+        <link rel="stylesheet" href="css/chrome-ae938929.css">
+        <link rel="stylesheet" href="css/print-9e4910d8.css" media="print">
 
         <!-- Fonts -->
-        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+        <link rel="stylesheet" href="fonts/fonts-9644e21d.css">
 
         <!-- Highlight.js Stylesheets -->
-        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
-        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
-        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+        <link rel="stylesheet" id="mdbook-highlight-css" href="highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="ayu-highlight-3fdfc3ac.css">
 
         <!-- Custom theme stylesheets -->
 
 
         <!-- Provide site root and default themes to javascript -->
         <script>
-            const path_to_root = "../";
+            const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-7800d3a0.js";
+            window.path_to_searchindex_js = "searchindex-7800d3a0.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-9e992bdf.js"></script>
+        <script src="toc-9e992bdf.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -105,7 +105,7 @@
             <!-- populated by js -->
             <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
             <noscript>
-                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
             </noscript>
             <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
                 <div class="sidebar-resize-indicator"></div>
@@ -140,7 +140,7 @@
                     <h1 class="menu-title">ScyllaDB JavaScript Driver</h1>
 
                     <div class="right-buttons">
-                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
                             <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
                         </a>
 
@@ -174,21 +174,118 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="summary"><a class="header" href="#summary">Summary</a></h1>
+                        <h1 id="load-balancing"><a class="header" href="#load-balancing">Load balancing</a></h1>
+<p>We recommend to configure load balancing options using only <code>DefaultLoadBalancingPolicy</code>.
+While some of the other built-in policies that were present in the DataStax driver,
+are still supported by this driver, usage of those policies in new projects is discouraged.</p>
+<p>If you are transferring from the DataStax driver, and would like to continue using
+existing policies, see <a href="./migration_guide.html#load-balancing-policies">migration guide</a> for more information.</p>
+<h2 id="configuring-a-defaultloadbalancingpolicy"><a class="header" href="#configuring-a-defaultloadbalancingpolicy">Configuring a DefaultLoadBalancingPolicy</a></h2>
+<p><code>DefaultLoadBalancingPolicy</code> can be configured only at its creation.
+The following fields can be configured:</p>
 <ul>
-<li><a href="./error_throwing.html">Errors</a></li>
-<li><a href="./parameter_wrapper.html">ParameterWrapper</a></li>
-<li><a href="./query_options.html">Query options overview</a></li>
+<li><code>preferDatacenter</code> (default: <code>null</code> - no preference)</li>
+<li><code>preferRack</code> (default: <code>null</code> - no preference)</li>
+<li><code>tokenAware</code> (default: <code>true</code>)</li>
+<li><code>permitDcFailover</code> (default: <code>false</code>)</li>
+<li><code>enableShufflingReplicas</code> (default: <code>true</code>)</li>
+<li><code>allowList</code> (default: <code>null</code> - all hosts are accepted)</li>
 </ul>
+<p>You can assume <code>undefined</code> is equivalent to <code>null</code> for the purpose of all configurations.</p>
+<p>You can set all, or only some of those options:</p>
+<pre><code class="language-js">const DefaultLoadBalancingPolicy = require("scylladb-driver-alpha").policies.loadBalancing.DefaultLoadBalancingPolicy;
+
+let policy = new DefaultLoadBalancingPolicy({
+    preferDatacenter: "my_dc",
+    preferRack: "my_rack",
+    permitDcFailover: true,
+    enableShufflingReplicas: true
+});
+
+</code></pre>
+<h2 id="semantics-of-defaultloadbalancingpolicy"><a class="header" href="#semantics-of-defaultloadbalancingpolicy">Semantics of DefaultLoadBalancingPolicy</a></h2>
+<h3 id="preferences"><a class="header" href="#preferences">Preferences</a></h3>
+<p>The <code>preferDatacenter</code> and <code>preferRack</code> fields in <code>DefaultLoadBalancingPolicy</code> allow the load balancing
+policy to prioritize nodes based on their location. It has three modes:</p>
+<ul>
+<li>no preference (none of the fields are provided)</li>
+<li>preferred datacenter (only <code>preferDatacenter</code> is provided)</li>
+<li>preferred datacenter and rack (both fields are provided)</li>
+</ul>
+<p>When a datacenter <code>"my_dc"</code> is preferred, the policy will treat nodes in <code>"my_dc"</code>
+as “local” nodes, and nodes in other datacenters as “remote” nodes. This affects
+the order in which nodes are returned by the policy when selecting nodes for
+read or write operations. If no datacenter is preferred, the policy will treat
+all nodes as local nodes.</p>
+<p>Preferences allow the load balancing policy to prioritize nodes based on their
+availability zones (racks) in the preferred datacenter, too. When a datacenter
+and a rack are preferred, the policy will first return replicas in the local rack
+in the preferred datacenter, and then the other replicas in the datacenter
+(followed by remote replicas). After replicas, the other nodes will be ordered
+similarly, too (local rack nodes, local datacenter nodes, remote nodes).</p>
+<p>When datacenter failover is disabled (<code>permitDcFailover</code> is set to
+false), the default policy will only include local nodes in load balancing
+plans. Remote nodes will be excluded, even if they are alive and available to
+serve requests.</p>
+<h3 id="datacenter-failover"><a class="header" href="#datacenter-failover">Datacenter Failover</a></h3>
+<p>In the event of a datacenter outage or network failure, the nodes in that
+datacenter may become unavailable, and clients may no longer be able to access
+the data stored on those nodes. To address this, the <code>DefaultLoadBalancingPolicy</code>
+supports datacenter failover, which allows to route requests to nodes in other
+datacenters if the local nodes are unavailable.</p>
+<p>Datacenter failover can be enabled in <code>DefaultLoadBalancingPolicy</code> by
+<code>permitDcFailover</code> option. When this option is set to <code>true</code>, the policy will
+prefer to return alive remote replicas if datacenter failover is permitted and
+possible due to consistency constraints.</p>
+<h3 id="token-awareness"><a class="header" href="#token-awareness">Token awareness</a></h3>
+<p>Token awareness refers to a mechanism by which the driver is aware of the token
+range assigned to each node in the cluster. Tokens are assigned to nodes to
+partition the data and distribute it across the cluster.</p>
+<p>When a user wants to read or write data, the driver can use token awareness to
+route the request to the correct node based on the token range of the data
+being accessed. This can help to minimize network traffic and improve
+performance by ensuring that the data is accessed locally as much as possible.</p>
+<p>In the case of <code>DefaultLoadBalancingPolicy</code>, token awareness is enabled by default,
+meaning that the policy will prefer to return alive local replicas if the token is
+available. This means that if the client is requesting data that falls within
+the token range of a particular node, the policy will try to route the request
+to that node first, assuming it is alive and responsive.</p>
+<p>Token awareness can significantly improve the performance and scalability of
+applications built on Scylla. By using token awareness, users can ensure that
+data is accessed locally as much as possible, reducing network overhead and
+improving throughput.</p>
+<p>Please note that for token awareness to be applied, a statement must be
+prepared before being executed.</p>
+<h3 id="replica-shuffling"><a class="header" href="#replica-shuffling">Replica shuffling</a></h3>
+<p>Setting <code>enableShufflingReplicas</code> to <code>false</code> (default: <code>true</code>) does something
+slightly different than its name suggests. It will cause all randomness-based
+operations on replicas, like selecting random one or shuffling a list of them,
+to always use PRNG with the same seed.
+The setting has no effect for non-replica nodes. Those are always shuffled
+randomly, without predefined seed. For that reason, this setting has no effect
+if token awareness is disabled.
+This is mostly useful in testing, to make sure subsequent calls to the policy
+return replicas in the same order. We discourage its use in production setting.</p>
+<h3 id="allow-list"><a class="header" href="#allow-list">Allow list</a></h3>
+<p>You may want to limit the driver ability to connect to certain nodes.
+It can be achieved by providing an allow list - list of hosts in
+<code>ip:port</code> format, that can be used, when connecting to the database.
+When this option is provided, any of the hosts that is not on the allow
+list will be ignored when connecting to the database.
+When this option is empty (set to <code>null</code>), all hosts (unless filtered by other load balancing options)
+can be used when connecting to the database.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../load_balancing.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="migration_guide.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
+                            <a rel="next prefetch" href="internal/SUMMARY.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
 
                         <div style="clear: both"></div>
                     </nav>
@@ -196,10 +293,13 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../load_balancing.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="migration_guide.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
+                    <a rel="next prefetch" href="internal/SUMMARY.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
             </nav>
 
         </div>
@@ -217,13 +317,13 @@
         </script>
 
 
-        <script src="../elasticlunr-ef4e11c1.min.js"></script>
-        <script src="../mark-09e88c2c.min.js"></script>
-        <script src="../searcher-c2a407aa.js"></script>
+        <script src="elasticlunr-ef4e11c1.min.js"></script>
+        <script src="mark-09e88c2c.min.js"></script>
+        <script src="searcher-c2a407aa.js"></script>
 
-        <script src="../clipboard-1626706a.min.js"></script>
-        <script src="../highlight-abc7f01d.js"></script>
-        <script src="../book-a0b12cfe.js"></script>
+        <script src="clipboard-1626706a.min.js"></script>
+        <script src="highlight-abc7f01d.js"></script>
+        <script src="book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
 
