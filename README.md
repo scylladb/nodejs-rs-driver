@@ -45,13 +45,14 @@ The driver supports the following:
 - Row streaming and pipes
 - Built-in TypeScript support
 - Password authentication
+- Configurable load balancing policies
+- Error handling, based on the Rust driver
 
 Features that are planned for the driver to become production ready:
 
-- Configurable load balancing and retry policies
+- Configurable retry policies
 - Faster performance, compared to DataStax Node.js driver
 - SSL support
-- Error handling, based on the Rust driver
 - Migration guide from the DataStax driver
 
 For other planned features see our [Milestones](https://github.com/scylladb/nodejs-rs-driver/milestones)

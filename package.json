@@ -1,6 +1,6 @@
 {
   "name": "scylladb-driver-alpha",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Async CQL driver for Node.js, built on top of Rust driver, optimized for ScyllaDB!",
   "license": "Apache-2.0",
   "contributors": [
