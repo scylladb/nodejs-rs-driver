@@ -106,10 +106,6 @@ export namespace policies {
   }
 
   namespace retry {
-    class IdempotenceAwareRetryPolicy extends RetryPolicy {
-      constructor(childPolicy: RetryPolicy);
-    }
-
     class FallthroughRetryPolicy extends RetryPolicy {
       constructor();
     }
