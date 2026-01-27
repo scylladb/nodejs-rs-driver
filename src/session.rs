@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
 use napi::bindgen_prelude::BigInt;
+use openssl::pkcs12::Pkcs12;
+use openssl::pkey::PKey;
 use openssl::ssl::{
     SslContext, SslContextBuilder, SslMethod, SslOptions as OpenSslOptions, SslVerifyMode,
     SslVersion,
@@ -427,6 +429,57 @@ fn configure_ssl(options: &SslOptions) -> ConvertedResult<Option<SslContext>> {
             store_builder.add_cert(ca)?;
         }
         ssl_context_builder.set_cert_store(store_builder.build());
+    }
+
+    if let Some(pfx_data) = &options.pfx {
+        let pfx_bytes = pfx_data.as_bytes();
+
+        // If the user didn't provide a passphrase, this can mean one of two things:
+        // 1. The PFX is not encrypted.
+        // 2. The user forgot to provide the passphrase.
+        // In the first case, we will successfully parse such PFX with "" passphrase.
+        // In the second case appropriate error will be returned from parse2 method.
+        let passphrase = options.passphrase.as_deref().unwrap_or("");
+        let pkcs12 = Pkcs12::from_der(pfx_bytes)?;
+        let parsed = pkcs12.parse2(passphrase)?;
+
+        if let Some(cert) = parsed.cert {
+            ssl_context_builder.set_certificate(&cert)?;
+        }
+        if let Some(pkey) = parsed.pkey {
+            ssl_context_builder.set_private_key(&pkey)?;
+        }
+
+        if let Some(ca_chain) = parsed.ca {
+            for ca_cert in ca_chain {
+                ssl_context_builder.add_extra_chain_cert(ca_cert)?;
+            }
+        }
+    }
+
+    if let Some(cert_pem) = &options.cert {
+        let certs = X509::stack_from_pem(cert_pem.as_bytes())?;
+        let mut certs_iter = certs.into_iter();
+
+        if let Some(main_cert) = certs_iter.next() {
+            ssl_context_builder.set_certificate(&main_cert)?;
+        }
+        for chain_cert in certs_iter {
+            ssl_context_builder.add_extra_chain_cert(chain_cert)?;
+        }
+    }
+
+    if let Some(key_pem) = &options.key {
+        let pkey = match PKey::private_key_from_pem(key_pem.as_bytes()) {
+            Ok(pkey) => pkey,
+            Err(_) if options.passphrase.is_some() => {
+                // Key might be encrypted, try with passphrase
+                let passphrase = options.passphrase.as_ref().unwrap();
+                PKey::private_key_from_pem_passphrase(key_pem.as_bytes(), passphrase.as_bytes())?
+            }
+            Err(e) => return Err(e.into()),
+        };
+        ssl_context_builder.set_private_key(&pkey)?;
     }
 
     Ok(Some(ssl_context_builder.build()))
