@@ -19,7 +19,20 @@ pub fn tests_check_client_option(options: SessionOptions, case: i32) {
                     credentials_password: Some("Unique password".to_owned()),
                     cache_size: Some(2137),
                     ssl_options: Some(SslOptions {
-                        reject_unauthorized: Some(false)
+                        reject_unauthorized: Some(false),
+                        ca: None,
+                        cert: None,
+                        sigalgs: None,
+                        ciphers: None,
+                        ecdh_curve: None,
+                        honor_cipher_order: None,
+                        key: None,
+                        max_version: None,
+                        min_version: None,
+                        secure_options: None,
+                        session_id_context: None,
+                        passphrase: None,
+                        pfx: None
                     }),
                     load_balancing_config: Some(LoadBalancingConfig {
                         prefer_datacenter: Some("Magic DC".to_owned()),

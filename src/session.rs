@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use napi::bindgen_prelude::BigInt;
 use openssl::ssl::{SslContextBuilder, SslMethod, SslVerifyMode};
 use scylla::client::SelfIdentity;
 use scylla::client::caching_session::CachingSession;
@@ -26,12 +27,32 @@ use crate::{requests::request::PreparedStatementWrapper, result::QueryResultWrap
 
 const DEFAULT_CACHE_SIZE: u32 = 512;
 
-// For now, ssl options include only rejectUnauthorized.
-// In practice, user can provide more options to configure
-// the ssl connection (see: ConnectionOptions typescript class)
-// This specific option is added, as it's used in the existing integration tests
+#[derive(Debug, PartialEq, Eq)]
+#[napi]
+pub enum TlsVersion {
+    Tlsv1,
+    Tlsv1_1,
+    Tlsv1_2,
+    Tlsv1_3,
+}
+
+// We assume here, that for the fields that allow multiple types on the JS side,
+// they will be converted to a type specified here, before passing to Rust side.
 #[rustfmt::skip] // fmt splits each field definition into multiple lines
 define_js_to_rust_convertible_object!(SslOptions {
+    ca, ca: Vec<String>,
+    cert, cert: String,
+    sigalgs, sigalgs: String,
+    ciphers, ciphers: String,
+    ecdh_curve, ecdhCurve: String,
+    honor_cipher_order, honorCipherOrder: bool,
+    key, key: String,
+    max_version, maxVersion: TlsVersion,
+    min_version, minVersion: TlsVersion,
+    passphrase, passphrase: String,
+    pfx, pfx: String,
+    secure_options, secureOptions: BigInt,
+    session_id_context, sessionIdContext: String,
     reject_unauthorized, rejectUnauthorized: bool,
 });
 
