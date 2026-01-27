@@ -14,9 +14,8 @@ const Client = require("../lib/client");
 const { HostMap } = require("../lib/host");
 const promiseUtils = require("../lib/promise-utils");
 const rust = require("../index");
+const { RetryPolicy } = require("../lib/policies/retry");
 const Vector = types.Vector;
-
-util.inherits(RetryMultipleTimes, policies.retry.RetryPolicy);
 
 const afterNextHandlers = [];
 let testUnhandledError = null;
@@ -147,7 +146,7 @@ const helper = {
             contactPoints: ["127.0.0.1"],
             localDataCenter: "dc1",
             // retry all queries multiple times (for improved test resiliency).
-            policies: { retry: new RetryMultipleTimes(3) },
+            policies: { retry: new RetryPolicy() },
         };
     })(),
     /**
@@ -1941,36 +1940,6 @@ const dataProviderWithCollections = dataProvider
 helper.dataProviderWithCollections = dataProviderWithCollections;
 
 /**
- * A retry policy for testing purposes only, retries for a number of times
- * @param {Number} times
- * @constructor
- */
-function RetryMultipleTimes(times) {
-    this.times = times;
-}
-
-RetryMultipleTimes.prototype.onReadTimeout = function (requestInfo) {
-    if (requestInfo.nbRetry > this.times) {
-        return this.rethrowResult();
-    }
-    return this.retryResult();
-};
-
-RetryMultipleTimes.prototype.onUnavailable = function (requestInfo) {
-    if (requestInfo.nbRetry > this.times) {
-        return this.rethrowResult();
-    }
-    return this.retryResult();
-};
-
-RetryMultipleTimes.prototype.onWriteTimeout = function (requestInfo) {
-    if (requestInfo.nbRetry > this.times) {
-        return this.rethrowResult();
-    }
-    return this.retryResult();
-};
-
-/**
  * For test purposes, filters the child policy by last octet of the ip address
  * @param {Array} list
  * @param [childPolicy]
@@ -2088,5 +2057,4 @@ class OrderedLoadBalancingPolicy extends policies.loadBalancing
 }
 
 module.exports = helper;
-module.exports.RetryMultipleTimes = RetryMultipleTimes;
 module.exports.OrderedLoadBalancingPolicy = OrderedLoadBalancingPolicy;
