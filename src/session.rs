@@ -1,7 +1,12 @@
 use std::sync::Arc;
 
 use napi::bindgen_prelude::BigInt;
-use openssl::ssl::{SslContextBuilder, SslMethod, SslVerifyMode};
+use openssl::ssl::{
+    SslContext, SslContextBuilder, SslMethod, SslOptions as OpenSslOptions, SslVerifyMode,
+    SslVersion,
+};
+use openssl::x509::X509;
+use openssl::x509::store::X509StoreBuilder;
 use scylla::client::SelfIdentity;
 use scylla::client::caching_session::CachingSession;
 use scylla::client::execution_profile::ExecutionProfileBuilder;
@@ -361,6 +366,72 @@ impl SessionWrapper {
     }
 }
 
+fn tls_version_to_ssl_version(version: &TlsVersion) -> SslVersion {
+    match version {
+        TlsVersion::Tlsv1 => SslVersion::TLS1,
+        TlsVersion::Tlsv1_1 => SslVersion::TLS1_1,
+        TlsVersion::Tlsv1_2 => SslVersion::TLS1_2,
+        TlsVersion::Tlsv1_3 => SslVersion::TLS1_3,
+    }
+}
+
+fn configure_ssl(options: &SslOptions) -> ConvertedResult<Option<SslContext>> {
+    let mut ssl_context_builder = SslContextBuilder::new(SslMethod::tls())?;
+
+    ssl_context_builder.set_verify(match options.reject_unauthorized {
+        Some(false) => SslVerifyMode::NONE,
+        Some(true) | None => SslVerifyMode::PEER,
+    });
+
+    if let Some(min_version) = &options.min_version {
+        let ssl_version = tls_version_to_ssl_version(min_version);
+        ssl_context_builder.set_min_proto_version(Some(ssl_version))?;
+    }
+
+    if let Some(max_version) = &options.max_version {
+        let ssl_version = tls_version_to_ssl_version(max_version);
+        ssl_context_builder.set_max_proto_version(Some(ssl_version))?;
+    }
+
+    if let Some(sigalgs) = &options.sigalgs {
+        ssl_context_builder.set_sigalgs_list(sigalgs)?;
+    }
+
+    if let Some(session_id_context) = &options.session_id_context {
+        ssl_context_builder.set_session_id_context(session_id_context.as_bytes())?;
+    }
+
+    if let Some(ecdh_curve) = &options.ecdh_curve {
+        ssl_context_builder.set_groups_list(ecdh_curve)?;
+    }
+
+    if let Some(secure_options) = &options.secure_options {
+        let (negative, flags, overflow) = secure_options.get_u64();
+        if negative || overflow {
+            return Err(ConvertedError::from(make_js_error(format!(
+                "secureOptions must be a non-negative integer within u64 range, got {:?}",
+                secure_options
+            ))));
+        }
+        ssl_context_builder.set_options(OpenSslOptions::from_bits_truncate(flags));
+    }
+
+    if let Some(true) = options.honor_cipher_order {
+        ssl_context_builder.set_options(OpenSslOptions::CIPHER_SERVER_PREFERENCE);
+    }
+
+    if let Some(ca_list) = &options.ca {
+        let mut store_builder = X509StoreBuilder::new()?;
+        for ca_pem in ca_list {
+            let ca = X509::from_pem(ca_pem.as_bytes())?;
+            store_builder.add_cert(ca)?;
+        }
+        ssl_context_builder.set_cert_store(store_builder.build());
+    }
+
+    Ok(Some(ssl_context_builder.build()))
+}
+
 fn configure_session_builder(options: &SessionOptions) -> ConvertedResult<SessionBuilder> {
     let mut builder = SessionBuilder::new();
     builder = builder.custom_identity(self_identity(options));
@@ -384,14 +455,7 @@ fn configure_session_builder(options: &SessionOptions) -> ConvertedResult<Sessio
     }
 
     if let Some(ssl_options) = &options.ssl_options {
-        let mut ssl_context_builder = SslContextBuilder::new(SslMethod::tls())?;
-
-        ssl_context_builder.set_verify(match ssl_options.reject_unauthorized {
-            Some(false) => SslVerifyMode::NONE,
-            Some(true) | None => SslVerifyMode::PEER,
-        });
-
-        builder = builder.tls_context(Some(ssl_context_builder.build()));
+        builder = builder.tls_context(configure_ssl(ssl_options)?);
     }
 
     if let Some(allow_list) = options
