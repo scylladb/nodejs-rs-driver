@@ -1,4 +1,4 @@
-use crate::session::{LoadBalancingConfig, SessionOptions, SslOptions};
+use crate::session::{LoadBalancingConfig, RetryPolicyKind, SessionOptions, SslOptions};
 
 #[napi]
 pub fn tests_check_client_option(options: SessionOptions, case: i32) {
@@ -28,7 +28,8 @@ pub fn tests_check_client_option(options: SessionOptions, case: i32) {
                         permit_dc_failover: Some(false),
                         enable_shuffling_replicas: Some(false),
                         allow_list: Some(vec!["127.0.0.1:7312".to_owned()]),
-                    })
+                    }),
+                    retry_policy: Some(RetryPolicyKind::Default)
                 }
             )
         }
@@ -45,7 +46,8 @@ pub fn tests_check_client_option(options: SessionOptions, case: i32) {
                     credentials_password: None,
                     cache_size: None,
                     ssl_options: None,
-                    load_balancing_config: None
+                    load_balancing_config: None,
+                    retry_policy: None
                 }
             )
         }

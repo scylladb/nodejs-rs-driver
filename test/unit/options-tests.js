@@ -5,6 +5,7 @@ const { setRustOptions } = require("../../lib/client-options");
 const {
     DefaultLoadBalancingPolicy,
 } = require("../../lib/policies/load-balancing");
+const { RetryPolicy } = require("../../lib/policies/retry");
 
 describe("Client options", function () {
     it("should correctly convert client options", function () {
@@ -29,6 +30,7 @@ describe("Client options", function () {
                     enableShufflingReplicas: false,
                     allowList: ["127.0.0.1:7312"],
                 }),
+                retry: new RetryPolicy(),
             },
         };
         rust.testsCheckClientOption(setRustOptions(options), 1);

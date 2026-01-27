@@ -7,6 +7,7 @@ use scylla::client::execution_profile::ExecutionProfileBuilder;
 use scylla::client::session_builder::SessionBuilder;
 use scylla::policies::host_filter::AllowListHostFilter;
 use scylla::policies::load_balancing::{self, LoadBalancingPolicy};
+use scylla::policies::retry::{DefaultRetryPolicy, FallthroughRetryPolicy, RetryPolicy};
 use scylla::response::{PagingState, PagingStateResponse};
 use scylla::statement::batch::Batch;
 use scylla::statement::{Consistency, SerialConsistency, Statement};
@@ -47,6 +48,13 @@ LoadBalancingConfig {
     
 });
 
+#[derive(Debug, PartialEq, Eq)]
+#[napi]
+pub enum RetryPolicyKind {
+    Default,
+    Fallthrough,
+}
+
 define_js_to_rust_convertible_object!(SessionOptions {
     connect_points, connectPoints: Vec<String>,
     keyspace, keyspace: String,
@@ -58,6 +66,7 @@ define_js_to_rust_convertible_object!(SessionOptions {
     cache_size, cacheSize: u32,
     ssl_options, sslOptions: SslOptions,
     load_balancing_config, loadBalancingConfig: LoadBalancingConfig,
+    retry_policy, retryPolicy: RetryPolicyKind,
 });
 
 #[napi]
@@ -388,6 +397,15 @@ fn configure_session_builder(options: &SessionOptions) -> ConvertedResult<Sessio
     {
         exec_profile_builder = exec_profile_builder.load_balancing_policy(load_balancing_policy);
     }
+
+    if let Some(retry_policy) = &options.retry_policy {
+        let policy: Arc<dyn RetryPolicy> = match retry_policy {
+            RetryPolicyKind::Default => Arc::new(DefaultRetryPolicy::new()),
+            RetryPolicyKind::Fallthrough => Arc::new(FallthroughRetryPolicy::new()),
+        };
+        exec_profile_builder = exec_profile_builder.retry_policy(policy);
+    }
+
     builder = builder.default_execution_profile_handle(exec_profile_builder.build().into_handle());
     Ok(builder)
 }

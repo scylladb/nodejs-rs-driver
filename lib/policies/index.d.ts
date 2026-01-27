@@ -106,17 +106,6 @@ export namespace policies {
   }
 
   namespace retry {
-    class DecisionInfo {
-      decision: number;
-      consistency: types.consistencies;
-    }
-
-    class OperationInfo {
-      query: string;
-      executionOptions: ExecutionOptions;
-      nbRetry: number;
-    }
-
     class IdempotenceAwareRetryPolicy extends RetryPolicy {
       constructor(childPolicy: RetryPolicy);
     }
@@ -126,49 +115,7 @@ export namespace policies {
     }
 
     class RetryPolicy {
-      onReadTimeout(
-        info: OperationInfo,
-        consistency: types.consistencies,
-        received: number,
-        blockFor: number,
-        isDataPresent: boolean,
-      ): DecisionInfo;
-
-      onRequestError(
-        info: OperationInfo,
-        consistency: types.consistencies,
-        err: Error,
-      ): DecisionInfo;
-
-      onUnavailable(
-        info: OperationInfo,
-        consistency: types.consistencies,
-        required: number,
-        alive: boolean,
-      ): DecisionInfo;
-
-      onWriteTimeout(
-        info: OperationInfo,
-        consistency: types.consistencies,
-        received: number,
-        blockFor: number,
-        writeType: string,
-      ): DecisionInfo;
-
-      rethrowResult(): DecisionInfo;
-
-      retryResult(
-        consistency: types.consistencies,
-        useCurrentHost?: boolean,
-      ): DecisionInfo;
-    }
-
-    namespace RetryDecision {
-      enum retryDecision {
-        ignore,
-        rethrow,
-        retry,
-      }
+      constructor();
     }
   }
 
