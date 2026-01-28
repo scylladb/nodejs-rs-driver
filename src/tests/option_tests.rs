@@ -1,8 +1,9 @@
-use crate::session::{LoadBalancingConfig, SessionOptions, SslOptions};
+use crate::session::{LoadBalancingConfig, SessionOptions, SslOptions, TlsVersion};
+use napi::bindgen_prelude::BigInt;
 
 #[napi]
-pub fn tests_check_client_option(options: SessionOptions, case: i32) {
-    match case {
+pub fn tests_check_client_option(options: SessionOptions, test_case: i32) {
+    match test_case {
         1 => {
             assert_eq!(
                 options,
@@ -20,19 +21,22 @@ pub fn tests_check_client_option(options: SessionOptions, case: i32) {
                     cache_size: Some(2137),
                     ssl_options: Some(SslOptions {
                         reject_unauthorized: Some(false),
-                        ca: None,
-                        cert: None,
-                        sigalgs: None,
-                        ciphers: None,
-                        ecdh_curve: None,
-                        honor_cipher_order: None,
-                        key: None,
-                        max_version: None,
-                        min_version: None,
-                        secure_options: None,
-                        session_id_context: None,
-                        passphrase: None,
-                        pfx: None
+                        ca: Some(vec!["CA cert 1".to_owned(), "CA cert 2".to_owned()]),
+                        cert: Some("Cert chain".to_owned()),
+                        sigalgs: Some("RSA+SHA256".to_owned()),
+                        ciphers: Some("TLS_AES_128_GCM_SHA256".to_owned()),
+                        ecdh_curve: Some("P-256".to_owned()),
+                        honor_cipher_order: Some(true),
+                        key: Some("Private key".to_owned()),
+                        max_version: Some(TlsVersion::Tlsv1_3),
+                        min_version: Some(TlsVersion::Tlsv1_2),
+                        secure_options: Some(BigInt {
+                            sign_bit: false,
+                            words: vec![123],
+                        }),
+                        session_id_context: Some("Session context".to_owned()),
+                        passphrase: Some("Passphrase".to_owned()),
+                        pfx: Some("PFX data".to_owned())
                     }),
                     load_balancing_config: Some(LoadBalancingConfig {
                         prefer_datacenter: Some("Magic DC".to_owned()),
