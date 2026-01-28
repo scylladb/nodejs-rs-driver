@@ -16,22 +16,33 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        settings:
+        host:
+        - ubuntu-latest
+        - ubuntu-24.04-arm
+        node: [ 20, 22, 24, current ]
+        include:
           - host: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             build: npm run build -- --target x86_64-unknown-linux-gnu
-        node: [ 20, 22, 24, current ]
-    name: Build and run examples - ${{ matrix.settings.target }} - node@${{ matrix.node }}
-    runs-on: ${{ matrix.settings.host }}
+          - host: ubuntu-24.04-arm 
+            target: aarch64-unknown-linux-gnu 
+            build: npm run build -- --target aarch64-unknown-linux-gnu
+        exclude:
+          - host: ubuntu-24.04-arm
+            node: 22
+          - host: ubuntu-24.04-arm
+            node: 24
+    name: Build and run examples - ${{ matrix.target }} - node@${{ matrix.node }}
+    runs-on: ${{ matrix.host }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/setup
         with:
-          host: ${{ matrix.settings.host }}
-          target: ${{ matrix.settings.target }}
+          host: ${{ matrix.host }}
+          target: ${{ matrix.target }}
           node-version: ${{ matrix.node }}
       - name: Build
-        run: ${{ matrix.settings.build }}
+        run: ${{ matrix.build }}
         shell: bash
       # Scylla docker setup copied from https://github.com/scylladb/scylla-rust-driver/blob/main/.github/workflows/rust.yml
       - name: Setup 3-node Scylla cluster
