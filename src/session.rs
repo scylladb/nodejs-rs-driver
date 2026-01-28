@@ -385,6 +385,37 @@ fn configure_ssl(options: &SslOptions) -> ConvertedResult<Option<SslContext>> {
         Some(true) | None => SslVerifyMode::PEER,
     });
 
+    if let Some(ciphers) = &options.ciphers {
+        // JS configuration has a single list for cipher list and ciphersuites,
+        // while the rust api to openssl requires those to be set separately.
+        // Therefore we need to split the provided list of ciphers into two parts.
+        let mut cipher_list = vec![];
+        let mut ciphersuites = vec![];
+
+        for part in ciphers.split(':') {
+            // JS allows lowercase names: https://nodejs.org/docs/latest-v24.x/api/tls.html#tlsgetciphers
+            let part = part.to_uppercase();
+            // valid cipersuite names start with "TLS_" (see: https://docs.openssl.org/master/man3/SSL_CTX_set_cipher_list/#description)
+            // while none of cipher string names start with that prefix (see: https://docs.openssl.org/master/man3/SSL_CTX_set_cipher_list/#description)
+            if part.starts_with("TLS_") {
+                ciphersuites.push(part);
+            } else {
+                // Even if this consists of multiple cipher string separated by commas or spaces,
+                // we still handle it as a single part, as OpenSSL will parse it correctly later
+                // This is valid as those separators are not valid in cipher suite names
+                cipher_list.push(part);
+            }
+        }
+        if !cipher_list.is_empty() {
+            let cipher_list_string = cipher_list.join(":");
+            ssl_context_builder.set_cipher_list(&cipher_list_string)?;
+        }
+        if !ciphersuites.is_empty() {
+            let ciphersuites_string = ciphersuites.join(":");
+            ssl_context_builder.set_ciphersuites(&ciphersuites_string)?;
+        }
+    }
+
     if let Some(min_version) = &options.min_version {
         let ssl_version = tls_version_to_ssl_version(min_version);
         ssl_context_builder.set_min_proto_version(Some(ssl_version))?;
