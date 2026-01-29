@@ -114,3 +114,25 @@ When `localDc` is not provided connections to all nodes will be allowed.
 **WARNING**:
 This is a change in behavior. In the DataStax driver, when `localDc` would not be provided,
 `localDataCenter` from client options would be used.
+
+## Retry policies
+
+### Supported retry policies
+
+- `FallthroughRetryPolicy`
+
+### Not supported retry policy
+
+- (legacy) `RetryPolicy`
+- `IdempotenceAwareRetryPolicy`
+- custom retry policies
+
+#### legacy RetryPolicy
+
+The `RetryPolicy` as present in the DataStax driver is no longer supported.
+It was replaced with a [new implementation](./retry_policies.md). There are no plans for
+re-implementing its functionality. You do not have to update a code to migrate to the new policy.
+
+#### IdempotenceAwareRetryPolicy
+
+This policy was deprecated in the DataStax driver, and for this reason was removed from this driver.
