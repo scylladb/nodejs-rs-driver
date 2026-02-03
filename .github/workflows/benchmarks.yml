@@ -1,7 +1,6 @@
 name: Run benchmarks
 env:
   DEBUG: napi:*
-  APP_NAME: scylladb-javascript-driver
   PEDANTIC: true
 on:
     workflow_dispatch:

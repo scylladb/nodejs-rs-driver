@@ -1,7 +1,6 @@
 name: Check code quality
 env:
   DEBUG: napi:*
-  APP_NAME: scylladb-javascript-driver
 "on":
   push:
     branches:
