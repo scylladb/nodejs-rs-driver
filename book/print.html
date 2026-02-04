@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-7800d3a0.js";
+            window.path_to_searchindex_js = "searchindex-54525e77.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-9e992bdf.js"></script>
@@ -286,6 +286,23 @@ When <code>localDc</code> is not provided connections to all nodes will be allow
 <p><strong>WARNING</strong>:
 This is a change in behavior. In the DataStax driver, when <code>localDc</code> would not be provided,
 <code>localDataCenter</code> from client options would be used.</p>
+<h2 id="retry-policies"><a class="header" href="#retry-policies">Retry policies</a></h2>
+<h3 id="supported-retry-policies"><a class="header" href="#supported-retry-policies">Supported retry policies</a></h3>
+<ul>
+<li><code>FallthroughRetryPolicy</code></li>
+</ul>
+<h3 id="not-supported-retry-policy"><a class="header" href="#not-supported-retry-policy">Not supported retry policy</a></h3>
+<ul>
+<li>(legacy) <code>RetryPolicy</code></li>
+<li><code>IdempotenceAwareRetryPolicy</code></li>
+<li>custom retry policies</li>
+</ul>
+<h4 id="legacy-retrypolicy"><a class="header" href="#legacy-retrypolicy">legacy RetryPolicy</a></h4>
+<p>The <code>RetryPolicy</code> as present in the DataStax driver is no longer supported.
+It was replaced with a <a href="retry_policies.html">new implementation</a>. There are no plans for
+re-implementing its functionality. You do not have to update a code to migrate to the new policy.</p>
+<h4 id="idempotenceawareretrypolicy"><a class="header" href="#idempotenceawareretrypolicy">IdempotenceAwareRetryPolicy</a></h4>
+<p>This policy was deprecated in the DataStax driver, and for this reason was removed from this driver.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="load-balancing"><a class="header" href="#load-balancing">Load balancing</a></h1>
 <p>We recommend to configure load balancing options using only <code>DefaultLoadBalancingPolicy</code>.
