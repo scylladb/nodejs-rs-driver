@@ -418,7 +418,7 @@ describe("Client @SERVER_API", function () {
                             150,
                             100,
                             function (n, next) {
-                                const id = types.uuid();
+                                const id = types.Uuid.random();
                                 let value = types.Integer.fromNumber(n * 999);
                                 value = value.multiply(
                                     types.Integer.fromString("9999901443"),
@@ -658,11 +658,11 @@ describe("Client @SERVER_API", function () {
                     new MapPF([[types.Integer.fromString("100000001"), true]]),
                     new MapPF([
                         [
-                            types.timeuuid(),
+                            types.TimeUuid.now(),
                             types.BigDecimal.fromString("1.20008"),
                         ],
                         [
-                            types.timeuuid(),
+                            types.TimeUuid.now(),
                             types.BigDecimal.fromString("-9.26"),
                         ],
                     ]),
@@ -771,9 +771,9 @@ describe("Client @SERVER_API", function () {
                     new SetPF([-2, 0, 1, 1.1233799457550049]),
                     new SetPF([types.Long.fromString("100000001")]),
                     new SetPF([
-                        types.timeuuid(),
-                        types.timeuuid(),
-                        types.timeuuid(),
+                        types.TimeUuid.now(),
+                        types.TimeUuid.now(),
+                        types.TimeUuid.now(),
                     ]),
                 ],
                 [

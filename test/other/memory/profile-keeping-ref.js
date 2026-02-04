@@ -68,7 +68,12 @@ utils.series(
                     );
                     client.execute(
                         query,
-                        [types.uuid(), n, types.Long.fromNumber(n), buffer],
+                        [
+                            types.Uuid.random(),
+                            n,
+                            types.Long.fromNumber(n),
+                            buffer,
+                        ],
                         { prepare: 1 },
                         function (err) {
                             if (callbackCounter++ % 1000 === 0) {

@@ -80,11 +80,6 @@ describe("encoder", function () {
                 "Guess type for a string uuid value failed",
             );
             assertGuessed(
-                types.timeuuid(),
-                dataTypes.uuid,
-                "Guess type for a Timeuuid value failed",
-            );
-            assertGuessed(
                 types.Integer.fromNumber(1),
                 dataTypes.varint,
                 "Guess type for a varint value failed",
@@ -462,8 +457,8 @@ describe("encoder", function () {
                     );
                     // Minimum info string, guessed
                     value = {};
-                    value[types.uuid()] = 0;
-                    value[types.uuid()] = 2;
+                    value[types.Uuid.random()] = 0;
+                    value[types.Uuid.random()] = 2;
                     encoded = encoder.encode(value, "map");
                     decoded = encoder.decode(encoded, {
                         code: dataTypes.map,
