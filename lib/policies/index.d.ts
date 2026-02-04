@@ -24,6 +24,10 @@ export namespace policies {
     class EC2MultiRegionTranslator implements AddressTranslator {
       translate(address: string, port: number, callback: Function): void;
     }
+
+    class MappingAddressTranslator implements AddressTranslator {
+      translate(address: string, port: number, callback: Function): void;
+    }
   }
 
   namespace loadBalancing {
