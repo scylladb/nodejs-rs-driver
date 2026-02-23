@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>JSDoc: Class: TokenRange</title>
+    <title>JSDoc: Class: SslOptions</title>
 
     <script src="scripts/prettify/prettify.js"> </script>
     <script src="scripts/prettify/lang-css.js"> </script>
@@ -17,7 +17,7 @@
 
 <div id="main">
 
-    <h1 class="page-title">Class: TokenRange</h1>
+    <h1 class="page-title">Class: SslOptions</h1>
 
     
 
@@ -28,15 +28,10 @@
 
 <header>
     
-        <h2><span class="attribs"><span class="type-signature"></span></span>TokenRange<span class="signature">()</span><span class="type-signature"></span></h2>
+        <h2><span class="attribs"><span class="type-signature"></span></span>SslOptions<span class="signature">()</span><span class="type-signature"></span></h2>
         
-            <div class="class-description"><p>Represents a range of tokens on a Cassandra ring.</p>
-<p>A range is start-exclusive and end-inclusive.  It is empty when
-start and end are the same token, except if that is the minimum
-token, in which case the range covers the whole ring (this is
-consistent with the behavior of CQL range queries).</p>
-<p>Note that CQL does not handle wrapping.  To query all partitions
-in a range, see unwrap.</p></div>
+            <div class="class-description"><p>SSL/TLS options for secure connections.
+Based on Node.js tls.ConnectionOptions which extends SecureContextOptions and CommonConnectionOptions.</p></div>
         
     
 </header>
@@ -51,7 +46,7 @@ in a range, see unwrap.</p></div>
     
 
     
-    <h4 class="name" id="TokenRange"><span class="type-signature"></span>new TokenRange<span class="signature">()</span><span class="type-signature"></span></h4>
+    <h4 class="name" id="SslOptions"><span class="type-signature"></span>new SslOptions<span class="signature">()</span><span class="type-signature"></span></h4>
     
 
     
@@ -99,7 +94,7 @@ in a range, see unwrap.</p></div>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="token.js.html">token.js</a>, <a href="token.js.html#line122">line 122</a>
+        <a href="client-options.js.html">client-options.js</a>, <a href="client-options.js.html#line256">line 256</a>
     </li></ul></dd>
     
 
@@ -145,84 +140,40 @@ in a range, see unwrap.</p></div>
     
 
     
-
-    
-        <h3 class="subsection-title">Methods</h3>
+        <h3 class="subsection-title">Members</h3>
 
         
             
+<h4 class="name" id="ca"><span class="type-signature">(nullable) </span>ca<span class="type-signature"> :string|Buffer|Array:<a href="module-types-Builder.html"></a>.&lt;(string:<a href="module-types-Builder.html"></a>|Buffer:<a href="module-types-Builder.html"></a>)></span></h4>
 
-    
-
-    
-    <h4 class="name" id="compare"><span class="type-signature"></span>compare<span class="signature">(other)</span><span class="type-signature"> &rarr; {Number}</span></h4>
-    
-
-    
 
 
 
 <div class="description">
-    <p>Returns 0 if the values are equal, otherwise compares against
-start, if start is equal, compares against end.</p>
+    <p>Optionally override the trusted CA certificates. When not provided,
+uses OpenSSL defaults (which in most cases means system trusted certificates).
+Setting this option replaces the default CA certificates, rather than adding to them.</p>
+<p>Corresponds to <a href="https://docs.openssl.org/master/man3/SSL_CTX_set_cert_store/">SSL_CTX_set_cert_store</a></p>
+<p><strong>Warning:</strong> Behavior when this option is unset differs from Node.js defaults.</p>
 </div>
 
 
 
-
-
-
-
-
-
-    <h5>Parameters:</h5>
-    
-
-<table class="params">
-    <thead>
-    <tr>
-        
-        <th>Name</th>
-        
-
-        <th>Type</th>
-
-        
-
-        
-
-        <th class="last">Description</th>
-    </tr>
-    </thead>
-
-    <tbody>
-    
-
-        <tr>
+    <h5>Type:</h5>
+    <ul>
+        <li>
             
-                <td class="name"><code>other</code></td>
-            
+<span class="param-type">string</span>
+|
 
-            <td class="type">
-            
-                
-<span class="param-type"><a href="TokenRange.html">TokenRange</a></span>
+<span class="param-type">Buffer</span>
+|
+
+<span class="param-type">Array:<a href="module-types-Builder.html"></a>.&lt;(string:<a href="module-types-Builder.html"></a>|Buffer:<a href="module-types-Builder.html"></a>)></span>
 
 
-            
-            </td>
-
-            
-
-            
-
-            <td class="description last"><p>Range to compare with.</p></td>
-        </tr>
-
-    
-    </tbody>
-</table>
-
+        </li>
+    </ul>
 
 
 
@@ -257,7 +208,7 @@ start, if start is equal, compares against end.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="token.js.html">token.js</a>, <a href="token.js.html#line288">line 288</a>
+        <a href="client-options.js.html">client-options.js</a>, <a href="client-options.js.html#line270">line 270</a>
     </li></ul></dd>
     
 
@@ -273,111 +224,41 @@ start, if start is equal, compares against end.</p>
 
 
 
-
-
-
-
-
-
-
-
-
-<h5>Returns:</h5>
-
-        
-
-
-<dl>
-    <dt>
-        Type
-    </dt>
-    <dd>
-        
-<span class="param-type">Number</span>
-
-
-    </dd>
-</dl>
-
-    
-
-
-
-
-
         
             
+<h4 class="name" id="cert"><span class="type-signature">(nullable) </span>cert<span class="type-signature"> :string|Buffer</span></h4>
 
-    
-
-    
-    <h4 class="name" id="contains"><span class="type-signature"></span>contains<span class="signature">(token)</span><span class="type-signature"> &rarr; {boolean}</span></h4>
-    
-
-    
 
 
 
 <div class="description">
-    <p>Whether this range contains a given Token.</p>
+    <p>Cert chains in PEM format. One cert chain should be provided per private key.
+Each cert chain should consist of the PEM formatted certificate for a provided
+private key, followed by the PEM formatted intermediate certificates (if any),
+in order, and not including the root CA (the root CA must be pre-known to the peer,
+see ca). If the intermediate certificates are not provided, the peer will not be
+able to validate the certificate, and the handshake will fail.</p>
+<p>Only a single cert chain is currently supported by the driver.</p>
+<p>Corresponds to <a href="https://docs.openssl.org/master/man3/SSL_CTX_use_certificate/">SSL_CTX_use_certificate</a>
+for the first certificate in the chain and
+<a href="https://docs.openssl.org/master/man3/SSL_CTX_add_extra_chain_cert/">SSL_CTX_add_extra_chain_cert</a>
+for the subsequent certificates in the chain.</p>
 </div>
 
 
 
-
-
-
-
-
-
-    <h5>Parameters:</h5>
-    
-
-<table class="params">
-    <thead>
-    <tr>
-        
-        <th>Name</th>
-        
-
-        <th>Type</th>
-
-        
-
-        
-
-        <th class="last">Description</th>
-    </tr>
-    </thead>
-
-    <tbody>
-    
-
-        <tr>
+    <h5>Type:</h5>
+    <ul>
+        <li>
             
-                <td class="name"><code>token</code></td>
-            
+<span class="param-type">string</span>
+|
 
-            <td class="type">
-            
-                
-<span class="param-type">*</span>
+<span class="param-type">Buffer</span>
 
 
-            
-            </td>
-
-            
-
-            
-
-            <td class="description last"><p>Token to check for.</p></td>
-        </tr>
-
-    
-    </tbody>
-</table>
-
+        </li>
+    </ul>
 
 
 
@@ -412,7 +293,7 @@ start, if start is equal, compares against end.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="token.js.html">token.js</a>, <a href="token.js.html#line243">line 243</a>
+        <a href="client-options.js.html">client-options.js</a>, <a href="client-options.js.html#line288">line 288</a>
     </li></ul></dd>
     
 
@@ -428,115 +309,184 @@ start, if start is equal, compares against end.</p>
 
 
 
-
-
-
-
-
-
-
-
-
-<h5>Returns:</h5>
-
         
-<div class="param-desc">
-    <p>Whether or not the Token is in this range.</p>
+            
+<h4 class="name" id="ciphers"><span class="type-signature">(nullable) </span>ciphers<span class="type-signature"> :string</span></h4>
+
+
+
+
+<div class="description">
+    <p>Cipher suite specification, replacing the default.
+For more information, see modifying the default cipher suite.
+Permitted ciphers can be obtained via tls.getCiphers().
+Cipher names must be uppercased in order for OpenSSL to accept them.</p>
+<p>Corresponds to <a href="https://docs.openssl.org/master/man3/SSL_CTX_set_cipher_list/">SSL_set_ciphersuites</a> for ciphers with <code>TLS_</code> prefix <a href="https://docs.openssl.org/master/man3/SSL_CTX_set_cipher_list/">SSL_CTX_set_cipher_list</a> for remaining ciphers.</p>
 </div>
 
 
 
-<dl>
-    <dt>
-        Type
-    </dt>
-    <dd>
+    <h5>Type:</h5>
+    <ul>
+        <li>
+            
+<span class="param-type">string</span>
+
+
+        </li>
+    </ul>
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="client-options.js.html">client-options.js</a>, <a href="client-options.js.html#line310">line 310</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
         
+            
+<h4 class="name" id="ecdhCurve"><span class="type-signature">(nullable) </span>ecdhCurve<span class="type-signature"> :string</span></h4>
+
+
+
+
+<div class="description">
+    <p>A string describing a named curve or a colon separated list of curve
+NIDs or names, for example P-521:P-384:P-256, to use for ECDH key
+agreement. Set to auto to select the curve automatically. Use
+crypto.getCurves() to obtain a list of available curve names. On
+recent releases, openssl ecparam -list_curves will also display the
+name and description of each available elliptic curve. Default:
+tls.DEFAULT_ECDH_CURVE.</p>
+<p>corresponds to <a href="https://docs.openssl.org/master/man3/SSL_CTX_set1_curves/">SSL_CTX_set1_curves</a></p>
+</div>
+
+
+
+    <h5>Type:</h5>
+    <ul>
+        <li>
+            
+<span class="param-type">string</span>
+
+
+        </li>
+    </ul>
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="client-options.js.html">client-options.js</a>, <a href="client-options.js.html#line324">line 324</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+        
+            
+<h4 class="name" id="honorCipherOrder"><span class="type-signature">(nullable) </span>honorCipherOrder<span class="type-signature"> :boolean</span></h4>
+
+
+
+
+<div class="description">
+    <p>Attempt to use the server's cipher suite preferences instead of the client's.
+When true, causes SSL_OP_CIPHER_SERVER_PREFERENCE to be set in secureOptions.</p>
+</div>
+
+
+
+    <h5>Type:</h5>
+    <ul>
+        <li>
+            
 <span class="param-type">boolean</span>
 
 
-    </dd>
-</dl>
-
-    
-
-
-
-
-
-        
-            
-
-    
-
-    
-    <h4 class="name" id="equals"><span class="type-signature"></span>equals<span class="signature">(other)</span><span class="type-signature"> &rarr; {boolean}</span></h4>
-    
-
-    
-
-
-
-<div class="description">
-    <p>Determines if the input range is equivalent to this one.</p>
-</div>
-
-
-
-
-
-
-
-
-
-    <h5>Parameters:</h5>
-    
-
-<table class="params">
-    <thead>
-    <tr>
-        
-        <th>Name</th>
-        
-
-        <th>Type</th>
-
-        
-
-        
-
-        <th class="last">Description</th>
-    </tr>
-    </thead>
-
-    <tbody>
-    
-
-        <tr>
-            
-                <td class="name"><code>other</code></td>
-            
-
-            <td class="type">
-            
-                
-<span class="param-type"><a href="TokenRange.html">TokenRange</a></span>
-
-
-            
-            </td>
-
-            
-
-            
-
-            <td class="description last"><p>Range to compare with.</p></td>
-        </tr>
-
-    
-    </tbody>
-</table>
-
+        </li>
+    </ul>
 
 
 
@@ -571,7 +521,7 @@ start, if start is equal, compares against end.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="token.js.html">token.js</a>, <a href="token.js.html#line272">line 272</a>
+        <a href="client-options.js.html">client-options.js</a>, <a href="client-options.js.html#line331">line 331</a>
     </li></ul></dd>
     
 
@@ -587,37 +537,480 @@ start, if start is equal, compares against end.</p>
 
 
 
-
-
-
-
-
-
-
-
-
-<h5>Returns:</h5>
-
         
-<div class="param-desc">
-    <p>Whether or not the ranges are equal.</p>
+            
+<h4 class="name" id="key"><span class="type-signature">(nullable) </span>key<span class="type-signature"> :string|Buffer</span></h4>
+
+
+
+
+<div class="description">
+    <p>Private keys in PEM format. PEM allows the option of private keys being encrypted.
+Encrypted keys will be decrypted with options.passphrase.</p>
+<p>Only a single cert chain, and as a result a single private key
+is currently supported by the driver.</p>
+<p>Corresponds to <a href="https://docs.openssl.org/master/man3/SSL_CTX_use_PrivateKey/">SSL_CTX_use_PrivateKey</a></p>
 </div>
 
 
 
-<dl>
-    <dt>
-        Type
-    </dt>
-    <dd>
+    <h5>Type:</h5>
+    <ul>
+        <li>
+            
+<span class="param-type">string</span>
+|
+
+<span class="param-type">Buffer</span>
+
+
+        </li>
+    </ul>
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="client-options.js.html">client-options.js</a>, <a href="client-options.js.html#line343">line 343</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
         
+            
+<h4 class="name" id="maxVersion"><span class="type-signature">(nullable) </span>maxVersion<span class="type-signature"> :'TLSv1.3'|'TLSv1.2'|'TLSv1.1'|'TLSv1'</span></h4>
+
+
+
+
+<div class="description">
+    <p>Optionally set the maximum TLS version to allow. One
+of <code>'TLSv1.3'</code>, <code>'TLSv1.2'</code>, <code>'TLSv1.1'</code>, or <code>'TLSv1'</code>.</p>
+<p><strong>Default:</strong> <code>'TLSv1.3'</code></p>
+<p><strong>Warning:</strong> In Node.js it was possible to modify default values using CLI options.
+This is not possible here.</p>
+</div>
+
+
+
+    <h5>Type:</h5>
+    <ul>
+        <li>
+            
+<span class="param-type">'TLSv1.3'</span>
+|
+
+<span class="param-type">'TLSv1.2'</span>
+|
+
+<span class="param-type">'TLSv1.1'</span>
+|
+
+<span class="param-type">'TLSv1'</span>
+
+
+        </li>
+    </ul>
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="client-options.js.html">client-options.js</a>, <a href="client-options.js.html#line355">line 355</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+        
+            
+<h4 class="name" id="minVersion"><span class="type-signature">(nullable) </span>minVersion<span class="type-signature"> :'TLSv1.3'|'TLSv1.2'|'TLSv1.1'|'TLSv1'</span></h4>
+
+
+
+
+<div class="description">
+    <p>Optionally set the minimum TLS version to allow. One
+of <code>'TLSv1.3'</code>, <code>'TLSv1.2'</code>, <code>'TLSv1.1'</code>, or <code>'TLSv1'</code>. It is not recommended to use
+less than TLSv1.2, but it may be required for interoperability.</p>
+<p><strong>Default:</strong> <code>'TLSv1.2'</code></p>
+<p><strong>Warning:</strong> In Node.js it was possible to modify default values using CLI options.</p>
+</div>
+
+
+
+    <h5>Type:</h5>
+    <ul>
+        <li>
+            
+<span class="param-type">'TLSv1.3'</span>
+|
+
+<span class="param-type">'TLSv1.2'</span>
+|
+
+<span class="param-type">'TLSv1.1'</span>
+|
+
+<span class="param-type">'TLSv1'</span>
+
+
+        </li>
+    </ul>
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="client-options.js.html">client-options.js</a>, <a href="client-options.js.html#line367">line 367</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+        
+            
+<h4 class="name" id="passphrase"><span class="type-signature">(nullable) </span>passphrase<span class="type-signature"> :string</span></h4>
+
+
+
+
+<div class="description">
+    <p>Shared passphrase used for a single private key and/or a PFX.</p>
+</div>
+
+
+
+    <h5>Type:</h5>
+    <ul>
+        <li>
+            
+<span class="param-type">string</span>
+
+
+        </li>
+    </ul>
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="client-options.js.html">client-options.js</a>, <a href="client-options.js.html#line373">line 373</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+        
+            
+<h4 class="name" id="pfx"><span class="type-signature">(nullable) </span>pfx<span class="type-signature"> :string|Buffer</span></h4>
+
+
+
+
+<div class="description">
+    <p>PFX or PKCS12 encoded private key and certificate chain.
+pfx is an alternative to providing key and cert individually.
+PFX is usually encrypted, if it is, passphrase will be used to decrypt it.</p>
+<p>Only a single cert chain is currently supported by the driver.</p>
+<p>This is equivalent to setting both <code>cert</code> and <code>key</code> fields</p>
+</div>
+
+
+
+    <h5>Type:</h5>
+    <ul>
+        <li>
+            
+<span class="param-type">string</span>
+|
+
+<span class="param-type">Buffer</span>
+
+
+        </li>
+    </ul>
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="client-options.js.html">client-options.js</a>, <a href="client-options.js.html#line385">line 385</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+        
+            
+<h4 class="name" id="rejectUnauthorized"><span class="type-signature">(nullable) </span>rejectUnauthorized<span class="type-signature"> :boolean</span></h4>
+
+
+
+
+<div class="description">
+    <p>If true the server will reject any connection which is not authorized
+with the list of supplied CAs. This option only has an effect if requestCert is true.</p>
+<p>Corresponds to <a href="https://docs.openssl.org/master/man3/SSL_CTX_set_verify/">SSL_CTX_set_verify</a></p>
+</div>
+
+
+
+    <h5>Type:</h5>
+    <ul>
+        <li>
+            
 <span class="param-type">boolean</span>
 
 
-    </dd>
-</dl>
+        </li>
+    </ul>
+
+
+
+
+
+<dl class="details">
 
     
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-default">Default Value:</dt>
+    <dd class="tag-default"><ul class="dummy">
+            <li>true</li>
+        </ul></dd>
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="client-options.js.html">client-options.js</a>, <a href="client-options.js.html#line407">line 407</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
 
 
 
@@ -625,31 +1018,29 @@ start, if start is equal, compares against end.</p>
 
         
             
+<h4 class="name" id="secureOptions"><span class="type-signature">(nullable) </span>secureOptions<span class="type-signature"> :number</span></h4>
 
-    
-
-    
-    <h4 class="name" id="isEmpty"><span class="type-signature"></span>isEmpty<span class="signature">()</span><span class="type-signature"> &rarr; {boolean}</span></h4>
-    
-
-    
 
 
 
 <div class="description">
-    <p>A range is empty when start and end are the same token, except if
-that is the minimum token, in which case the range covers the
-whole ring.  This is consistent with the behavior of CQL range
-queries.</p>
+    <p>Optionally affect the OpenSSL protocol behavior, which is not usually necessary.</p>
+<p><strong>This should be used carefully if at all!</strong></p>
+<p>Value is a numeric bitmask of the SSL_OP_* options from OpenSSL Options.</p>
+<p>Corresponds to the options parameter in <a href="https://docs.openssl.org/master/man3/SSL_CTX_set_options/">SSL_CTX_set_options</a></p>
 </div>
 
 
 
+    <h5>Type:</h5>
+    <ul>
+        <li>
+            
+<span class="param-type">number</span>
 
 
-
-
-
+        </li>
+    </ul>
 
 
 
@@ -684,7 +1075,7 @@ queries.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="token.js.html">token.js</a>, <a href="token.js.html#line187">line 187</a>
+        <a href="client-options.js.html">client-options.js</a>, <a href="client-options.js.html#line397">line 397</a>
     </li></ul></dd>
     
 
@@ -700,68 +1091,32 @@ queries.</p>
 
 
 
-
-
-
-
-
-
-
-
-
-<h5>Returns:</h5>
-
-        
-<div class="param-desc">
-    <p>Whether this range is empty.</p>
-</div>
-
-
-
-<dl>
-    <dt>
-        Type
-    </dt>
-    <dd>
-        
-<span class="param-type">boolean</span>
-
-
-    </dd>
-</dl>
-
-    
-
-
-
-
-
         
             
+<h4 class="name" id="sigalgs"><span class="type-signature">(nullable) </span>sigalgs<span class="type-signature"> :string</span></h4>
 
-    
-
-    
-    <h4 class="name" id="isWrappedAround"><span class="type-signature"></span>isWrappedAround<span class="signature">()</span><span class="type-signature"> &rarr; {boolean}</span></h4>
-    
-
-    
 
 
 
 <div class="description">
-    <p>A range wraps around the end of the ring when the start token
-is greater than the end token and the end token is not the
-minimum token.</p>
+    <p>Colon-separated list of supported signature algorithms.
+The list can contain digest algorithms (SHA256, MD5 etc.),
+public key algorithms (RSA-PSS, ECDSA etc.), combination of both (e.g 'RSA+SHA384')
+or TLS v1.3 scheme names (e.g. rsa_pss_pss_sha512).</p>
+<p>Corresponds to <a href="https://docs.openssl.org/master/man3/SSL_CTX_set1_sigalgs/">SSL_CTX_set1_sigalgs</a></p>
 </div>
 
 
 
+    <h5>Type:</h5>
+    <ul>
+        <li>
+            
+<span class="param-type">string</span>
 
 
-
-
-
+        </li>
+    </ul>
 
 
 
@@ -796,7 +1151,7 @@ minimum token.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="token.js.html">token.js</a>, <a href="token.js.html#line201">line 201</a>
+        <a href="client-options.js.html">client-options.js</a>, <a href="client-options.js.html#line299">line 299</a>
     </li></ul></dd>
     
 
@@ -812,348 +1167,9 @@ minimum token.</p>
 
 
 
-
-
-
-
-
-
-
-
-
-<h5>Returns:</h5>
-
         
-<div class="param-desc">
-    <p>Whether this range wraps around.</p>
-</div>
-
-
-
-<dl>
-    <dt>
-        Type
-    </dt>
-    <dd>
-        
-<span class="param-type">boolean</span>
-
-
-    </dd>
-</dl>
-
     
 
-
-
-
-
-        
-            
-
-    
-
-    
-    <h4 class="name" id="splitEvenly"><span class="type-signature"></span>splitEvenly<span class="signature">(numberOfSplits)</span><span class="type-signature"> &rarr; {Array:<a href="module-types-Builder.html"></a>.&lt;<a href="TokenRange.html">TokenRange</a>:<a href="module-types-Builder.html"></a>>}</span></h4>
-    
-
-    
-
-
-
-<div class="description">
-    <p>Splits this range into a number of smaller ranges of equal &quot;size&quot;
-(referring to the number of tokens, not the actual amount of data).</p>
-<p>Splitting an empty range is not permitted.  But not that, in edge
-cases, splitting a range might produce one or more empty ranges.</p>
-</div>
-
-
-
-
-
-
-
-
-
-    <h5>Parameters:</h5>
-    
-
-<table class="params">
-    <thead>
-    <tr>
-        
-        <th>Name</th>
-        
-
-        <th>Type</th>
-
-        
-
-        
-
-        <th class="last">Description</th>
-    </tr>
-    </thead>
-
-    <tbody>
-    
-
-        <tr>
-            
-                <td class="name"><code>numberOfSplits</code></td>
-            
-
-            <td class="type">
-            
-                
-<span class="param-type">Number</span>
-
-
-            
-            </td>
-
-            
-
-            
-
-            <td class="description last"><p>Number of splits to make.</p></td>
-        </tr>
-
-    
-    </tbody>
-</table>
-
-
-
-
-
-
-<dl class="details">
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-    <dt class="tag-source">Source:</dt>
-    <dd class="tag-source"><ul class="dummy"><li>
-        <a href="token.js.html">token.js</a>, <a href="token.js.html#line143">line 143</a>
-    </li></ul></dd>
-    
-
-    
-
-    
-
-    
-</dl>
-
-
-
-
-
-
-
-
-
-
-
-
-
-<h5>Throws:</h5>
-
-        
-
-<dl>
-    <dt>
-        <div class="param-desc">
-        <p>If splitting an empty range.</p>
-        </div>
-    </dt>
-    <dd></dd>
-    <dt>
-        <dl>
-            <dt>
-                Type
-            </dt>
-            <dd>
-                
-<span class="param-type">Error</span>
-
-
-            </dd>
-        </dl>
-    </dt>
-    <dd></dd>
-</dl>
-
-
-    
-
-
-<h5>Returns:</h5>
-
-        
-<div class="param-desc">
-    <p>Split ranges.</p>
-</div>
-
-
-
-<dl>
-    <dt>
-        Type
-    </dt>
-    <dd>
-        
-<span class="param-type">Array:<a href="module-types-Builder.html"></a>.&lt;<a href="TokenRange.html">TokenRange</a>:<a href="module-types-Builder.html"></a>></span>
-
-
-    </dd>
-</dl>
-
-    
-
-
-
-
-
-        
-            
-
-    
-
-    
-    <h4 class="name" id="unwrap"><span class="type-signature"></span>unwrap<span class="signature">()</span><span class="type-signature"> &rarr; {Array:<a href="module-types-Builder.html"></a>.&lt;<a href="TokenRange.html">TokenRange</a>:<a href="module-types-Builder.html"></a>>}</span></h4>
-    
-
-    
-
-
-
-<div class="description">
-    <p>Splits this range into a list of two non-wrapping ranges.</p>
-<p>This will return the range itself if it is non-wrapped, or two
-ranges otherwise.</p>
-<p>This is useful for CQL range queries, which do not handle
-wrapping.</p>
-</div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-<dl class="details">
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-    <dt class="tag-source">Source:</dt>
-    <dd class="tag-source"><ul class="dummy"><li>
-        <a href="token.js.html">token.js</a>, <a href="token.js.html#line219">line 219</a>
-    </li></ul></dd>
-    
-
-    
-
-    
-
-    
-</dl>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-<h5>Returns:</h5>
-
-        
-<div class="param-desc">
-    <p>The list of non-wrapping ranges.</p>
-</div>
-
-
-
-<dl>
-    <dt>
-        Type
-    </dt>
-    <dd>
-        
-<span class="param-type">Array:<a href="module-types-Builder.html"></a>.&lt;<a href="TokenRange.html">TokenRange</a>:<a href="module-types-Builder.html"></a>></span>
-
-
-    </dd>
-</dl>
-
-    
-
-
-
-
-
-        
     
 
     

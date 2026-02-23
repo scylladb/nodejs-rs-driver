@@ -37,6 +37,7 @@ const metrics = require("./metrics");
 const auth = require("./auth");
 const { throwNotSupported } = require("./new-utils");
 const errors = require("./errors.js");
+const rust = require("../index");
 
 /**
  * Client options.
@@ -221,7 +222,7 @@ const errors = require("./errors.js");
  * @property {RequestTracker} [requestTracker] The instance of RequestTracker used to monitor or log requests executed
  * with this instance.
  * [TODO: Add support for this field]
- * @property {Object} [sslOptions] Client-to-node ssl options. When set the driver will use the secure layer.
+ * @property {SslOptions} [sslOptions] Client-to-node ssl options. When set the driver will use the secure layer.
  * You can specify cert, ca, ... options named after the Node.js `tls.connect()` options.
  *
  * It uses the same default values as Node.js `tls.connect()`
@@ -275,6 +276,164 @@ const errors = require("./errors.js");
  *
  * [TODO: Add support for this field]
  */
+
+/**
+ * SSL/TLS options for secure connections.
+ * Based on Node.js tls.ConnectionOptions which extends SecureContextOptions and CommonConnectionOptions.
+ */
+class SslOptions {
+    // All of the comments are copied from Node.js docs for tls version of this class
+    // See: https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/types/node/tls.d.ts
+
+    /**
+     * Optionally override the trusted CA certificates. When not provided,
+     * uses OpenSSL defaults (which in most cases means system trusted certificates).
+     * Setting this option replaces the default CA certificates, rather than adding to them.
+     *
+     * Corresponds to [SSL_CTX_set_cert_store](https://docs.openssl.org/master/man3/SSL_CTX_set_cert_store/)
+     *
+     * **Warning:** Behavior when this option is unset differs from Node.js defaults.
+     * @type {(string | Buffer | Array&lt;string | Buffer>)?}
+     */
+    ca;
+
+    /**
+     * Cert chains in PEM format. One cert chain should be provided per private key.
+     * Each cert chain should consist of the PEM formatted certificate for a provided
+     * private key, followed by the PEM formatted intermediate certificates (if any),
+     * in order, and not including the root CA (the root CA must be pre-known to the peer,
+     * see ca). If the intermediate certificates are not provided, the peer will not be
+     * able to validate the certificate, and the handshake will fail.
+     *
+     * Only a single cert chain is currently supported by the driver.
+     *
+     * Corresponds to [SSL_CTX_use_certificate](https://docs.openssl.org/master/man3/SSL_CTX_use_certificate/)
+     * for the first certificate in the chain and
+     * [SSL_CTX_add_extra_chain_cert](https://docs.openssl.org/master/man3/SSL_CTX_add_extra_chain_cert/)
+     * for the subsequent certificates in the chain.
+     * @type {(string | Buffer)?}
+     */
+    cert;
+
+    /**
+     * Colon-separated list of supported signature algorithms.
+     * The list can contain digest algorithms (SHA256, MD5 etc.),
+     * public key algorithms (RSA-PSS, ECDSA etc.), combination of both (e.g 'RSA+SHA384')
+     * or TLS v1.3 scheme names (e.g. rsa_pss_pss_sha512).
+     *
+     * Corresponds to [SSL_CTX_set1_sigalgs](https://docs.openssl.org/master/man3/SSL_CTX_set1_sigalgs/)
+     * @type {string?}
+     */
+    sigalgs;
+
+    /**
+     * Cipher suite specification, replacing the default.
+     * For more information, see modifying the default cipher suite.
+     * Permitted ciphers can be obtained via tls.getCiphers().
+     * Cipher names must be uppercased in order for OpenSSL to accept them.
+     *
+     * Corresponds to [SSL_set_ciphersuites](https://docs.openssl.org/master/man3/SSL_CTX_set_cipher_list/) for ciphers with `TLS_` prefix [SSL_CTX_set_cipher_list](https://docs.openssl.org/master/man3/SSL_CTX_set_cipher_list/) for remaining ciphers.
+     * @type {string?}
+     */
+    ciphers;
+
+    /**
+     * A string describing a named curve or a colon separated list of curve
+     * NIDs or names, for example P-521:P-384:P-256, to use for ECDH key
+     * agreement. Set to auto to select the curve automatically. Use
+     * crypto.getCurves() to obtain a list of available curve names. On
+     * recent releases, openssl ecparam -list_curves will also display the
+     * name and description of each available elliptic curve. Default:
+     * tls.DEFAULT_ECDH_CURVE.
+     *
+     * corresponds to [SSL_CTX_set1_curves](https://docs.openssl.org/master/man3/SSL_CTX_set1_curves/)
+     * @type {string?}
+     */
+    ecdhCurve;
+
+    /**
+     * Attempt to use the server's cipher suite preferences instead of the client's.
+     * When true, causes SSL_OP_CIPHER_SERVER_PREFERENCE to be set in secureOptions.
+     * @type {boolean?}
+     */
+    honorCipherOrder;
+
+    /**
+     * Private keys in PEM format. PEM allows the option of private keys being encrypted.
+     * Encrypted keys will be decrypted with options.passphrase.
+     *
+     * Only a single cert chain, and as a result a single private key
+     * is currently supported by the driver.
+     *
+     * Corresponds to [SSL_CTX_use_PrivateKey](https://docs.openssl.org/master/man3/SSL_CTX_use_PrivateKey/)
+     * @type {(string | Buffer)?}
+     */
+    key;
+
+    /**
+     * Optionally set the maximum TLS version to allow. One
+     * of `'TLSv1.3'`, `'TLSv1.2'`, `'TLSv1.1'`, or `'TLSv1'`.
+     *
+     * **Default:** `'TLSv1.3'`
+     *
+     * **Warning:** In Node.js it was possible to modify default values using CLI options.
+     * This is not possible here.
+     * @type {('TLSv1.3' | 'TLSv1.2' | 'TLSv1.1' | 'TLSv1')?}
+     */
+    maxVersion;
+
+    /**
+     * Optionally set the minimum TLS version to allow. One
+     * of `'TLSv1.3'`, `'TLSv1.2'`, `'TLSv1.1'`, or `'TLSv1'`. It is not recommended to use
+     * less than TLSv1.2, but it may be required for interoperability.
+     *
+     * **Default:** `'TLSv1.2'`
+     *
+     * **Warning:** In Node.js it was possible to modify default values using CLI options.
+     * @type {('TLSv1.3' | 'TLSv1.2' | 'TLSv1.1' | 'TLSv1')?}
+     */
+    minVersion;
+
+    /**
+     * Shared passphrase used for a single private key and/or a PFX.
+     * @type {string?}
+     */
+    passphrase;
+
+    /**
+     * PFX or PKCS12 encoded private key and certificate chain.
+     * pfx is an alternative to providing key and cert individually.
+     * PFX is usually encrypted, if it is, passphrase will be used to decrypt it.
+     *
+     * Only a single cert chain is currently supported by the driver.
+     *
+     * This is equivalent to setting both `cert` and `key` fields
+     * @type {(string | Buffer)?}
+     */
+    pfx;
+
+    /**
+     * Optionally affect the OpenSSL protocol behavior, which is not usually necessary.
+     *
+     * **This should be used carefully if at all!**
+     *
+     * Value is a numeric bitmask of the SSL_OP_* options from OpenSSL Options.
+     *
+     * Corresponds to the options parameter in [SSL_CTX_set_options](https://docs.openssl.org/master/man3/SSL_CTX_set_options/)
+     * @type {number?}
+     */
+    secureOptions;
+
+    /**
+     * If true the server will reject any connection which is not authorized
+     * with the list of supplied CAs. This option only has an effect if requestCert is true.
+     *
+     * Corresponds to [SSL_CTX_set_verify](https://docs.openssl.org/master/man3/SSL_CTX_set_verify/)
+     * @type {boolean?}
+     * @default true
+     */
+    rejectUnauthorized;
+}
 
 /** Core connections per host for protocol versions 1 and 2 */
 const coreConnectionsPerHostV2 = {
@@ -635,6 +794,121 @@ function validateMonitorReporting(options) {
 }
 
 /**
+ * Normalizes a key that can be either a string or a buffer into a string.
+ * @param {string | Buffer} value
+ * @param {string} name Name of the option being normalized, used for error messages
+ * @returns {string}
+ */
+function normalizeKey(value, name) {
+    if (typeof value === "string") {
+        return value;
+    }
+    if (Buffer.isBuffer(value)) {
+        return value.toString("binary");
+    }
+    throw new TypeError(
+        `Unexpected type for ${name}. Expected to be string or buffer, got ${typeof value}`,
+    );
+}
+
+/**
+ * According to the TS type definition, SecureVersion (the value we are handling here),
+ * can be one of the following:
+ * type SecureVersion = "TLSv1.3" | "TLSv1.2" | "TLSv1.1" | "TLSv1";
+ * @param {'TLSv1.3' | 'TLSv1.2' | 'TLSv1.1' | 'TLSv1'} value
+ * @returns {rust.TlsVersion}
+ */
+function convertTlsVersion(value) {
+    if (typeof value !== "string") {
+        throw new TypeError("TLS version must be a string");
+    }
+    switch (value.toUpperCase()) {
+        case "TLSV1":
+            return rust.TlsVersion.Tlsv1;
+        case "TLSV1.1":
+            return rust.TlsVersion.Tlsv1_1;
+        case "TLSV1.2":
+            return rust.TlsVersion.Tlsv1_2;
+        case "TLSV1.3":
+            return rust.TlsVersion.Tlsv1_3;
+        default:
+            throw new TypeError(
+                `Invalid TLS version: ${value}. Expected one of: TLSv1, TLSv1.1, TLSv1.2, TLSv1.3.`,
+            );
+    }
+}
+
+/**
+ * Normalizes SSL options to be passed to the Rust layer.
+ * The SslOptions class can have values as multiple types,
+ * while the Rust code expects a specific format.
+ * We could do this at the napi layer by trying all accepted types
+ * until we successfully convert it, but we can also convert it here.
+ * @param {SslOptions} sslOptions
+ */
+function normalizeSslOptions(sslOptions) {
+    if (!sslOptions) {
+        return sslOptions;
+    }
+
+    const normalized = { ...sslOptions };
+
+    if (normalized.ca) {
+        const caList = Array.isArray(normalized.ca)
+            ? normalized.ca
+            : [normalized.ca];
+        normalized.ca = caList.map((entry) => normalizeKey(entry, "ca"));
+    }
+
+    if (normalized.cert) {
+        normalized.cert = normalizeKey(normalized.cert, "cert");
+    }
+
+    if (normalized.dhparam) {
+        normalized.dhparam = normalizeKey(normalized.dhparam, "dhparam");
+    }
+
+    if (normalized.key) {
+        normalized.key = normalizeKey(normalized.key, "key");
+    }
+
+    if (normalized.pfx) {
+        normalized.pfx = normalizeKey(normalized.pfx, "pfx");
+    }
+
+    if (normalized.minVersion) {
+        normalized.minVersion = convertTlsVersion(normalized.minVersion);
+    }
+
+    if (normalized.maxVersion) {
+        normalized.maxVersion = convertTlsVersion(normalized.maxVersion);
+    }
+
+    if (normalized.secureOptions) {
+        normalized.secureOptions = BigInt(normalized.secureOptions);
+    }
+
+    // The options require that the number of keys and certs match
+    // While we only support a single cert and key for now, we need check for situations
+    // where only one of them is provided.
+    // We double negate the values, to convert them to booleans
+    if (!!normalized.cert ^ !!normalized.key) {
+        throw new errors.ArgumentError(
+            "Both cert and key must be provided together in sslOptions.",
+        );
+    }
+
+    // We can check only with cert, as we ensure cert is provided when and only when the key is provided.
+    if (!!normalized.pfx &amp;&amp; !!normalized.cert) {
+        throw new errors.ArgumentError(
+            "Only one of (pfx) or (cert with key) must be provided in sslOptions.",
+        );
+    }
+
+    return normalized;
+}
+
+/**
  * Sets the default options that depend on the protocol version and other metadata.
  * @param {Client} client
  */
@@ -725,7 +999,7 @@ function setRustOptions(options) {
     }
 
     if (options.sslOptions) {
-        rustOptions.sslOptions = options.sslOptions;
+        rustOptions.sslOptions = normalizeSslOptions(options.sslOptions);
     }
     return rustOptions;
 }
@@ -741,6 +1015,7 @@ exports.setMetadataDependent = setMetadataDependent;
 exports.continuousPageUnitBytes = continuousPageUnitBytes;
 exports.continuousPageDefaultSize = continuousPageDefaultSize;
 exports.continuousPageDefaultHighWaterMark = continuousPageDefaultHighWaterMark;
+exports.SslOptions = SslOptions;
 </code></pre>
         </article>
     </section>
@@ -751,13 +1026,13 @@ exports.continuousPageDefaultHighWaterMark = continuousPageDefaultHighWaterMark;
 </div>
 
 <nav>
-    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-auth.html">auth</a></li><li><a href="module-concurrent.html">concurrent</a></li><li><a href="module-datastax.html">datastax</a></li><li><a href="module-errors.html">errors</a></li><li><a href="module-geometry.html">geometry</a></li><li><a href="module-mapping.html">mapping</a></li><li><a href="module-metadata.html">metadata</a></li><li><a href="module-metrics.html">metrics</a></li><li><a href="module-policies.html">policies</a></li><li><a href="module-policies_addressResolution.html">policies/addressResolution</a></li><li><a href="module-policies_loadBalancing.html">policies/loadBalancing</a></li><li><a href="module-policies_reconnection.html">policies/reconnection</a></li><li><a href="module-policies_retry.html">policies/retry</a></li><li><a href="module-policies_speculativeExecution.html">policies/speculativeExecution</a></li><li><a href="module-policies_timestampGeneration.html">policies/timestampGeneration</a></li><li><a href="module-tracker.html">tracker</a></li><li><a href="module-types.html">types</a></li></ul><h3>Classes</h3><ul><li><a href="AddressResolver.html">AddressResolver</a></li><li><a href="ByteOrderedToken.html">ByteOrderedToken</a></li><li><a href="Client.html">Client</a></li><li><a href="Encoder.html">Encoder</a></li><li><a href="ExecutionOptions.html">ExecutionOptions</a></li><li><a href="ExecutionProfile.html">ExecutionProfile</a></li><li><a href="FrameReader.html">FrameReader</a></li><li><a href="HashSet.html">HashSet</a></li><li><a href="Host.html">Host</a></li><li><a href="HostMap.html">HostMap</a></li><li><a href="LineString.html">LineString</a></li><li><a href="Murmur3Token.html">Murmur3Token</a></li><li><a href="Point.html">Point</a></li><li><a href="Polygon.html">Polygon</a></li><li><a href="RandomToken.html">RandomToken</a></li><li><a href="Token.html">Token</a></li><li><a href="TokenRange.html">TokenRange</a></li><li><a href="module-auth-AuthProvider.html">AuthProvider</a></li><li><a href="module-auth-Authenticator.html">Authenticator</a></li><li><a href="module-auth-PlainTextAuthProvider.html">PlainTextAuthProvider</a></li><li><a href="module-errors-ArgumentError.html">ArgumentError</a></li><li><a href="module-errors-AuthenticationError.html">AuthenticationError</a></li><li><a href="module-errors-BusyConnectionError.html">BusyConnectionError</a></li><li><a href="module-errors-DriverInternalError.html">DriverInternalError</a></li><li><a href="module-errors-NoHostAvailableError.html">NoHostAvailableError</a></li><li><a href="module-errors-NotSupportedError.html">NotSupportedError</a></li><li><a href="module-errors-OperationTimedOutError.html">OperationTimedOutError</a></li><li><a href="module-errors-ResponseError.html">ResponseError</a></li><li><a href="module-mapping-DefaultTableMappings.html">DefaultTableMappings</a></li><li><a href="module-mapping-Mapper.html">Mapper</a></li><li><a href="module-mapping-ModelBatchItem.html">ModelBatchItem</a></li><li><a href="module-mapping-ModelMapper.html">ModelMapper</a></li><li><a href="module-mapping-Result.html">Result</a></li><li><a href="module-mapping-UnderscoreCqlToCamelCaseMappings.html">UnderscoreCqlToCamelCaseMappings</a></li><li><a href="module-metadata-Aggregate.html">Aggregate</a></li><li><a href="module-metadata-ClientState.html">ClientState</a></li><li><a href="module-metadata-DataCollection.html">DataCollection</a></li><li><a href="module-metadata-Index.html">Index</a></li><li><a href="module-metadata-MaterializedView.html">MaterializedView</a></li><li><a href="module-metadata-Metadata.html">Metadata</a></li><li><a href="module-metadata-SchemaFunction.html">SchemaFunction</a></li><li><a href="module-metadata-TableMetadata.html">TableMetadata</a></li><li><a href="module-metrics-DefaultMetrics.html">DefaultMetrics</a></li><li><a href="module-policies_addressResolution-AddressTranslator.html">AddressTranslator</a></li><li><a href="module-policies_addressResolution-EC2MultiRegionTranslator.html">EC2MultiRegionTranslator</a></li><li><a href="module-policies_loadBalancing-AllowListPolicy.html">AllowListPolicy</a></li><li><a href="module-policies_loadBalancing-DCAwareRoundRobinPolicy.html">DCAwareRoundRobinPolicy</a></li><li><a href="module-policies_loadBalancing-DefaultLoadBalancingPolicy.html">DefaultLoadBalancingPolicy</a></li><li><a href="module-policies_loadBalancing-LegacyDefaultLoadBalancingPolicy.html">LegacyDefaultLoadBalancingPolicy</a></li><li><a href="module-policies_loadBalancing-LoadBalancingConfig.html">LoadBalancingConfig</a></li><li><a href="module-policies_loadBalancing-LoadBalancingPolicy.html">LoadBalancingPolicy</a></li><li><a href="module-policies_loadBalancing-RoundRobinPolicy.html">RoundRobinPolicy</a></li><li><a href="module-policies_loadBalancing-TokenAwarePolicy.html">TokenAwarePolicy</a></li><li><a href="module-policies_reconnection-ConstantReconnectionPolicy.html">ConstantReconnectionPolicy</a></li><li><a href="module-policies_reconnection-ExponentialReconnectionPolicy.html">ExponentialReconnectionPolicy</a></li><li><a href="module-policies_reconnection-ReconnectionPolicy.html">ReconnectionPolicy</a></li><li><a href="module-policies_retry-FallthroughRetryPolicy.html">FallthroughRetryPolicy</a></li><li><a href="module-policies_retry-RetryPolicy.html">RetryPolicy</a></li><li><a href="module-policies_speculativeExecution-ConstantSpeculativeExecutionPolicy.html">ConstantSpeculativeExecutionPolicy</a></li><li><a href="module-policies_speculativeExecution-NoSpeculativeExecutionPolicy.html">NoSpeculativeExecutionPolicy</a></li><li><a href="module-policies_speculativeExecution-SpeculativeExecutionPolicy.html">SpeculativeExecutionPolicy</a></li><li><a href="module-policies_timestampGeneration-MonotonicTimestampGenerator.html">MonotonicTimestampGenerator</a></li><li><a href="module-policies_timestampGeneration-TimestampGenerator.html">TimestampGenerator</a></li><li><a href="module-tracker-RequestLogger.html">RequestLogger</a></li><li><a href="module-types-BigDecimal.html">BigDecimal</a></li><li><a href="module-types-Duration.html">Duration</a></li><li><a href="module-types-InetAddress.html">InetAddress</a></li><li><a href="module-types-Integer.html">Integer</a></li><li><a href="module-types-LocalDate.html">LocalDate</a></li><li><a href="module-types.html#~LocalTime">LocalTime</a></li><li><a href="module-types-Long.html">Long</a></li><li><a href="module-types-ResultSet.html">ResultSet</a></li><li><a href="module-types-ResultStream.html">ResultStream</a></li><li><a href="module-types-Row.html">Row</a></li><li><a href="module-types-TimeUuid.html">TimeUuid</a></li><li><a href="module-types-Tuple.html">Tuple</a></li><li><a href="module-types-Uuid.html">Uuid</a></li><li><a href="module-types-Vector.html">Vector</a></li></ul><h3>Interfaces</h3><ul><li><a href="module-mapping-TableMappings.html">TableMappings</a></li><li><a href="module-metrics-ClientMetrics.html">ClientMetrics</a></li><li><a href="module-tracker-RequestTracker.html">RequestTracker</a></li></ul><h3>Events</h3><ul><li><a href="Client.html#event:hostAdd">hostAdd</a></li><li><a href="Client.html#event:hostDown">hostDown</a></li><li><a href="Client.html#event:hostRemove">hostRemove</a></li><li><a href="Client.html#event:hostUp">hostUp</a></li></ul><h3>Global</h3><ul><li><a href="global.html#Integer">Integer</a></li><li><a href="global.html#VIntCoding">VIntCoding</a></li><li><a href="global.html#_parseUdtName">_parseUdtName</a></li><li><a href="global.html#adaptNamedParamsPrepared">adaptNamedParamsPrepared</a></li><li><a href="global.html#adaptNamedParamsWithHints">adaptNamedParamsWithHints</a></li><li><a href="global.html#allocBuffer">allocBuffer</a></li><li><a href="global.html#allocBufferFromArray">allocBufferFromArray</a></li><li><a href="global.html#allocBufferFromString">allocBufferFromString</a></li><li><a href="global.html#allocBufferUnsafe">allocBufferUnsafe</a></li><li><a href="global.html#arbitraryValueToBigInt">arbitraryValueToBigInt</a></li><li><a href="global.html#arrayIterator">arrayIterator</a></li><li><a href="global.html#bigintToLong">bigintToLong</a></li><li><a href="global.html#binarySearch">binarySearch</a></li><li><a href="global.html#callbackOnce">callbackOnce</a></li><li><a href="global.html#changedBehaviorWarning">changedBehaviorWarning</a></li><li><a href="global.html#convertComplexType">convertComplexType</a></li><li><a href="global.html#copyBuffer">copyBuffer</a></li><li><a href="global.html#coreConnectionsPerHostV2">coreConnectionsPerHostV2</a></li><li><a href="global.html#coreConnectionsPerHostV3">coreConnectionsPerHostV3</a></li><li><a href="global.html#decodeCustom">decodeCustom</a></li><li><a href="global.html#decodeVector">decodeVector</a></li><li><a href="global.html#deepExtend">deepExtend</a></li><li><a href="global.html#defaultOptions">defaultOptions</a></li><li><a href="global.html#defaultPromiseFactory">defaultPromiseFactory</a></li><li><a href="global.html#delay">delay</a></li><li><a href="global.html#each">each</a></li><li><a href="global.html#eachSeries">eachSeries</a></li><li><a href="global.html#emptyArray">emptyArray</a></li><li><a href="global.html#emptyObject">emptyObject</a></li><li><a href="global.html#encodeCustom">encodeCustom</a></li><li><a href="global.html#encodeParams">encodeParams</a></li><li><a href="global.html#encodeTuple">encodeTuple</a></li><li><a href="global.html#encodeUdt">encodeUdt</a></li><li><a href="global.html#encodeVector">encodeVector</a></li><li><a href="global.html#ensure32SignedInteger">ensure32SignedInteger</a></li><li><a href="global.html#ensure64SignedInteger">ensure64SignedInteger</a></li><li><a href="global.html#extend">extend</a></li><li><a href="global.html#fixStack">fixStack</a></li><li><a href="global.html#forEachOf">forEachOf</a></li><li><a href="global.html#fromCallback">fromCallback</a></li><li><a href="global.html#fromEvent">fromEvent</a></li><li><a href="global.html#getCallback">getCallback</a></li><li><a href="global.html#getColumnsMetadata">getColumnsMetadata</a></li><li><a href="global.html#getRowsFromResultsWrapper">getRowsFromResultsWrapper</a></li><li><a href="global.html#ifUndefined">ifUndefined</a></li><li><a href="global.html#ifUndefined3">ifUndefined3</a></li><li><a href="global.html#insertSorted">insertSorted</a></li><li><a href="global.html#iteratorToArray">iteratorToArray</a></li><li><a href="global.html#log">log</a></li><li><a href="global.html#map">map</a></li><li><a href="global.html#mapSeries">mapSeries</a></li><li><a href="global.html#maxInt">maxInt</a></li><li><a href="global.html#maxRequestsPerConnectionV2">maxRequestsPerConnectionV2</a></li><li><a href="global.html#maxRequestsPerConnectionV3">maxRequestsPerConnectionV3</a></li><li><a href="global.html#napiErrorHandler">napiErrorHandler</a></li><li><a href="global.html#newQueryPlan">newQueryPlan</a></li><li><a href="global.html#objectValues">objectValues</a></li><li><a href="global.html#optionalCallback">optionalCallback</a></li><li><a href="global.html#parallel">parallel</a></li><li><a href="global.html#parseVectorTypeArgs">parseVectorTypeArgs</a></li><li><a href="global.html#promiseWrapper">promiseWrapper</a></li><li><a href="global.html#queryOptionsIntoWrapper">queryOptionsIntoWrapper</a></li><li><a href="global.html#serializationSizeIfFixed">serializationSizeIfFixed</a></li><li><a href="global.html#series">series</a></li><li><a href="global.html#setMetadataDependent">setMetadataDependent</a></li><li><a href="global.html#stringRepeat">stringRepeat</a></li><li><a href="global.html#throwNotSupported">throwNotSupported</a></li><li><a href="global.html#times">times</a></li><li><a href="global.html#timesLimit">timesLimit</a></li><li><a href="global.html#timesSeries">timesSeries</a></li><li><a href="global.html#toBackground">toBackground</a></li><li><a href="global.html#toCallback">toCallback</a></li><li><a href="global.html#toLowerCaseProperties">toLowerCaseProperties</a></li><li><a href="global.html#totalLength">totalLength</a></li><li><a href="global.html#validateFn">validateFn</a></li><li><a href="global.html#whilst">whilst</a></li></ul>
+    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-auth.html">auth</a></li><li><a href="module-concurrent.html">concurrent</a></li><li><a href="module-datastax.html">datastax</a></li><li><a href="module-errors.html">errors</a></li><li><a href="module-geometry.html">geometry</a></li><li><a href="module-mapping.html">mapping</a></li><li><a href="module-metadata.html">metadata</a></li><li><a href="module-metrics.html">metrics</a></li><li><a href="module-policies.html">policies</a></li><li><a href="module-policies_addressResolution.html">policies/addressResolution</a></li><li><a href="module-policies_loadBalancing.html">policies/loadBalancing</a></li><li><a href="module-policies_reconnection.html">policies/reconnection</a></li><li><a href="module-policies_retry.html">policies/retry</a></li><li><a href="module-policies_speculativeExecution.html">policies/speculativeExecution</a></li><li><a href="module-policies_timestampGeneration.html">policies/timestampGeneration</a></li><li><a href="module-tracker.html">tracker</a></li><li><a href="module-types.html">types</a></li></ul><h3>Classes</h3><ul><li><a href="AddressResolver.html">AddressResolver</a></li><li><a href="ByteOrderedToken.html">ByteOrderedToken</a></li><li><a href="Client.html">Client</a></li><li><a href="Encoder.html">Encoder</a></li><li><a href="ExecutionOptions.html">ExecutionOptions</a></li><li><a href="ExecutionProfile.html">ExecutionProfile</a></li><li><a href="FrameReader.html">FrameReader</a></li><li><a href="HashSet.html">HashSet</a></li><li><a href="Host.html">Host</a></li><li><a href="HostMap.html">HostMap</a></li><li><a href="LineString.html">LineString</a></li><li><a href="Murmur3Token.html">Murmur3Token</a></li><li><a href="Point.html">Point</a></li><li><a href="Polygon.html">Polygon</a></li><li><a href="RandomToken.html">RandomToken</a></li><li><a href="SslOptions.html">SslOptions</a></li><li><a href="Token.html">Token</a></li><li><a href="TokenRange.html">TokenRange</a></li><li><a href="module-auth-AuthProvider.html">AuthProvider</a></li><li><a href="module-auth-Authenticator.html">Authenticator</a></li><li><a href="module-auth-PlainTextAuthProvider.html">PlainTextAuthProvider</a></li><li><a href="module-errors-ArgumentError.html">ArgumentError</a></li><li><a href="module-errors-AuthenticationError.html">AuthenticationError</a></li><li><a href="module-errors-BusyConnectionError.html">BusyConnectionError</a></li><li><a href="module-errors-DriverInternalError.html">DriverInternalError</a></li><li><a href="module-errors-NoHostAvailableError.html">NoHostAvailableError</a></li><li><a href="module-errors-NotSupportedError.html">NotSupportedError</a></li><li><a href="module-errors-OperationTimedOutError.html">OperationTimedOutError</a></li><li><a href="module-errors-ResponseError.html">ResponseError</a></li><li><a href="module-mapping-DefaultTableMappings.html">DefaultTableMappings</a></li><li><a href="module-mapping-Mapper.html">Mapper</a></li><li><a href="module-mapping-ModelBatchItem.html">ModelBatchItem</a></li><li><a href="module-mapping-ModelMapper.html">ModelMapper</a></li><li><a href="module-mapping-Result.html">Result</a></li><li><a href="module-mapping-UnderscoreCqlToCamelCaseMappings.html">UnderscoreCqlToCamelCaseMappings</a></li><li><a href="module-metadata-Aggregate.html">Aggregate</a></li><li><a href="module-metadata-ClientState.html">ClientState</a></li><li><a href="module-metadata-DataCollection.html">DataCollection</a></li><li><a href="module-metadata-Index.html">Index</a></li><li><a href="module-metadata-MaterializedView.html">MaterializedView</a></li><li><a href="module-metadata-Metadata.html">Metadata</a></li><li><a href="module-metadata-SchemaFunction.html">SchemaFunction</a></li><li><a href="module-metadata-TableMetadata.html">TableMetadata</a></li><li><a href="module-metrics-DefaultMetrics.html">DefaultMetrics</a></li><li><a href="module-policies_addressResolution-AddressTranslator.html">AddressTranslator</a></li><li><a href="module-policies_addressResolution-EC2MultiRegionTranslator.html">EC2MultiRegionTranslator</a></li><li><a href="module-policies_loadBalancing-AllowListPolicy.html">AllowListPolicy</a></li><li><a href="module-policies_loadBalancing-DCAwareRoundRobinPolicy.html">DCAwareRoundRobinPolicy</a></li><li><a href="module-policies_loadBalancing-DefaultLoadBalancingPolicy.html">DefaultLoadBalancingPolicy</a></li><li><a href="module-policies_loadBalancing-LegacyDefaultLoadBalancingPolicy.html">LegacyDefaultLoadBalancingPolicy</a></li><li><a href="module-policies_loadBalancing-LoadBalancingConfig.html">LoadBalancingConfig</a></li><li><a href="module-policies_loadBalancing-LoadBalancingPolicy.html">LoadBalancingPolicy</a></li><li><a href="module-policies_loadBalancing-RoundRobinPolicy.html">RoundRobinPolicy</a></li><li><a href="module-policies_loadBalancing-TokenAwarePolicy.html">TokenAwarePolicy</a></li><li><a href="module-policies_reconnection-ConstantReconnectionPolicy.html">ConstantReconnectionPolicy</a></li><li><a href="module-policies_reconnection-ExponentialReconnectionPolicy.html">ExponentialReconnectionPolicy</a></li><li><a href="module-policies_reconnection-ReconnectionPolicy.html">ReconnectionPolicy</a></li><li><a href="module-policies_retry-FallthroughRetryPolicy.html">FallthroughRetryPolicy</a></li><li><a href="module-policies_retry-RetryPolicy.html">RetryPolicy</a></li><li><a href="module-policies_speculativeExecution-ConstantSpeculativeExecutionPolicy.html">ConstantSpeculativeExecutionPolicy</a></li><li><a href="module-policies_speculativeExecution-NoSpeculativeExecutionPolicy.html">NoSpeculativeExecutionPolicy</a></li><li><a href="module-policies_speculativeExecution-SpeculativeExecutionPolicy.html">SpeculativeExecutionPolicy</a></li><li><a href="module-policies_timestampGeneration-MonotonicTimestampGenerator.html">MonotonicTimestampGenerator</a></li><li><a href="module-policies_timestampGeneration-TimestampGenerator.html">TimestampGenerator</a></li><li><a href="module-tracker-RequestLogger.html">RequestLogger</a></li><li><a href="module-types-BigDecimal.html">BigDecimal</a></li><li><a href="module-types-Duration.html">Duration</a></li><li><a href="module-types-InetAddress.html">InetAddress</a></li><li><a href="module-types-Integer.html">Integer</a></li><li><a href="module-types-LocalDate.html">LocalDate</a></li><li><a href="module-types.html#~LocalTime">LocalTime</a></li><li><a href="module-types-Long.html">Long</a></li><li><a href="module-types-ResultSet.html">ResultSet</a></li><li><a href="module-types-ResultStream.html">ResultStream</a></li><li><a href="module-types-Row.html">Row</a></li><li><a href="module-types-TimeUuid.html">TimeUuid</a></li><li><a href="module-types-Tuple.html">Tuple</a></li><li><a href="module-types-Uuid.html">Uuid</a></li><li><a href="module-types-Vector.html">Vector</a></li></ul><h3>Interfaces</h3><ul><li><a href="module-mapping-TableMappings.html">TableMappings</a></li><li><a href="module-metrics-ClientMetrics.html">ClientMetrics</a></li><li><a href="module-tracker-RequestTracker.html">RequestTracker</a></li></ul><h3>Events</h3><ul><li><a href="Client.html#event:hostAdd">hostAdd</a></li><li><a href="Client.html#event:hostDown">hostDown</a></li><li><a href="Client.html#event:hostRemove">hostRemove</a></li><li><a href="Client.html#event:hostUp">hostUp</a></li></ul><h3>Global</h3><ul><li><a href="global.html#Integer">Integer</a></li><li><a href="global.html#VIntCoding">VIntCoding</a></li><li><a href="global.html#_parseUdtName">_parseUdtName</a></li><li><a href="global.html#adaptNamedParamsPrepared">adaptNamedParamsPrepared</a></li><li><a href="global.html#adaptNamedParamsWithHints">adaptNamedParamsWithHints</a></li><li><a href="global.html#allocBuffer">allocBuffer</a></li><li><a href="global.html#allocBufferFromArray">allocBufferFromArray</a></li><li><a href="global.html#allocBufferFromString">allocBufferFromString</a></li><li><a href="global.html#allocBufferUnsafe">allocBufferUnsafe</a></li><li><a href="global.html#arbitraryValueToBigInt">arbitraryValueToBigInt</a></li><li><a href="global.html#arrayIterator">arrayIterator</a></li><li><a href="global.html#bigintToLong">bigintToLong</a></li><li><a href="global.html#binarySearch">binarySearch</a></li><li><a href="global.html#callbackOnce">callbackOnce</a></li><li><a href="global.html#changedBehaviorWarning">changedBehaviorWarning</a></li><li><a href="global.html#convertComplexType">convertComplexType</a></li><li><a href="global.html#convertTlsVersion">convertTlsVersion</a></li><li><a href="global.html#copyBuffer">copyBuffer</a></li><li><a href="global.html#coreConnectionsPerHostV2">coreConnectionsPerHostV2</a></li><li><a href="global.html#coreConnectionsPerHostV3">coreConnectionsPerHostV3</a></li><li><a href="global.html#decodeCustom">decodeCustom</a></li><li><a href="global.html#decodeVector">decodeVector</a></li><li><a href="global.html#deepExtend">deepExtend</a></li><li><a href="global.html#defaultOptions">defaultOptions</a></li><li><a href="global.html#defaultPromiseFactory">defaultPromiseFactory</a></li><li><a href="global.html#delay">delay</a></li><li><a href="global.html#each">each</a></li><li><a href="global.html#eachSeries">eachSeries</a></li><li><a href="global.html#emptyArray">emptyArray</a></li><li><a href="global.html#emptyObject">emptyObject</a></li><li><a href="global.html#encodeCustom">encodeCustom</a></li><li><a href="global.html#encodeParams">encodeParams</a></li><li><a href="global.html#encodeTuple">encodeTuple</a></li><li><a href="global.html#encodeUdt">encodeUdt</a></li><li><a href="global.html#encodeVector">encodeVector</a></li><li><a href="global.html#ensure32SignedInteger">ensure32SignedInteger</a></li><li><a href="global.html#ensure64SignedInteger">ensure64SignedInteger</a></li><li><a href="global.html#extend">extend</a></li><li><a href="global.html#fixStack">fixStack</a></li><li><a href="global.html#forEachOf">forEachOf</a></li><li><a href="global.html#fromCallback">fromCallback</a></li><li><a href="global.html#fromEvent">fromEvent</a></li><li><a href="global.html#getCallback">getCallback</a></li><li><a href="global.html#getColumnsMetadata">getColumnsMetadata</a></li><li><a href="global.html#getRowsFromResultsWrapper">getRowsFromResultsWrapper</a></li><li><a href="global.html#ifUndefined">ifUndefined</a></li><li><a href="global.html#ifUndefined3">ifUndefined3</a></li><li><a href="global.html#insertSorted">insertSorted</a></li><li><a href="global.html#iteratorToArray">iteratorToArray</a></li><li><a href="global.html#log">log</a></li><li><a href="global.html#map">map</a></li><li><a href="global.html#mapSeries">mapSeries</a></li><li><a href="global.html#maxInt">maxInt</a></li><li><a href="global.html#maxRequestsPerConnectionV2">maxRequestsPerConnectionV2</a></li><li><a href="global.html#maxRequestsPerConnectionV3">maxRequestsPerConnectionV3</a></li><li><a href="global.html#napiErrorHandler">napiErrorHandler</a></li><li><a href="global.html#newQueryPlan">newQueryPlan</a></li><li><a href="global.html#normalizeKey">normalizeKey</a></li><li><a href="global.html#normalizeSslOptions">normalizeSslOptions</a></li><li><a href="global.html#objectValues">objectValues</a></li><li><a href="global.html#optionalCallback">optionalCallback</a></li><li><a href="global.html#parallel">parallel</a></li><li><a href="global.html#parseVectorTypeArgs">parseVectorTypeArgs</a></li><li><a href="global.html#promiseWrapper">promiseWrapper</a></li><li><a href="global.html#queryOptionsIntoWrapper">queryOptionsIntoWrapper</a></li><li><a href="global.html#serializationSizeIfFixed">serializationSizeIfFixed</a></li><li><a href="global.html#series">series</a></li><li><a href="global.html#setMetadataDependent">setMetadataDependent</a></li><li><a href="global.html#stringRepeat">stringRepeat</a></li><li><a href="global.html#throwNotSupported">throwNotSupported</a></li><li><a href="global.html#times">times</a></li><li><a href="global.html#timesLimit">timesLimit</a></li><li><a href="global.html#timesSeries">timesSeries</a></li><li><a href="global.html#toBackground">toBackground</a></li><li><a href="global.html#toCallback">toCallback</a></li><li><a href="global.html#toLowerCaseProperties">toLowerCaseProperties</a></li><li><a href="global.html#totalLength">totalLength</a></li><li><a href="global.html#validateFn">validateFn</a></li><li><a href="global.html#whilst">whilst</a></li></ul>
 </nav>
 
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Mon Feb 23 2026 05:24:13 GMT+0000 (Coordinated Universal Time)
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Mon Feb 23 2026 06:08:43 GMT+0000 (Coordinated Universal Time)
 </footer>
 
 <script> prettyPrint(); </script>
