@@ -89,7 +89,7 @@ means that your batch is no longer atomic.
 | Load balancing       | advanced if prepared, else primitive                  | advanced if prepared **and ALL** statements in the batch target the same partition, else primitive                                                                                  |
 | Suitable operations  | most operations                                       | - a list of operations that need to be executed atomically (batch LightWeight Transaction)</br> - a batch of operations targeting the same partition (as an advanced optimisation)  |
 
-### Paged vs Unpaged queries
+### [Paged](./paging.md) vs Unpaged queries
 
 > ***GOOD TO KNOW***\
 > SELECT statements return a result set, possibly a large one. Therefore, paging is available to fetch it in chunks, relieving load on the cluster and lowering latency.\
@@ -105,6 +105,8 @@ means that your batch is no longer atomic.
 | Memory footprint      | potentially big - all results have to be stored at once                                                                 | small - at most constant number of pages are stored by the driver at the same time                                                                             |
 | Latency               | potentially big - all results have to be generated at once                                                              | small - at most one chunk of data must be generated at once, so latency of each chunk is small                                                                 |
 | Suitable operations   | - in general: operations with empty result set (non-SELECTs)</br> - as possible optimisation: SELECTs with LIMIT clause | - in general: all SELECTs                                                                                                                                      |
+
+For more detailed comparison and more best practices, see doc page about [paging](./paging.md).
 
 ## CQL statements - operations (based on what the CQL string contains)
 
