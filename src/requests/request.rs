@@ -18,23 +18,23 @@ pub(crate) struct PreparedStatementWrapper {
 // retry?, policies.retry.RetryPolicy;
 // routingKey?, Buffer | Buffer[];
 define_js_to_rust_convertible_object!(
-    QueryOptionsObj{
-        auto_page, autoPage: bool,
-        capture_stack_trace, captureStackTrace: bool,
-        consistency, consistency: u16,
-        counter, counter: bool,
-        fetch_size, fetchSize: i32,
-        is_idempotent, isIdempotent: bool,
-        keyspace, keyspace: String,
-        logged, logged: bool,
-        prepare, prepare: bool,
-        read_timeout, readTimeout: i32,
-        routing_indexes, routingIndexes: Vec<i32>,
-        routing_names, routingNames: Vec<String>,
-        serial_consistency, serialConsistency: i16,
-        timestamp, timestamp: BigInt,
-        trace_query, traceQuery: bool,
-    }
+struct QueryOptionsObj{
+    auto_page, autoPage: bool,
+    capture_stack_trace, captureStackTrace: bool,
+    consistency, consistency: u16,
+    counter, counter: bool,
+    fetch_size, fetchSize: i32,
+    is_idempotent, isIdempotent: bool,
+    keyspace, keyspace: String,
+    logged, logged: bool,
+    prepare, prepare: bool,
+    read_timeout, readTimeout: i32,
+    routing_indexes, routingIndexes: Vec<i32>,
+    routing_names, routingNames: Vec<String>,
+    serial_consistency, serialConsistency: i16,
+    timestamp, timestamp: BigInt,
+    trace_query, traceQuery: bool,
+}
 );
 
 #[napi]

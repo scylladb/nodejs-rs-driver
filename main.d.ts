@@ -240,7 +240,21 @@ export interface ClientOptions {
     readTimeout?: number;
     tcpNoDelay?: boolean;
   };
-  sslOptions?: tls.ConnectionOptions;
+  sslOptions?: SslOptions;
+}
+
+export interface SslOptions {
+  ca?: string | Buffer | Array<string | Buffer>;
+  cert?: string | Buffer;
+  sigalgs?: string;
+  ciphers?: string;
+  ecdhCurve?: string;
+  honorCipherOrder?: boolean;
+  key?: string | Buffer;
+  maxVersion?: tls.SecureVersion;
+  minVersion?: tls.SecureVersion;
+  secureOptions?: number;
+  rejectUnauthorized?: boolean;
 }
 
 export interface QueryOptions {

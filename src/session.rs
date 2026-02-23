@@ -1,6 +1,15 @@
+use std::fmt::Debug;
 use std::sync::Arc;
 
-use openssl::ssl::{SslContextBuilder, SslMethod, SslVerifyMode};
+use napi::bindgen_prelude::BigInt;
+use openssl::pkcs12::Pkcs12;
+use openssl::pkey::PKey;
+use openssl::ssl::{
+    SslContext, SslContextBuilder, SslMethod, SslOptions as OpenSslOptions, SslVerifyMode,
+    SslVersion,
+};
+use openssl::x509::X509;
+use openssl::x509::store::X509StoreBuilder;
 use scylla::client::SelfIdentity;
 use scylla::client::caching_session::CachingSession;
 use scylla::client::execution_profile::ExecutionProfileBuilder;
@@ -27,18 +36,40 @@ use crate::{requests::request::PreparedStatementWrapper, result::QueryResultWrap
 
 const DEFAULT_CACHE_SIZE: u32 = 512;
 
-// For now, ssl options include only rejectUnauthorized.
-// In practice, user can provide more options to configure
-// the ssl connection (see: ConnectionOptions typescript class)
-// This specific option is added, as it's used in the existing integration tests
+#[derive(Debug, PartialEq, Eq)]
+#[napi]
+pub enum TlsVersion {
+    Tlsv1,
+    Tlsv1_1,
+    Tlsv1_2,
+    Tlsv1_3,
+}
+
+// We assume here, that for the fields that allow multiple types on the JS side,
+// they will be converted to a type specified here, before passing to Rust side.
 #[rustfmt::skip] // fmt splits each field definition into multiple lines
-define_js_to_rust_convertible_object!(SslOptions {
+define_js_to_rust_convertible_object!(
+// We manually implement Debug to avoid accidentally leaking private key and passphrase in logs
+#[derive(PartialEq, Eq)]
+struct SslOptions {
+    ca, ca: Vec<String>,
+    cert, cert: String,
+    sigalgs, sigalgs: String,
+    ciphers, ciphers: String,
+    ecdh_curve, ecdhCurve: String,
+    honor_cipher_order, honorCipherOrder: bool,
+    key, key: String,
+    max_version, maxVersion: TlsVersion,
+    min_version, minVersion: TlsVersion,
+    passphrase, passphrase: String,
+    pfx, pfx: String,
+    secure_options, secureOptions: BigInt,
     reject_unauthorized, rejectUnauthorized: bool,
 });
 
 #[rustfmt::skip] // fmt splits each field definition into multiple lines
 define_js_to_rust_convertible_object!(
-LoadBalancingConfig {
+struct LoadBalancingConfig {
     prefer_datacenter, preferDatacenter: String,
     prefer_rack, preferRack: String,
     token_aware, tokenAware: bool,
@@ -55,7 +86,8 @@ pub enum RetryPolicyKind {
     Fallthrough,
 }
 
-define_js_to_rust_convertible_object!(SessionOptions {
+define_js_to_rust_convertible_object!(
+struct SessionOptions {
     connect_points, connectPoints: Vec<String>,
     keyspace, keyspace: String,
     application_name, applicationName: String,
@@ -87,6 +119,26 @@ pub struct QueryExecutor {
     params: Arc<Vec<EncodedValuesWrapper>>,
     statement: Arc<Statement>,
     is_prepared: bool,
+}
+
+impl Debug for SslOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SslOptions")
+            .field("ca", &self.ca)
+            .field("cert", &self.cert)
+            .field("sigalgs", &self.sigalgs)
+            .field("ciphers", &self.ciphers)
+            .field("ecdh_curve", &self.ecdh_curve)
+            .field("honor_cipher_order", &self.honor_cipher_order)
+            .field("key", &"[key elided]")
+            .field("max_version", &self.max_version)
+            .field("min_version", &self.min_version)
+            .field("passphrase", &"[passphrase elided]")
+            .field("pfx", &"[pfx elided]")
+            .field("secure_options", &self.secure_options)
+            .field("reject_unauthorized", &self.reject_unauthorized)
+            .finish()
+    }
 }
 
 impl QueryExecutor {
@@ -349,6 +401,158 @@ impl SessionWrapper {
     }
 }
 
+fn tls_version_to_ssl_version(version: &TlsVersion) -> SslVersion {
+    match version {
+        TlsVersion::Tlsv1 => SslVersion::TLS1,
+        TlsVersion::Tlsv1_1 => SslVersion::TLS1_1,
+        TlsVersion::Tlsv1_2 => SslVersion::TLS1_2,
+        TlsVersion::Tlsv1_3 => SslVersion::TLS1_3,
+    }
+}
+
+fn configure_ssl(options: &SslOptions) -> ConvertedResult<Option<SslContext>> {
+    let mut ssl_context_builder = SslContextBuilder::new(SslMethod::tls())?;
+
+    ssl_context_builder.set_verify(match options.reject_unauthorized {
+        Some(false) => SslVerifyMode::NONE,
+        Some(true) | None => SslVerifyMode::PEER,
+    });
+
+    if let Some(ciphers) = &options.ciphers {
+        // JS configuration has a single list for cipher list and ciphersuites,
+        // while the rust api to openssl requires those to be set separately.
+        // Therefore we need to split the provided list of ciphers into two parts.
+        let mut cipher_list = vec![];
+        let mut ciphersuites = vec![];
+
+        for part in ciphers.split(':') {
+            // While the option descriptions mentions that it has to be uppercase,
+            // but the list of possible values comes from a function that returns lowercase.
+            // Let's be liberal here, and allow both kinds of values: https://nodejs.org/docs/latest-v24.x/api/tls.html#tlsgetciphers
+            let part = part.to_uppercase();
+            // valid cipersuite names start with "TLS_"
+            // while none of cipher string names start with that prefix (see: https://docs.openssl.org/master/man3/SSL_CTX_set_cipher_list/#description)
+            if part.starts_with("TLS_") {
+                ciphersuites.push(part);
+            } else {
+                // Even if this consists of multiple cipher string separated by commas or spaces,
+                // we still handle it as a single part, as OpenSSL will parse it correctly later
+                // This is valid as those separators are not valid in cipher suite names
+                cipher_list.push(part);
+            }
+        }
+        if !cipher_list.is_empty() {
+            let cipher_list_string = cipher_list.join(":");
+            ssl_context_builder.set_cipher_list(&cipher_list_string)?;
+        }
+        if !ciphersuites.is_empty() {
+            let ciphersuites_string = ciphersuites.join(":");
+            ssl_context_builder.set_ciphersuites(&ciphersuites_string)?;
+        }
+    }
+
+    if let Some(min_version) = &options.min_version {
+        let ssl_version = tls_version_to_ssl_version(min_version);
+        ssl_context_builder.set_min_proto_version(Some(ssl_version))?;
+    }
+
+    if let Some(max_version) = &options.max_version {
+        let ssl_version = tls_version_to_ssl_version(max_version);
+        ssl_context_builder.set_max_proto_version(Some(ssl_version))?;
+    }
+
+    if let Some(sigalgs) = &options.sigalgs {
+        ssl_context_builder.set_sigalgs_list(sigalgs)?;
+    }
+
+    if let Some(ecdh_curve) = &options.ecdh_curve {
+        ssl_context_builder.set_groups_list(ecdh_curve)?;
+    }
+
+    if let Some(secure_options) = &options.secure_options {
+        let (negative, flags, overflow) = secure_options.get_u64();
+        if negative || overflow {
+            return Err(ConvertedError::from(make_js_error(format!(
+                "secureOptions must be a non-negative integer within u64 range, got {:?}",
+                secure_options
+            ))));
+        }
+        ssl_context_builder.set_options(OpenSslOptions::from_bits_truncate(flags));
+    }
+
+    if let Some(true) = options.honor_cipher_order {
+        ssl_context_builder.set_options(OpenSslOptions::CIPHER_SERVER_PREFERENCE);
+    }
+
+    if let Some(ca_list) = &options.ca {
+        let mut store_builder = X509StoreBuilder::new()?;
+        for ca_pem in ca_list {
+            let ca = X509::from_pem(ca_pem.as_bytes())?;
+            store_builder.add_cert(ca)?;
+        }
+        ssl_context_builder.set_cert_store(store_builder.build());
+    }
+
+    match (&options.pfx, &options.cert, &options.key) {
+        (None, Some(cert_pem), Some(key_pem)) => {
+            let certs = X509::stack_from_pem(cert_pem.as_bytes())?;
+            let mut certs_iter = certs.into_iter();
+
+            if let Some(main_cert) = certs_iter.next() {
+                ssl_context_builder.set_certificate(&main_cert)?;
+            }
+            for chain_cert in certs_iter {
+                ssl_context_builder.add_extra_chain_cert(chain_cert)?;
+            }
+            let pkey = match PKey::private_key_from_pem(key_pem.as_bytes()) {
+                Ok(pkey) => pkey,
+                Err(_) if options.passphrase.is_some() => {
+                    // Key might be encrypted, try with passphrase
+                    let passphrase = options.passphrase.as_ref().unwrap();
+                    PKey::private_key_from_pem_passphrase(
+                        key_pem.as_bytes(),
+                        passphrase.as_bytes(),
+                    )?
+                }
+                Err(e) => return Err(e.into()),
+            };
+            ssl_context_builder.set_private_key(&pkey)?;
+        }
+        (Some(pfx_data), None, None) => {
+            let pfx_bytes = pfx_data.as_bytes();
+
+            // If the user didn't provide a passphrase, this can mean one of two things:
+            // 1. The PFX is not encrypted.
+            // 2. The user forgot to provide the passphrase.
+            // In the first case, we will successfully parse such PFX with "" passphrase.
+            // In the second case appropriate error will be returned from parse2 method.
+            let passphrase = options.passphrase.as_deref().unwrap_or("");
+            let pkcs12 = Pkcs12::from_der(pfx_bytes)?;
+            let parsed = pkcs12.parse2(passphrase)?;
+
+            if let Some(cert) = parsed.cert {
+                ssl_context_builder.set_certificate(&cert)?;
+            }
+            if let Some(pkey) = parsed.pkey {
+                ssl_context_builder.set_private_key(&pkey)?;
+            }
+
+            if let Some(ca_chain) = parsed.ca {
+                for ca_cert in ca_chain {
+                    ssl_context_builder.add_extra_chain_cert(ca_cert)?;
+                }
+            }
+        }
+        // No configuration is valid configuration
+        (None, None, None) => {}
+        _ => {
+            panic!("Invalid pfx / cert combination. Should be enforced on JS side.")
+        }
+    };
+
+    Ok(Some(ssl_context_builder.build()))
+}
+
 fn configure_session_builder(options: &SessionOptions) -> ConvertedResult<SessionBuilder> {
     let mut builder = SessionBuilder::new();
     builder = builder.custom_identity(self_identity(options));
@@ -372,14 +576,7 @@ fn configure_session_builder(options: &SessionOptions) -> ConvertedResult<Sessio
     }
 
     if let Some(ssl_options) = &options.ssl_options {
-        let mut ssl_context_builder = SslContextBuilder::new(SslMethod::tls())?;
-
-        ssl_context_builder.set_verify(match ssl_options.reject_unauthorized {
-            Some(false) => SslVerifyMode::NONE,
-            Some(true) | None => SslVerifyMode::PEER,
-        });
-
-        builder = builder.tls_context(Some(ssl_context_builder.build()));
+        builder = builder.tls_context(configure_ssl(ssl_options)?);
     }
 
     if let Some(allow_list) = options

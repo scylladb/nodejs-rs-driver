@@ -14,10 +14,10 @@
 /// Calling this macro in a following way:
 /// ```rust
 /// define_js_to_rust_convertible_object!(
-///     Example {
-///         some_field, someField: bool,
-///         other_field, otherField: i32
-///     }
+/// struct Example {
+///     some_field, someField: bool,
+///     other_field, otherField: i32
+/// }
 /// );
 /// ```
 ///
@@ -38,12 +38,19 @@
 /// ```rust
 /// Example {some_field: Some(false), other_field: None}
 /// ```
+///
+/// You can also manually define derives for the struct:
+/// ```rust
+/// define_js_to_rust_convertible_object!(
+/// #[derive(PartialEq, Eq)]
+/// struct SslOptions {
+/// ...
+/// }
+/// ```
+/// This can be useful, as the Debug, PartialEq, Eq are added by default.
 macro_rules! define_js_to_rust_convertible_object {
-    ($struct_name: ident{$($field_name:ident, $js_name:ident: $field_type:ty),*,}) => {
-        // The PartialEq and Eq are used only for testing purposes
-        // If at some point those traits become a problem, feel free to remove them
-        // Or update the macro to make them optional
-        #[derive(Debug, PartialEq, Eq)]
+    (#[derive($($derive:ident),*)]struct $struct_name: ident{$($field_name:ident, $js_name:ident: $field_type:ty),*,}) => {
+        #[derive($($derive),*)]
         pub struct $struct_name {
             $(
                 pub $field_name: Option<$field_type>,
@@ -68,6 +75,16 @@ macro_rules! define_js_to_rust_convertible_object {
         }
 
     };
+    (struct $struct_name: ident{$($field_name:ident, $js_name:ident: $field_type:ty),*,}) =>{
+        // The PartialEq and Eq are used only for testing purposes
+        // If at some point those traits become a problem, you can manually implement them.
+        define_js_to_rust_convertible_object!(
+            #[derive(Debug, PartialEq, Eq)]
+            struct $struct_name {
+                $($field_name, $js_name: $field_type),*,
+            }
+        );
+    }
 }
 
 pub(crate) use define_js_to_rust_convertible_object;
