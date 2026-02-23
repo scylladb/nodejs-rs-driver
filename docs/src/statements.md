@@ -73,7 +73,7 @@ Results of preparation are not cached between `client.batch` calls.
 Takeaway from the above: Do NOT use unprepared batches, unless all statements take no bind markers.
 :::
 
-### Single vs Batch
+### Single vs [Batch](./batch.md)
 
 The batch statement combines multiple data modification statements (`INSERT`, `UPDATE`, or `DELETE`)
 into a single logical operation that is sent to the server in a single request.
