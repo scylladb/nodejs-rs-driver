@@ -118,7 +118,7 @@ html_sidebars = {"**": ["side-nav.html"]}
 htmlhelp_basename = "ScyllaDBNodeJSDriverDoc"
 
 # URL which points to the root of the HTML documentation.
-html_baseurl = "https://nodejs-driver.docs.scylladb.com"
+html_baseurl = "https://nodejs-rs-driver.docs.scylladb.com"
 
 # Dictionary of values to pass into the template engine's context for all pages
 html_context = {"html_baseurl": html_baseurl}
