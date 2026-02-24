@@ -247,12 +247,14 @@ def _shift_headings(html, shift):
     return re.sub(r"<(/?)h([1-6])", _replace, html)
 
 
-def _rewrite_links(html, current_docname, jsdoc_dir):
+def _rewrite_links(html, current_docname, jsdoc_dir, use_dirhtml=True):
     """Rewrite JSDoc hrefs to cross-page Sphinx URLs.
 
     Links to JSDoc HTML files (e.g. ``module-auth-AuthProvider.html``)
     are rewritten to relative Sphinx page URLs based on the current
-    page's location in the dirhtml output.
+    page's location in the output.  When *use_dirhtml* is ``True``
+    (the default), links use trailing-slash style (``AuthProvider/``);
+    otherwise they use ``.html`` style (``AuthProvider.html``).
     """
     sphinx_map = _build_jsdoc_sphinx_map(jsdoc_dir)
 
@@ -262,7 +264,11 @@ def _rewrite_links(html, current_docname, jsdoc_dir):
             return docname[:-6]
         return docname
 
-    current_base = _docname_base(current_docname)
+    if use_dirhtml:
+        current_base = _docname_base(current_docname)
+    else:
+        # html builder: current page dir is the dirname of the docname
+        current_base = posixpath.dirname(current_docname)
 
     def _replace(m):
         href = m.group(1)
@@ -272,10 +278,15 @@ def _rewrite_links(html, current_docname, jsdoc_dir):
             return m.group(0)
 
         target_docname = sphinx_map[fname]
-        target_base = _docname_base(target_docname)
 
-        rel = posixpath.relpath(target_base, current_base)
-        url = rel + "/"
+        if use_dirhtml:
+            target_base = _docname_base(target_docname)
+            rel = posixpath.relpath(target_base, current_base)
+            url = rel + "/"
+        else:
+            # html builder: docname maps directly to docname.html
+            rel = posixpath.relpath(target_docname, current_base)
+            url = rel + ".html"
 
         if fragment:
             url += f"#{fragment}"
@@ -499,7 +510,8 @@ def _split_at_subsections(html):
 
 
 def extract_main_content(html_text, filename=None, current_docname=None,
-                         jsdoc_dir=None, github_source_url=None):
+                         jsdoc_dir=None, github_source_url=None,
+                         use_dirhtml=True):
     """Extract the ``<div id="main">…</div>`` from a JSDoc HTML page.
 
     Returns a dict with:
@@ -549,7 +561,8 @@ def extract_main_content(html_text, filename=None, current_docname=None,
     if shift:
         content = _shift_headings(content, shift)
     if current_docname and jsdoc_dir:
-        content = _rewrite_links(content, current_docname, jsdoc_dir)
+        content = _rewrite_links(content, current_docname, jsdoc_dir,
+                                use_dirhtml=use_dirhtml)
 
     return {
         "title": title,
@@ -559,7 +572,7 @@ def extract_main_content(html_text, filename=None, current_docname=None,
 
 
 def extract_events_content(html_text, current_docname=None, jsdoc_dir=None,
-                           github_source_url=None):
+                           github_source_url=None, use_dirhtml=True):
     """Extract the Events section from a JSDoc HTML page (e.g. Client.html)."""
     m = re.search(
         r'<h3 class="subsection-title">Events</h3>(.*?)(?=<h3 class="subsection-title"|</div>\s*<nav)',
@@ -582,7 +595,8 @@ def extract_events_content(html_text, current_docname=None, jsdoc_dir=None,
     content = _shift_headings(content, -2)
 
     if current_docname and jsdoc_dir:
-        content = _rewrite_links(content, current_docname, jsdoc_dir)
+        content = _rewrite_links(content, current_docname, jsdoc_dir,
+                                use_dirhtml=use_dirhtml)
 
     return content.strip()
 
@@ -607,6 +621,9 @@ class JsDocIncludeDirective(Directive):
         config = env.config
         jsdoc_dir = _resolve_jsdoc_dir(config, env)
         current_docname = env.docname
+
+        # Detect builder to generate correct link style
+        use_dirhtml = getattr(env.app.builder, "name", "dirhtml") == "dirhtml"
 
         # Build GitHub source URL from config
         github_source_url = None
@@ -656,6 +673,7 @@ class JsDocIncludeDirective(Directive):
                         current_docname=current_docname,
                         jsdoc_dir=jsdoc_dir,
                         github_source_url=github_source_url,
+                        use_dirhtml=use_dirhtml,
                     )
                     if body is None:
                         logger.warning(
@@ -675,6 +693,7 @@ class JsDocIncludeDirective(Directive):
                     current_docname=current_docname,
                     jsdoc_dir=jsdoc_dir,
                     github_source_url=github_source_url,
+                    use_dirhtml=use_dirhtml,
                 )
                 if info is None:
                     logger.warning(
