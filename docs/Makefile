@@ -38,6 +38,7 @@ pristine: clean
 .PHONY: clean
 clean:
 	rm -rf $(BUILDDIR)/*
+	rm -rf $(SOURCEDIR)/api
 
 # Generate output commands
 .PHONY: jsdoc

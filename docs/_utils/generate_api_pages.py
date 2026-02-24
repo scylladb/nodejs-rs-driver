@@ -27,6 +27,29 @@ JSDOC_DIR = DOCS_DIR.parent / "public" / "docs"
 API_DIR = DOCS_DIR / "source" / "api"
 CHECKSUM_FILE = API_DIR / ".jsdoc_nav_checksum"
 
+# Default values used when conf.py doesn't define them.
+_DEFAULT_API_INTRO = "API documentation."
+_DEFAULT_API_SECTIONS = [
+    ("modules", "Browse modules."),
+    ("classes", "Global classes."),
+    ("interfaces", "Interface definitions."),
+    ("events", "Events."),
+    ("globals", "Global functions and constants."),
+]
+
+
+def _load_conf():
+    """Load jsdoc_api_intro and jsdoc_api_sections from conf.py."""
+    conf_path = DOCS_DIR / "source" / "conf.py"
+    namespace = {}
+    try:
+        exec(compile(conf_path.read_text(encoding="utf-8"), conf_path, "exec"), namespace)
+    except Exception:
+        pass
+    intro = namespace.get("jsdoc_api_intro", _DEFAULT_API_INTRO)
+    sections = namespace.get("jsdoc_api_sections", _DEFAULT_API_SECTIONS)
+    return intro, sections
+
 # Hub pages that are always generated and should never be removed.
 HUB_FILES = {"index.rst", "modules.rst", "classes.rst", "interfaces.rst",
              "events.rst", "globals.rst"}
@@ -233,18 +256,19 @@ def generate(nav):
             changed += 1
 
     # --- Hub pages ---------------------------------------------------------
-    if write_if_changed(API_DIR / "index.rst", "\n".join([
-        rst_title("API Reference"),
-        ".. toctree::",
-        "   :hidden:",
-        "",
-        "   modules",
-        "   classes",
-        "   interfaces",
-        "   events",
-        "   globals",
-        "",
-    ]), written_paths):
+    api_intro, api_sections = _load_conf()
+    index_parts = [rst_title("API Reference"), api_intro, ""]
+    for doc_name, desc in api_sections:
+        index_parts.append(f"- :doc:`{doc_name}` -- {desc}")
+    index_parts.append("")
+    index_parts.append(".. toctree::")
+    index_parts.append("   :hidden:")
+    index_parts.append("")
+    for doc_name, _ in api_sections:
+        index_parts.append(f"   {doc_name}")
+    index_parts.append("")
+    if write_if_changed(API_DIR / "index.rst",
+                        "\n".join(index_parts), written_paths):
         changed += 1
 
     mod_entries = [f"   {mp}/index" for mp in sorted(top_modules)]

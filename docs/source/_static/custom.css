@@ -39,3 +39,27 @@
 .jsdoc-content h6 + ul {
     margin-left: 1.5em;
 }
+
+/* Override table within tables style */
+.jsdoc-content .table-wrapper .table-wrapper {
+    margin: 0;
+}
+
+.jsdoc-content .table-wrapper .table-wrapper tbody,
+.jsdoc-content .table-wrapper .table-wrapper tr {
+    border: 0;
+}
+
+/* JSDoc parameter tables — give description column more space */
+.jsdoc-content table.params {
+    table-layout: fixed;
+    width: 100%;
+}
+
+.jsdoc-content table.params th.last {
+    width: 50%;
+}
+
+.jsdoc-content table.params td {
+    overflow-wrap: break-word;
+}

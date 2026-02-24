@@ -56,6 +56,16 @@ jsdoc_github_repository = "scylladb/nodejs-rs-driver"
 jsdoc_source_path = "lib"
 jsdoc_default_branch = LATEST_VERSION
 
+# Intro text and sections displayed on the API Reference landing page.
+jsdoc_api_intro = "API documentation for the ScyllaDB Node.js Driver."
+jsdoc_api_sections = [
+    ("modules", "Browse modules."),
+    ("classes", "Global classes provided by the driver."),
+    ("interfaces", "Interface definitions."),
+    ("events", "Events emitted by the ``Client`` instance."),
+    ("globals", "Global functions and constants."),
+]
+
 # -- Options for myst parser ----------------------------------------
 myst_enable_extensions = ["colon_fence"]
 
