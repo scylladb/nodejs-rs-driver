@@ -13,42 +13,44 @@ permissions:
   contents: read
 
 jobs:
-  # For now we build only for linux x86_64
-  # We can later add more targets as a separate jobs on a different architectures
-  build-x86_64-unknown-linux-gnu:
+  build:
     strategy:
-      fail-fast: false
       matrix:
         settings:
           - host: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             build: npm run build -- --target x86_64-unknown-linux-gnu
-    name: build for release stable - ${{ matrix.settings.target }}
+            files: |
+              index.linux-x64-gnu.node
+              index.d.ts
+              index.js
+          - host: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            build: npm run build -- --target aarch64-unknown-linux-gnu
+            files: |
+              index.linux-arm64-gnu.node
+    name: Build for release stable - ${{ matrix.settings.target }}
     runs-on: ${{ matrix.settings.host }}
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/setup
         with:
           node-version: 24
-          host: ubuntu-latest
-          target: x86_64-unknown-linux-gnu
+          host: ${{ matrix.settings.host }}
+          target: ${{ matrix.settings.target }}
       - name: Install libraries for linking
-        run: sudo apt-get install -y libssl-dev 
-      - name: Build
+        run: sudo apt-get install -y libssl-dev
+      - name: Build ${{ matrix.settings.target }}
         run: ${{ matrix.settings.build }}
-        shell: bash
-      - name: Upload artifact
-        uses: actions/upload-artifact@v5
+      - name: Upload artifact - ${{ matrix.settings.target }}
+        uses: actions/upload-artifact@v6
         with:
-          name: bindings-x86_64-unknown-linux-gnu
-          path: |
-            index.linux-x64-gnu.node
-            index.d.ts
-            index.js
+          name: bindings-${{ matrix.settings.target }}
+          path: ${{ matrix.settings.files }}
           if-no-files-found: error
   test-x86_64-unknown-linux-gnu:
     needs:
-      - build-x86_64-unknown-linux-gnu
+      - build
     name: test built package - x86_64-unknown-linux-gnu
     runs-on: ubuntu-latest
     steps:
@@ -61,7 +63,6 @@ jobs:
         with:
           name: bindings-x86_64-unknown-linux-gnu
       - name: Install dependencies
-        shell: bash
         run: npm i
       - name: Install ccm
         # We need a copy of the repo for the ssl tests.
@@ -76,9 +77,46 @@ jobs:
           CCM_IS_SCYLLA: "true"
           CCM_PATH: "./scylla-ccm"
         run: npm run integration
+  # We test examples only on aarch64, as we cannot run integration test on this platform
+  test-aarch64-unknown-linux-gnu-examples:
+    needs:
+      - build
+    name: test examples - aarch64-unknown-linux-gnu - node@24
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - name: Install dependencies
+        run: npm i
+      - name: Download artifact
+        uses: actions/download-artifact@v6
+        with:
+          merge-multiple: true
+      - name: Setup 3-node Scylla cluster
+        run: |
+          sudo sh -c "echo 2097152 >> /proc/sys/fs/aio-max-nr"
+          docker compose -f .github/docker-compose.yml up -d --wait
+      - name: Install examples dependencies
+        run: |
+          cd examples
+          npm i
+      - name: Run all examples
+        run: SCYLLA_URI=172.42.0.2:9042 npm run examples
+      - name: Stop the cluster
+        if: ${{ always() }}
+        run: docker compose -f .github/docker-compose.yml stop
+      - name: Print the cluster logs
+        if: ${{ always() }}
+        run: docker compose -f .github/docker-compose.yml logs
+      - name: Remove cluster
+        if: ${{ always() }}
+        run: docker compose -f .github/docker-compose.yml down
   publish:
     needs:
       - test-x86_64-unknown-linux-gnu
+      - test-aarch64-unknown-linux-gnu-examples
     name: Publish
     runs-on: ubuntu-latest
     permissions:
@@ -92,7 +130,6 @@ jobs:
           registry-url: "https://registry.npmjs.org"
           cache: npm
       - name: Install dependencies
-        shell: bash
         run: npm i
       # This creates the directories for subpackage for specific platforms
       - name: create npm dirs
@@ -101,13 +138,13 @@ jobs:
         uses: actions/download-artifact@v6
         with:
           path: artifacts
+          merge-multiple: true
       # Copies the downloaded artifacts to proper places in the npm package directories
       - name: Move artifacts
         run: npm run artifacts
       # Not necessary for the release, but useful for debugging in case some binaries are missing
       - name: List packages
         run: ls -R ./npm
-        shell: bash
       - name: Copy index files
         run: cp ./artifacts/index.js ./artifacts/index.d.ts .
       # napi artifacts copies binaries both to specific platform directories and the main directory
