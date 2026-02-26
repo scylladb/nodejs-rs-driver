@@ -210,38 +210,6 @@ describe("types", function () {
             });
         });
     });
-    describe("uuid() backward-compatibility", function () {
-        it("should generate a random string uuid", function () {
-            const uuidRegex =
-                /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-            const val = types.uuid();
-            assert.strictEqual(typeof val, "string");
-            assert.strictEqual(val.length, 36);
-            assert.ok(uuidRegex.test(val));
-            assert.notEqual(val, types.uuid());
-        });
-        it("should fill in the values in a buffer", function () {
-            const buf = utils.allocBufferUnsafe(16);
-            const val = types.uuid(null, buf);
-            assert.strictEqual(val, buf);
-        });
-    });
-    describe("timeuuid() backward-compatibility", function () {
-        it("should generate a string uuid", function () {
-            const uuidRegex =
-                /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-            const val = types.timeuuid();
-            assert.strictEqual(typeof val, "string");
-            assert.strictEqual(val.length, 36);
-            assert.ok(uuidRegex.test(val));
-            assert.notEqual(val, types.timeuuid());
-        });
-        it("should fill in the values in a buffer", function () {
-            const buf = utils.allocBufferUnsafe(16);
-            const val = types.timeuuid(null, buf);
-            assert.strictEqual(val, buf);
-        });
-    });
     describe("generateTimestamp()", function () {
         it("should generate using date and microseconds parts", function () {
             let date = new Date();

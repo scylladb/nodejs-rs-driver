@@ -610,14 +610,14 @@ describe("Client @SERVER_API", function () {
                         "INSERT INTO %s (id, time, text_sample) VALUES (?, ?, ?)",
                         table1,
                     ),
-                    params: [id1, types.timeuuid(), "sample1"],
+                    params: [id1, types.TimeUuid.now(), "sample1"],
                 },
                 {
                     query: util.format(
                         "INSERT INTO %s (id, time, int_sample, varint_sample) VALUES (?, ?, ?, ?)",
                         table2,
                     ),
-                    params: [id2, types.timeuuid(), -101, "151"],
+                    params: [id2, types.TimeUuid.now(), -101, "151"],
                 },
             ];
             client.batch(
@@ -683,7 +683,7 @@ describe("Client @SERVER_API", function () {
                         ),
                         params: [
                             types.Uuid.random(),
-                            types.timeuuid(),
+                            types.TimeUuid.now(),
                             "sample1",
                         ],
                     },
@@ -691,7 +691,7 @@ describe("Client @SERVER_API", function () {
                         query: util.format("INSERT WILL FAIL"),
                         params: [
                             types.Uuid.random(),
-                            types.timeuuid(),
+                            types.TimeUuid.now(),
                             -101,
                             -1,
                         ],
@@ -728,7 +728,7 @@ describe("Client @SERVER_API", function () {
                         ),
                         params: [
                             types.Uuid.random(),
-                            types.timeuuid(),
+                            types.TimeUuid.now(),
                             { notValid: true },
                         ],
                     },
@@ -790,7 +790,7 @@ describe("Client @SERVER_API", function () {
                                             query: query1Table1,
                                             params: [
                                                 id1Tbl1,
-                                                types.timeuuid(),
+                                                types.TimeUuid.now(),
                                                 types.BigDecimal.fromNumber(
                                                     new Date().getTime(),
                                                 ),
@@ -800,7 +800,7 @@ describe("Client @SERVER_API", function () {
                                             query: query1Table2,
                                             params: [
                                                 id1Tbl2,
-                                                types.timeuuid(),
+                                                types.TimeUuid.now(),
                                                 new Date(),
                                             ],
                                         },
@@ -827,7 +827,7 @@ describe("Client @SERVER_API", function () {
                                             query: query2Table1,
                                             params: [
                                                 id2Tbl1,
-                                                types.timeuuid(),
+                                                types.TimeUuid.now(),
                                                 types.BigDecimal.fromNumber(
                                                     new Date().getTime(),
                                                 ),
@@ -837,7 +837,7 @@ describe("Client @SERVER_API", function () {
                                             query: query2Table2,
                                             params: [
                                                 id2Tbl2,
-                                                types.timeuuid(),
+                                                types.TimeUuid.now(),
                                                 new Date().getTime() / 15,
                                             ],
                                         },
@@ -1031,8 +1031,8 @@ describe("Client @SERVER_API", function () {
             const insertQuery =
                 "INSERT INTO %s (id, time, double_sample) VALUES (?, ?, ?)";
             const id = types.Uuid.random();
-            const ts1 = types.timeuuid();
-            const ts2 = types.timeuuid();
+            const ts1 = types.TimeUuid.now();
+            const ts2 = types.TimeUuid.now();
             const queries = [
                 {
                     query: util.format(insertQuery, table1Short),
