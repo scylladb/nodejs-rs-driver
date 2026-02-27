@@ -5,6 +5,39 @@
 // with manual definitions of (To/From)NapiValue. For this reason,
 // we manually define those types, in order to use them in the JS part of the code.
 
+/**
+ * Represents a CQL column type, including complex/nested types.
+ * This type represents the guarantees, that the value returned from Rust promises to have.
+ */
+export type ComplexType =
+  | { baseType: Exclude<CqlType, CqlType.List | CqlType.Set | CqlType.Map | CqlType.Vector | CqlType.UserDefinedType | CqlType.Tuple> }
+  | { baseType: CqlType.List | CqlType.Set; frozen: boolean; supportType1: ComplexType }
+  | { baseType: CqlType.Map; frozen: boolean; supportType1: ComplexType; supportType2: ComplexType }
+  | { baseType: CqlType.Vector; supportType1: ComplexType; dimensions: number }
+  | { baseType: CqlType.UserDefinedType; frozen: boolean; name: string; keyspace: string; udt_types: ComplexType[]; udt_name: string[] }
+  | { baseType: CqlType.Tuple; subtypes: ComplexType[] }
+
+/**
+ * Result of a paged query.
+ * Serialized as a 2-element tuple: [pagingState, result].
+ * - pagingState is null when there are no more pages.
+ */
+export type PagingResult = [PagingStateWrapper | null, QueryResultWrapper]
+
+/**
+ * Result of a paged query that can be continued via a QueryExecutor.
+ * Serialized as a 3-element tuple: [pagingState, result, executor].
+ * - pagingState is null when there are no more pages.
+ */
+export type PagingResultWithExecutor = [PagingStateWrapper | null, QueryResultWrapper, QueryExecutor]
+
+
+/**
+ * A pre-encoded CQL value passed to query parameters.
+ * Null represents no value, and undefined represents unset value.
+ */
+export type EncodedValuesWrapper = Uint8Array | null | undefined
+
 // ---------------------------------------------------------------------------
 // Types for objects produced by define_rust_to_js_convertible_object.
 // These are plain JS objects returned from Rust to JS
