@@ -9,6 +9,10 @@ env:
   pull_request:
     branches:
       - '**'
+
+permissions:
+  contents: read
+
 jobs:
   check-code-quality:
     runs-on: ubuntu-latest

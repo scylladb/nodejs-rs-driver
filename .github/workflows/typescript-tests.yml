@@ -8,6 +8,10 @@ env:
   pull_request:
     branches:
       - '**'
+
+permissions:
+  contents: read
+
 jobs:
   build-and-run-tests:
     strategy:
