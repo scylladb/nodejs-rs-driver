@@ -136,3 +136,14 @@ re-implementing its functionality. You do not have to update a code to migrate t
 #### IdempotenceAwareRetryPolicy
 
 This policy was deprecated in the DataStax driver, and for this reason was removed from this driver.
+
+## Metadata
+
+### Hosts
+
+#### Hosts order
+
+The DataStax driver had some undocumented assumptions about the order of hosts, when using `client.hosts.keys()`
+(those assumptions were checked in the driver tests).
+Those assumptions no longer hold true, the hosts returned from `client.hosts.keys()` may be in a random order,
+that may vary from run to run.
