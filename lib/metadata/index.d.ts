@@ -1,11 +1,10 @@
-import { types } from "../types";
+import * as types from "../types";
 import { EmptyCallback, Host, token, ValueCallback } from "../../";
 import dataTypes = types.dataTypes;
 import Uuid = types.Uuid;
 import InetAddress = types.InetAddress;
 
-export namespace metadata {
-  interface Aggregate {
+export interface Aggregate {
     argumentTypes: Array<{ code: dataTypes; info: any }>;
     finalFunction: string;
     initCondition: string;
@@ -16,7 +15,7 @@ export namespace metadata {
     stateType: string;
   }
 
-  interface ClientState {
+export interface ClientState {
     getConnectedHosts(): Host[];
 
     getInFlightQueries(host: Host): number;
@@ -26,7 +25,7 @@ export namespace metadata {
     toString(): string;
   }
 
-  interface DataTypeInfo {
+export interface DataTypeInfo {
     code: dataTypes;
     info: string | DataTypeInfo | DataTypeInfo[];
     options: {
@@ -35,18 +34,18 @@ export namespace metadata {
     };
   }
 
-  interface ColumnInfo {
+export interface ColumnInfo {
     name: string;
     type: DataTypeInfo;
   }
 
-  enum IndexKind {
+export enum IndexKind {
     custom = 0,
     keys,
     composites,
   }
 
-  interface Index {
+export interface Index {
     kind: IndexKind;
     name: string;
     options: object;
@@ -59,7 +58,7 @@ export namespace metadata {
     isKeysKind(): boolean;
   }
 
-  interface DataCollection {
+export interface DataCollection {
     bloomFilterFalsePositiveChance: number;
     caching: string;
     clusteringKeys: ColumnInfo[];
@@ -87,13 +86,13 @@ export namespace metadata {
     speculativeRetry: string;
   }
 
-  interface MaterializedView extends DataCollection {
+export interface MaterializedView extends DataCollection {
     tableName: string;
     whereClause: string;
     includeAllColumns: boolean;
   }
 
-  interface TableMetadata extends DataCollection {
+export interface TableMetadata extends DataCollection {
     indexes: Index[];
     indexInterval?: number;
     isCompact: boolean;
@@ -103,7 +102,7 @@ export namespace metadata {
     virtual: boolean;
   }
 
-  interface QueryTrace {
+export interface QueryTrace {
     requestType: string;
     coordinator: InetAddress;
     parameters: { [key: string]: any };
@@ -119,7 +118,7 @@ export namespace metadata {
     }>;
   }
 
-  interface SchemaFunction {
+export interface SchemaFunction {
     argumentNames: string[];
     argumentTypes: Array<{ code: dataTypes; info: any }>;
     body: string;
@@ -131,12 +130,12 @@ export namespace metadata {
     signature: string[];
   }
 
-  interface Udt {
+export interface Udt {
     name: string;
     fields: ColumnInfo[];
   }
 
-  interface Metadata {
+export interface Metadata {
     keyspaces: { [name: string]: { name: string; strategy: string } };
 
     clearPrepared(): void;
@@ -252,4 +251,3 @@ export namespace metadata {
 
     refreshKeyspaces(callback: EmptyCallback): void;
   }
-}

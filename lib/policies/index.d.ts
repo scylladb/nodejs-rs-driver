@@ -1,22 +1,21 @@
 import { Client, EmptyCallback, ExecutionOptions, Host, HostMap } from "../../";
-import { types } from "../types";
+import * as types from "../types";
 
-export namespace policies {
-  function defaultAddressTranslator(): addressResolution.AddressTranslator;
+export function defaultAddressTranslator(): addressResolution.AddressTranslator;
 
-  function defaultLoadBalancingPolicy(
+export function defaultLoadBalancingPolicy(
     localDc?: string,
   ): loadBalancing.LoadBalancingPolicy;
 
-  function defaultReconnectionPolicy(): reconnection.ReconnectionPolicy;
+export function defaultReconnectionPolicy(): reconnection.ReconnectionPolicy;
 
-  function defaultRetryPolicy(): retry.RetryPolicy;
+export function defaultRetryPolicy(): retry.RetryPolicy;
 
-  function defaultSpeculativeExecutionPolicy(): speculativeExecution.SpeculativeExecutionPolicy;
+export function defaultSpeculativeExecutionPolicy(): speculativeExecution.SpeculativeExecutionPolicy;
 
-  function defaultTimestampGenerator(): timestampGeneration.TimestampGenerator;
+export function defaultTimestampGenerator(): timestampGeneration.TimestampGenerator;
 
-  namespace addressResolution {
+export namespace addressResolution {
     interface AddressTranslator {
       translate(address: string, port: number, callback: Function): void;
     }
@@ -26,7 +25,7 @@ export namespace policies {
     }
   }
 
-  namespace loadBalancing {
+export namespace loadBalancing {
     abstract class LoadBalancingPolicy {
       init(client: Client, hosts: HostMap, callback: EmptyCallback): void;
 
@@ -77,7 +76,7 @@ export namespace policies {
     }
   }
 
-  namespace reconnection {
+export namespace reconnection {
     class ConstantReconnectionPolicy implements ReconnectionPolicy {
       constructor(delay: number);
 
@@ -105,7 +104,7 @@ export namespace policies {
     }
   }
 
-  namespace retry {
+export namespace retry {
     class FallthroughRetryPolicy extends RetryPolicy {
       constructor();
     }
@@ -115,7 +114,7 @@ export namespace policies {
     }
   }
 
-  namespace speculativeExecution {
+export namespace speculativeExecution {
     class ConstantSpeculativeExecutionPolicy
       implements SpeculativeExecutionPolicy
     {
@@ -162,7 +161,7 @@ export namespace policies {
     }
   }
 
-  namespace timestampGeneration {
+export namespace timestampGeneration {
     class MonotonicTimestampGenerator implements TimestampGenerator {
       constructor(warningThreshold: number, minLogInterval: number);
 
@@ -175,4 +174,3 @@ export namespace policies {
       next(client: Client): types.Long | number;
     }
   }
-}
