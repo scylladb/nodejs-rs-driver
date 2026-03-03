@@ -1,9 +1,8 @@
-import { types } from "../types";
+import * as types from "../types";
 import { Client } from "../../";
 import Long = types.Long;
 
-export namespace mapping {
-  interface TableMappings {
+export interface TableMappings {
     getColumnName(propName: string): string;
 
     getPropertyName(columnName: string): string;
@@ -11,7 +10,7 @@ export namespace mapping {
     newObjectInstance(): any;
   }
 
-  class DefaultTableMappings implements TableMappings {
+export class DefaultTableMappings implements TableMappings {
     getColumnName(propName: string): string;
 
     getPropertyName(columnName: string): string;
@@ -19,7 +18,7 @@ export namespace mapping {
     newObjectInstance(): any;
   }
 
-  class UnderscoreCqlToCamelCaseMappings implements TableMappings {
+export class UnderscoreCqlToCamelCaseMappings implements TableMappings {
     getColumnName(propName: string): string;
 
     getPropertyName(columnName: string): string;
@@ -27,7 +26,7 @@ export namespace mapping {
     newObjectInstance(): any;
   }
 
-  interface Result<T = any> extends Iterator<T> {
+export interface Result<T = any> extends Iterator<T> {
     wasApplied(): boolean;
 
     first(): T | null;
@@ -40,7 +39,7 @@ export namespace mapping {
     toArray(): T[];
   }
 
-  type MappingExecutionOptions = {
+export type MappingExecutionOptions = {
     executionProfile?: string;
     isIdempotent?: boolean;
     logged?: boolean;
@@ -49,12 +48,12 @@ export namespace mapping {
     pageState?: number;
   };
 
-  interface ModelTables {
+export interface ModelTables {
     name: string;
     isView: boolean;
   }
 
-  class Mapper {
+export class Mapper {
     constructor(client: Client, options?: MappingOptions);
 
     batch(
@@ -65,23 +64,23 @@ export namespace mapping {
     forModel<T = any>(name: string): ModelMapper<T>;
   }
 
-  type MappingOptions = {
+export type MappingOptions = {
     models: { [key: string]: ModelOptions };
   };
 
-  type FindDocInfo = {
+export type FindDocInfo = {
     fields?: string[];
     orderBy?: { [key: string]: string };
     limit?: number;
   };
 
-  type InsertDocInfo = {
+export type InsertDocInfo = {
     fields?: string[];
     ttl?: number;
     ifNotExists?: boolean;
   };
 
-  type UpdateDocInfo = {
+export type UpdateDocInfo = {
     fields?: string[];
     ttl?: number;
     ifExists?: boolean;
@@ -91,7 +90,7 @@ export namespace mapping {
     deleteOnlyColumns?: boolean;
   };
 
-  type RemoveDocInfo = {
+export type RemoveDocInfo = {
     fields?: string[];
     ttl?: number;
     ifExists?: boolean;
@@ -99,22 +98,22 @@ export namespace mapping {
     deleteOnlyColumns?: boolean;
   };
 
-  type ModelOptions = {
+export type ModelOptions = {
     tables?: string[] | ModelTables[];
     mappings?: TableMappings;
     columns?: { [key: string]: string | ModelColumnOptions };
     keyspace?: string;
   };
 
-  type ModelColumnOptions = {
+export type ModelColumnOptions = {
     name: string;
     toModel?: (columnValue: any) => any;
     fromModel?: (modelValue: any) => any;
   };
 
-  interface ModelBatchItem {}
+export interface ModelBatchItem {}
 
-  interface ModelBatchMapper {
+export interface ModelBatchMapper {
     insert(doc: any, docInfo?: InsertDocInfo): ModelBatchItem;
 
     remove(doc: any, docInfo?: RemoveDocInfo): ModelBatchItem;
@@ -122,7 +121,7 @@ export namespace mapping {
     update(doc: any, docInfo?: UpdateDocInfo): ModelBatchItem;
   }
 
-  interface ModelMapper<T = any> {
+export interface ModelMapper<T = any> {
     name: string;
     batching: ModelBatchMapper;
 
@@ -171,7 +170,7 @@ export namespace mapping {
     ) => Promise<Result<T>>;
   }
 
-  namespace q {
+export namespace q {
     interface QueryOperator {}
 
     function in_(arr: any): QueryOperator;
@@ -198,4 +197,3 @@ export namespace mapping {
 
     function remove(value: any): QueryOperator;
   }
-}

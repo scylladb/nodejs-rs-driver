@@ -1,7 +1,6 @@
 import { errors } from "../../";
 
-export namespace metrics {
-  interface ClientMetrics {
+export interface ClientMetrics {
     onAuthenticationError(e: Error | errors.AuthenticationError): void;
 
     onClientTimeoutError(e: errors.OperationTimedOutError): void;
@@ -35,7 +34,7 @@ export namespace metrics {
     onWriteTimeoutRetry(e: Error): void;
   }
 
-  class DefaultMetrics implements ClientMetrics {
+export class DefaultMetrics implements ClientMetrics {
     constructor();
 
     onAuthenticationError(e: Error | errors.AuthenticationError): void;
@@ -70,4 +69,3 @@ export namespace metrics {
 
     onWriteTimeoutRetry(e: Error): void;
   }
-}
