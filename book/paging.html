@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Unprepared statement parameters - ScyllaDB JavaScript Driver</title>
+        <title>Fetching large result sets - ScyllaDB JavaScript Driver</title>
 
 
         <!-- Custom HTML head -->
@@ -174,207 +174,175 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="unprepared-statements"><a class="header" href="#unprepared-statements">Unprepared statements</a></h1>
-<p>Whenever you want to execute statements without their prior preparation, you need to inform the driver what the inserted data is.
-There are multiple ways you can achieve that:</p>
-<ol>
-<li>passing recognizable types,</li>
-<li>passing a <em>type hint</em> alongside the value,</li>
-<li>passing already serialized values.</li>
-</ol>
-<h2 id="recognizable-types"><a class="header" href="#recognizable-types">Recognizable types</a></h2>
-<p>When you pass a value of a specific type, the driver will attempt to guess the type of the value
-that should be inserted into the database. This is also known as <strong>type guessing</strong>.
-While this is useful for simple types, this may not work properly with more advanced types,
-or multiple types that look the same in JS but are encoded differently in CQL protocol (undesired unification).</p>
-<p>Here you can find for each CQL type, what JS values can be used to represent given type and be guessed:</p>
-<!-- TODO: In some place list all accepted types without type guessing -->
+                        <!-- This document is heavily based on the DSx driver documentation:
+https://docs.datastax.com/en/developer/nodejs-driver/4.8/features/paging/index.html
+and rust driver documentation:
+https://rust-driver.docs.scylladb.com/stable/statements/paged.html -->
+<h1 id="fetching-large-result-sets"><a class="header" href="#fetching-large-result-sets">Fetching large result sets</a></h1>
+<dl>
+<dt id="when-dealing-with-a-large-number-of-rows-the-driver-breaks-the-result-into-pages-only-requesting-a-limited-number-of-rows-each-time-5000-being-the-default-fetchsize-to-retrieve-the-rows-beyond-this-default-size-use-one-of-the-following-paging-mechanisms-paging-is-enabled-by-default-and-you-can-disable-paging-by-setting-queryoptionspaged-to-false"><a class="header" href="#when-dealing-with-a-large-number-of-rows-the-driver-breaks-the-result-into-pages-only-requesting-a-limited-number-of-rows-each-time-5000-being-the-default-fetchsize-to-retrieve-the-rows-beyond-this-default-size-use-one-of-the-following-paging-mechanisms-paging-is-enabled-by-default-and-you-can-disable-paging-by-setting-queryoptionspaged-to-false">When dealing with a large number of rows, the driver breaks the result into <em>pages</em>, only requesting a limited number of
+rows each time (<code>5000</code> being the default <code>fetchSize</code>). To retrieve the rows beyond this default size, use one of the
+following paging mechanisms. Paging is enabled by default and you can disable paging by setting <code>QueryOptions.paged</code> to false.</a></dt>
+<dd>
+<p>::{warning}
+Issuing unpaged SELECTs
+may have dramatic performance consequences! <strong>BEWARE!</strong><br>If the result set is big (or, e.g., there are a lot of tombstones), those atrocities can happen:</p>
+</dd>
+</dl>
 <ul>
-<li>Ascii, Text:
-<ul>
-<li><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String">String</a> (except strings that match UUID regex).
-Please note that when using type guessing all the strings will be encoded with utf-8 encoding.</li>
+<li>cluster may experience high load,</li>
+<li>queries may time out,</li>
+<li>the driver may devour a lot of RAM,</li>
+<li>latency will likely spike.</li>
 </ul>
-</li>
-<li>BigInt, Counter:
-<ul>
-<li><a href="https://www.npmjs.com/package/long">Long</a> class</li>
-</ul>
-<!-- Internal note. BigInt is not guess into any type. Maybe add guessing for that? -->
-</li>
-<li>Boolean:
-<ul>
-<li><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Boolean">boolean</a></li>
-</ul>
-</li>
-<li>Blob:
-<ul>
-<li>Blobs can be encoded only from Buffer, which formally is already a serialized value</li>
-</ul>
-</li>
-<li>Decimal:
-<ul>
-<li>BigDecimal class (class exposed by this driver)</li>
-</ul>
-</li>
-<li>Double:
-<ul>
-<li><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number">Number</a></li>
-</ul>
-</li>
-<li>Date:
-<ul>
-<li>LocalDate class (class exposed by this driver)</li>
-</ul>
-</li>
-<li>Duration:
-<ul>
-<li>Duration class (class exposed by this driver)</li>
-</ul>
-</li>
-<li>Float, Int, SmallInt, TinyInt:
-<ul>
-<li>It’s not possible to guess those types</li>
-</ul>
-</li>
-<li>Timestamp:
-<ul>
-<li><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date">Date</a></li>
-</ul>
-</li>
-<li>Inet:
-<ul>
-<li>InetAddress class (class exposed by this driver)</li>
-</ul>
-</li>
-<li>List, Set:
-<ul>
-<li><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array">Array</a></li>
-</ul>
-</li>
-<li>Map:
-<ul>
-<li>It’s not possible to guess this type</li>
-</ul>
-</li>
-<li>UDT:
-<ul>
-<li>It’s not possible to guess this type</li>
-</ul>
-</li>
-<li>Time:
-<ul>
-<li>LocalTime class (class exposed by this driver)</li>
-</ul>
-</li>
-<li>Uuid, TimeUuid:
-<ul>
-<li>any string matching Uuid regex</li>
-<li>Uuid class (class exposed by this driver)</li>
-</ul>
-</li>
-<li>Tuple:
-<ul>
-<li>Tuple class (class exposed by this driver)</li>
-</ul>
-</li>
-<li>Varint:
-<ul>
-<li>Integer class (class exposed by this driver)</li>
-</ul>
-</li>
-</ul>
-<h2 id="type-hints"><a class="header" href="#type-hints">Type hints</a></h2>
-<p>Sometimes you might want to use CQL types which cannot be guessed,
-or use one of the value formats you cannot use for guessing.
-One example is that you are passing a string that matches uuid regex.
-It would be guessed as uuid CQL type, so if you want to pass it as a CQL string (Text or Ascii),
-you need another way: you can provide <em>a type hint</em>. With the type hint, you provide the desired CQL type of the value,
-which allows to properly serialize the value into CQL protocol format.</p>
-<p>There are two supported formats of providing type hints:</p>
-<ul>
-<li>Text representation,</li>
-<li>Object representation.</li>
-</ul>
-<h3 id="text-representation"><a class="header" href="#text-representation">Text representation</a></h3>
-<p>You can provide a string containing the type of the value. Examples:</p>
-<ul>
-<li><code>timestamp</code>,</li>
-<li><code>list&lt;int&gt;</code>,</li>
-<li><code>map</code> (this is a <em>partial hint</em>!),</li>
-<li><code>tuple&lt;int, boolean&gt;</code>, <code>udt&lt;name_of_the_udt&gt;</code>,</li>
-<li><code>vector&lt;float, 7&gt;</code> (for vectors, first provide type, then dimension).</li>
-</ul>
-<h3 id="object-representation"><a class="header" href="#object-representation">Object representation</a></h3>
-<p>Due to the complexity of this form of hint representation, we recommend using text representation of the type hints.</p>
-<p>You can provide a type hint as an object with the following structure:</p>
-<pre><code class="language-javascript">{
-  code: number,             // A variant of types.dataTypes enum
-  info: type_info?,         // Additional type information (necessary for complex types: see bellow)
-  customTypeName: string?   // Type name (necessary when code is set to dataTypes.custom)
+<dl>
+<dt id="stay-safe-page-your-selects"><a class="header" href="#stay-safe-page-your-selects">Stay safe. Page your SELECTs.</a></dt>
+<dd>::</dd>
+</dl>
+<h2 id="automatic-paging"><a class="header" href="#automatic-paging">Automatic paging</a></h2>
+<h3 id="async-iterators"><a class="header" href="#async-iterators">Async iterators</a></h3>
+<p>The driver supports asynchronous iteration of the <code>ResultSet</code> using the built-in <a href="https://github.com/tc39/proposal-async-iteration">Async Iterator</a>, fetching
+the following result pages after the previous one has been yielded.</p>
+<p>Large result sets can be iterated using the <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/for-await...of"><code>for await ... of</code></a> statement:</p>
+<pre><code class="language-javascript">const result = await client.execute(query, params, { prepare: true });
+
+for await (const row of result) {
+  console.log(row[columnName]);
 }
 </code></pre>
-<p>The <code>code</code> property should represent the base type of the value - you can find possible values in the
-<a href="https://github.com/scylladb/nodejs-rs-driver/blob/0342b6789b59106ce3d9d2964fd27514a0b42d68/lib/types/index.js#L93-L121"><code>types.dataTypes</code></a>.</p>
-<p>The <code>info</code> property depends on the type:</p>
+<p>Under the hood, the driver will get all the rows of the query result using multiple requests. Initially,
+when calling <code>execute()</code> it will retrieve the first page of results according to the fetch size (defaults to <code>5000</code>).
+If there are additional rows, those will be retrieved once the async iterator yielded the rows from the previous page.</p>
+<dl>
+<dt id="if-needed-you-can-use-ispaged-method-of-resultset-instance-to-determine-whether-there-are-more-pages-of-results-than-initially-fetched"><a class="header" href="#if-needed-you-can-use-ispaged-method-of-resultset-instance-to-determine-whether-there-are-more-pages-of-results-than-initially-fetched">If needed, you can use <code>isPaged()</code> method of <code>ResultSet</code> instance to determine whether there are more pages of results
+than initially fetched.</a></dt>
+<dd>
+<p>::{warning}
+Note that using either the async or sync iterators will not affect the internal state of the <code>ResultSet</code> instance.
+The following methods are mutually exclusive, so you should use only one per ResultSet instance:</p>
+</dd>
+</dl>
+<ul>
+<li>rows property, which contains the row instances of the first page of results,</li>
+<li>sync iterator, which will yield all the rows in the current page,</li>
+<li>async iterator, which will yield all the rows in the result regardless of the number of pages.
+:::</li>
+</ul>
+<h3 id="each-row-callback"><a class="header" href="#each-row-callback">Each row callback</a></h3>
+<p>You can also iterate through pages by setting a per-page callback.
+<code>eachRow()</code> works in two modes, depending on the <code>QueryOptions.autoPage</code> configuration:</p>
+<ul>
+<li>automatic paging: keeps fetching pages until all rows are processed (this is the default mode),</li>
+<li>manual paging: fetches one page at a time. This mode gives you access to result sets of intermediate pages.
+To fetch the next page, you need to call <code>result.nextPage()</code>.</li>
+</ul>
+<p><code>eachRow()</code> calls:</p>
+<ul>
+<li><code>rowCallback(rowIndex, row)</code> for each row as soon as it is received,</li>
+<li><code>callback(err, result)</code>:
+<ul>
+<li>when <code>autoPage</code> is set to true: after all pages are fetched and <code>rowCallback</code> was called for each row,</li>
+<li>when <code>autoPage</code> is set to false: after the current page is fetched and <code>rowCallback</code> was called for each row,</li>
+<li>when an error occurs.</li>
+</ul>
+</li>
+</ul>
+<pre><code class="language-javascript">client.eachRow(
+  query,
+  parameters,
+  { prepare: true, autoPage },
+  (rowIndex, row) =&gt; {
+    // process row
+  },
+  (err, result) =&gt; {
+    if (err) {
+      // handle error
+      return;
+    }
+    if (result.nextPage) {
+      // Handle intermediate page result set. This branch will be taken only when autoPage is disabled.
+      // When autoPage is enabled you will not have access to those result sets.
+      result.nextPage();
+    } else {
+      // Handle last page result.
+    }
+  }
+);
+</code></pre>
+<h3 id="row-streams"><a class="header" href="#row-streams">Row streams</a></h3>
+<p>If you want to handle a large result set as a <a href="https://nodejs.org/api/stream.html"><code>Stream</code></a> of rows, you can use <code>stream()</code> method of the
+<code>Client</code> instance. The <code>stream()</code> method automatically fetches the following pages, yielding the rows as they come
+through the network and retrieving the following page only after the previous rows were read (throttling).</p>
+<pre><code class="language-javascript">client.stream(query, parameters, options)
+  .on('readable', function () {
+    // readable is emitted as soon as a row is received and parsed
+    let row;
+    while (row = this.read()) {
+      // process row
+    }
+  })
+  .on('end', function () {
+    // emitted when all rows have been retrieved and read
+  });
+</code></pre>
+<h2 id="manual-paging"><a class="header" href="#manual-paging">Manual paging</a></h2>
+<p>Sometimes it is convenient to save the paging state in order to restore it later. For example, consider a stateless
+web service that displays a list of results with a link to the next page. When the user clicks that link, we want to
+run the exact same query, except that the iteration should start where we stopped on the previous page.</p>
+<p>To do so, the driver exposes a <code>pagingState</code> object that represents where we were in the result set when the last page
+was fetched:</p>
+<pre><code class="language-javascript">const options = { prepare: true, fetchSize: 1000 };
+const result = await client.execute(query, parameters, options);
+
+// Property 'rows' will contain only the amount of items of the first page (max 1000 in this case)
+const rows = result.rows;
+
+// Store the page state
+let pageState = result.pageState;
+</code></pre>
+<p>In the next request, use the <code>pageState</code> to fetch the following rows.</p>
+<pre><code class="language-javascript">// Use the pageState in the queryOptions to continue where you left it.
+const options = { pageState, prepare: true, fetchSize: 1000 };
+const result = await client.execute(query, parameters, options);
+
+// Following rows up to fetch size (1000)
+const rows = result.rows;
+
+// Store the next paging state.
+pageState = result.pageState;
+</code></pre>
+<p>Saving the paging state works well when you only let the user move from one page to the next. But it doesn’t allow
+arbitrary jumps (like “go directly to page 10”), because you can’t fetch a page unless you have the paging state of the
+previous one. Such a feature would require offset queries, which are not natively supported by ScyllaDB and Apache Cassandra.</p>
+<p><strong>Note</strong>: The page state token can be manipulated to retrieve other results within the same column family, so it is not
+safe to expose it to the users in plain text.</p>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best practices</a></h2>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Type</th><th><code>info</code> value</th></tr>
+<tr><th>Query result fetching</th><th>Unpaged</th><th>Paged manually</th><th>Paged automatically</th></tr>
 </thead>
 <tbody>
-<tr><td>Simple types (int, text, boolean, etc.)</td><td><code>null</code> or omitted</td></tr>
-<tr><td>List, Set</td><td>A type hint object for the element type</td></tr>
-<tr><td>Map</td><td>An array of two type hint objects: <code>[keyType, valueType]</code></td></tr>
-<tr><td>Tuple</td><td>An array of type hint objects, one for each element</td></tr>
-<tr><td>UDT</td><td>Object of UdtColumnInfo type</td></tr>
-<tr><td>Vector</td><td>An array: <code>[elementTypeHint, dimension]</code> where dimension is a number</td></tr>
+<tr><td>Exposed Client API</td><td><code>execute</code> with <code>QueryOptions.paged = false</code></td><td><code>execute</code> with <code>QueryOptions.pageState</code></td><td>Async iterators, each row callbacks, streams</td></tr>
+<tr><td>Working</td><td>get all results in a single CQL frame, into a single result set</td><td>get one page of results in a single CQL frame, into a single result set</td><td>upon high-level iteration, fetch consecutive CQL frames and transparently iterate over their rows</td></tr>
+<tr><td>Cluster load</td><td>potentially <strong>HIGH</strong> for large results, beware!</td><td>normal</td><td>normal</td></tr>
+<tr><td>Driver overhead</td><td>low - simple frame fetch</td><td>low - simple frame fetch</td><td>low - simple frame fetch</td></tr>
+<tr><td>Driver memory footprint</td><td>potentially <strong>BIG</strong> - all results have to be stored at once!</td><td>small - only one page stored at a time</td><td>small - at most constant number of pages stored at a time</td></tr>
+<tr><td>Latency</td><td>potentially <strong>BIG</strong> - all results have to be generated at once!</td><td>considerable on page boundary - new page needs to be fetched</td><td>considerable on page boundary - new page needs to be fetched</td></tr>
+<tr><td>Suitable operations</td><td>- in general: operations with empty result set (non-SELECTs) - as possible optimisation: SELECTs with LIMIT clause</td><td>- for advanced users who prefer more control over paging</td><td>- in general: all SELECTs</td></tr>
 </tbody>
 </table>
 </div>
-<p>See the <a href="https://github.com/scylladb/nodejs-rs-driver/blob/0342b6789b59106ce3d9d2964fd27514a0b42d68/lib/encoder.js#L22-L32">type definitions</a> for more detailed information
-on how info field should look like.</p>
-<h4 id="examples"><a class="header" href="#examples">Examples</a></h4>
-<pre><code class="language-javascript">// equivalent to `int`
-const intHint = { code: 0x9 /* types.dataTypes.int */ }; 
-
-// equivalent to `map&lt;text, boolean&gt;`
-const mapHint = { 
-  code: 0x21 /* types.dataTypes.map */, 
-  info: [
-    { code: 0xa /* types.dataTypes.text */ },
-    { code: 0x4 /* types.dataTypes.boolean */ }
-  ] 
-};
-
-// equivalent to `vector&lt;float, 3&gt;`
-const vectorHint = { 
-  code: 0x0 /* types.dataTypes.custom */, 
-  customTypeName: "vector",
-  info: [{ code: 0x8 /* types.dataTypes.float */ }, 3] 
-};
-</code></pre>
-<hr>
-<p>Hints can be provided for all or only some of the parameters.<br>A hint can be full or partial. A hint is considered <em>full</em> when<br>it specifies either:</p>
-<ul>
-<li>a simple type (like int or date),</li>
-<li>or a complex type (like a list or a map) with all its subtypes specified.<br>A hint is considered <em>partial</em> if it defines a complex type without<br>specifying hints for its subtypes.<br>A complex type hint with hints provided for only some subtypes — such as specifying<br>the type of map keys but not the values — is not considered a valid hint.<br>When a partial hint is provided, the driver attempts to guess the remaining part of the value’s type.</li>
-</ul>
-<p>In prepared statements any hints you provide will be ignored.</p>
-<h2 id="serialized-values"><a class="header" href="#serialized-values">Serialized values</a></h2>
-<p>It’s possible to pass an already serialized value as a <a href="https://nodejs.org/api/buffer.html#buffer">Buffer</a>.
-Normally, this is not recommended unless you want to write your own encoder.
-This might be a viable way if you, for some reason, have already serialized CQL values at hand.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="load_balancing.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="statements.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="internal/SUMMARY.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="batch.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -384,11 +352,11 @@ This might be a viable way if you, for some reason, have already serialized CQL 
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="load_balancing.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="statements.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="internal/SUMMARY.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="batch.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

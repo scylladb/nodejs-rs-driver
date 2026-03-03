@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-d0d1e991.js";
+            window.path_to_searchindex_js = "searchindex-1ffe27a2.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-fa8eaeb7.js"></script>
+        <script src="toc-338321ef.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -175,7 +175,355 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="shutdown"><a class="header" href="#shutdown">Shutdown</a></h1>
+                        <!-- This document is heavily based on the rust driver documentation:
+https://rust-driver.docs.scylladb.com/stable/statements/statements.html 
+and DSx driver documentation:
+https://docs.datastax.com/en/developer/nodejs-driver/4.8/coding-rules/index.html -->
+<h1 id="executing-cql-statements---best-practices"><a class="header" href="#executing-cql-statements---best-practices">Executing CQL statements - best practices</a></h1>
+<p>Driver supports all kinds of statements supported by ScyllaDB. The following tables aim to bridge between DB concepts and driver’s API.
+They include recommendations on which API to use in what cases.</p>
+<h2 id="kinds-of-cql-statements-from-the-cql-protocol-point-of-view"><a class="header" href="#kinds-of-cql-statements-from-the-cql-protocol-point-of-view">Kinds of CQL statements (from the CQL protocol point of view)</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Kind of CQL statement</th><th>Single</th><th>Batch</th></tr>
+</thead>
+<tbody>
+<tr><td>prepared</td><td>prepared statement</td><td>batch of prepared statements</td></tr>
+<tr><td>unprepared</td><td>unprepared statement</td><td>batch of unprepared statements</td></tr>
+</tbody>
+</table>
+</div>
+<p>This is <strong>NOT</strong> strictly related to content of the CQL statement string.</p>
+<blockquote>
+<p><em><strong>Interesting note</strong></em><br>In fact, any kind of CQL statement could contain any CQL statement string.
+Yet, some of such combinations don’t make sense and will be rejected by the DB.
+For example, SELECTs in a Batch are nonsense.</p>
+</blockquote>
+<h3 id="unprepared-vs-prepared"><a class="header" href="#unprepared-vs-prepared"><a href="#unprepared-statements">Unprepared</a> vs Prepared</a></h3>
+<blockquote>
+<p><em><strong>GOOD TO KNOW</strong></em><br>Each time a statement is executed by sending a statement string to the DB, it needs to be parsed. Driver does not parse CQL, therefore it sees statement strings as opaque.<br>There is an option to <em>prepare</em> a statement, i.e. parse it once by the DB and associate it with an ID. After preparation, it’s enough that the driver sends the ID
+and the DB already knows what operation to perform - no more expensive parsing necessary! Moreover, upon preparation driver receives valuable data for load balancing,
+enabling advanced load balancing (so better performance!) of all further executions of that prepared statement.<br><em><strong>Key takeaway:</strong></em> always use prepared statements that you are going to execute multiple times.</p>
+</blockquote>
+<dl>
+<dt id="you-can-decide-whether-a-given-query-will-be-prepared-by-setting-the-queryoptionsprepare-option-by-default-queries-are-unprepared-you-do-not-need-to-manually-handle-statement-preparation-if-you-enable-the-prepare-option-the-driver-handles-the-rest-it-either-uses-its-cache-of-prepared-statements-if-the-statement-is-present-or-prepares-the-query-before-execution-the-driver-keeps-a-cache-of-the-last-clientoptionsmaxprepared-statements-this-cache-ensures-you-can-take-full-advantage-of-prepared-statements"><a class="header" href="#you-can-decide-whether-a-given-query-will-be-prepared-by-setting-the-queryoptionsprepare-option-by-default-queries-are-unprepared-you-do-not-need-to-manually-handle-statement-preparation-if-you-enable-the-prepare-option-the-driver-handles-the-rest-it-either-uses-its-cache-of-prepared-statements-if-the-statement-is-present-or-prepares-the-query-before-execution-the-driver-keeps-a-cache-of-the-last-clientoptionsmaxprepared-statements-this-cache-ensures-you-can-take-full-advantage-of-prepared-statements">You can decide whether a given query will be prepared by setting the <code>QueryOptions.prepare</code> option. By default, queries are unprepared.
+You do not need to manually handle statement preparation. If you enable the <code>prepare</code> option, the driver handles the rest: it either uses its cache of prepared statements
+if the statement is present, or prepares the query before execution.
+The driver keeps a cache of the last <code>ClientOptions.maxPrepared</code> statements. This cache ensures you can take full advantage of prepared statements.</a></dt>
+<dd>
+<p>::{warning}
+<strong>Ensure sufficient cache size.</strong> If you execute more than <code>ClientOptions.maxPrepared</code> different statements, you will experience cache flickering, defeating the purpose of prepared
+statements and significantly decreasing driver performance.</p>
+</dd>
+<dd>
+<p>::</p>
+</dd>
+</dl>
+<pre><code class="language-js">function insert(next) {
+    const query =
+        "INSERT INTO examples.basic (id, txt, val) VALUES (?, ?, ?)";
+    // By changing the prepare option, you can decide whether to prepare given statement
+    client.execute(query, [id, "Hello!", 100], { prepare: true }, next);
+},
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Statement comparison</th><th>Unprepared</th><th>Prepared</th></tr>
+</thead>
+<tbody>
+<tr><td>Usability</td><td>execute CQL statement string directly</td><td>the driver ensures the statement is prepared before execution</td></tr>
+<tr><td>Performance</td><td>poor (statement parsed each time)</td><td>good (statement parsed only upon preparation)</td></tr>
+<tr><td>Load balancing</td><td>primitive (random choice of a node/shard)</td><td>advanced (proper node/shard, optimisations for LWT statements)</td></tr>
+<tr><td>Suitable operations</td><td>one-shot operations</td><td>repeated operations</td></tr>
+</tbody>
+</table>
+</div>
+<p>If a statement contains bind markers (<code>?</code>), then it needs some values to be passed along the statement string.
+If a statement is prepared, the metadata received from the DB can be used to verify validity of passed bind values.
+In case of unprepared statements, this metadata is missing and thus verification is not feasible.
+While it’s possible to <a href="#unprepared-statements">manually provide metadata</a>, this allows some silent bugs to sneak into user applications in case the provided metadata is invalid.</p>
+<!-- Well. While the rust driver still silently prepares with the goal of ensuring type safety. We just totally ignore the verification part. -->
+<p>:::{warning}
+When the unprepared statement contains bind markers, the driver silently prepares the statement before execution.
+That behaviour is especially important in batches:
+For each simple statement with a non-empty list of values in the batch,
+the driver will send a prepare request, and it will be done <strong>sequentially</strong>!
+Results of preparation are not cached between <code>client.batch</code> calls.</p>
+<dl>
+<dt id="takeaway-from-the-above-do-not-use-unprepared-batches-unless-all-statements-take-no-bind-markers"><a class="header" href="#takeaway-from-the-above-do-not-use-unprepared-batches-unless-all-statements-take-no-bind-markers">Takeaway from the above: Do NOT use unprepared batches, unless all statements take no bind markers.</a></dt>
+<dd>::</dd>
+</dl>
+<h3 id="single-vs-batch"><a class="header" href="#single-vs-batch">Single vs <a href="#batch-statements">Batch</a></a></h3>
+<p>The batch statement combines multiple data modification statements (<code>INSERT</code>, <code>UPDATE</code>, or <code>DELETE</code>)
+into a single logical operation that is sent to the server in a single request.
+By default, batching together multiple operations also ensures that they are executed in an atomic way (that is, either all succeed or none).
+Remember that using <a href="https://docs.scylladb.com/manual/stable/cql/dml/batch.html#unlogged-batches">unlogged batches</a> (which you need to manually enable)
+means that your batch is no longer atomic.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Statement comparison</th><th>Single</th><th>Batch</th></tr>
+</thead>
+<tbody>
+<tr><td>Exposed Client API</td><td><code>execute</code>, <code>eachRow</code>, <code>executeConcurrent</code></td><td><code>batch</code></td></tr>
+<tr><td>Usability</td><td>simple setup</td><td>need to aggregate statements and binding values to each is more cumbersome</td></tr>
+<tr><td>Performance</td><td>good (DB is optimised for handling single statements)</td><td>good for small batches, may be worse for larger (also: higher risk of request timeout due to big portion of work)</td></tr>
+<tr><td>Load balancing</td><td>advanced if prepared, else primitive</td><td>advanced if prepared <strong>and ALL</strong> statements in the batch target the same partition, else primitive</td></tr>
+<tr><td>Suitable operations</td><td>most operations</td><td>- a list of operations that need to be executed atomically (batch LightWeight Transaction) - a batch of operations targeting the same partition (as an advanced optimisation)</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="paged-vs-unpaged-queries"><a class="header" href="#paged-vs-unpaged-queries"><a href="#fetching-large-result-sets">Paged</a> vs Unpaged queries</a></h3>
+<blockquote>
+<p><em><strong>GOOD TO KNOW</strong></em><br>SELECT statements return a result set, possibly a large one. Therefore, paging is available to fetch it in chunks, relieving load on the cluster and lowering latency.<br><em><strong>Key takeaways:</strong></em><br>For SELECTs you had better <strong>avoid unpaged queries</strong>.<br>For non-SELECTs, it’s preferred to have unpaged queries.</p>
+</blockquote>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Query result fetching</th><th>Unpaged</th><th>Paged</th></tr>
+</thead>
+<tbody>
+<tr><td>Exposed Client API</td><td><code>execute</code>, <code>executeConcurrent</code></td><td><code>eachRow</code>, <code>stream</code>, <code>ResultSet.asyncIterator</code>, <code>execute</code> with <code>ResultSet.pageState</code></td></tr>
+<tr><td>Usability</td><td>get all results in a single CQL frame, so into a single result set</td><td>need to fetch multiple CQL frames and iterate over them - using driver’s abstractions (<code>eachRow</code>, <code>ResultSet.asyncIterator</code>) or manually (<code>execute</code> in a loop)</td></tr>
+<tr><td>Performance</td><td>- for large results, puts <strong>high load on the cluster</strong> - for small results, the same as paged</td><td>- for large results, relieves the cluster - for small results, the same as unpaged</td></tr>
+<tr><td>Memory footprint</td><td>potentially big - all results have to be stored at once</td><td>small - at most constant number of pages are stored by the driver at the same time</td></tr>
+<tr><td>Latency</td><td>potentially big - all results have to be generated at once</td><td>small - at most one chunk of data must be generated at once, so latency of each chunk is small</td></tr>
+<tr><td>Suitable operations</td><td>- in general: operations with empty result set (non-SELECTs) - as possible optimisation: SELECTs with LIMIT clause</td><td>- in general: all SELECTs</td></tr>
+</tbody>
+</table>
+</div>
+<p>For more detailed comparison and more best practices, see doc page about <a href="#fetching-large-result-sets">paging</a>.</p>
+<h2 id="cql-statements---operations-based-on-what-the-cql-string-contains"><a class="header" href="#cql-statements---operations-based-on-what-the-cql-string-contains">CQL statements - operations (based on what the CQL string contains)</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>CQL data manipulation statement</th><th>Recommended statement kind</th><th>Should be paged</th></tr>
+</thead>
+<tbody>
+<tr><td>SELECT</td><td>Prepared statement if repeated, or using more advanced (<a href="#recognizable-types">unguessable</a>) parameters in the query, otherwise unprepared</td><td>Yes, unless query guarantees that no more than a few rows will be returned (ex. selecting a single row by searching for its primary key)</td></tr>
+<tr><td>INSERT, UPDATE</td><td>Prepared statement if repeated, unprepared statement if once, batch if multiple statements are to be executed atomically</td><td>No. While you can still use paging, it is irrelevant, because the result set of such operation is empty</td></tr>
+<tr><td>CREATE/DROP {KEYSPACE, TABLE, TYPE, INDEX,…}</td><td>Unprepared statement, batch if multiple statements are to be executed atomically</td><td>No. While you can still use paging, it is irrelevant, because the result set of such operation is empty</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="queries-are-fully-asynchronous---you-can-run-as-many-of-them-in-parallel-as-you-wish"><a class="header" href="#queries-are-fully-asynchronous---you-can-run-as-many-of-them-in-parallel-as-you-wish">Queries are fully asynchronous - you can run as many of them in parallel as you wish</a></h3>
+<div style="break-before: page; page-break-before: always;"></div><!-- This document is heavily based on the DSx driver documentation:
+https://docs.datastax.com/en/developer/nodejs-driver/4.8/features/paging/index.html
+and rust driver documentation:
+https://rust-driver.docs.scylladb.com/stable/statements/paged.html -->
+<h1 id="fetching-large-result-sets"><a class="header" href="#fetching-large-result-sets">Fetching large result sets</a></h1>
+<dl>
+<dt id="when-dealing-with-a-large-number-of-rows-the-driver-breaks-the-result-into-pages-only-requesting-a-limited-number-of-rows-each-time-5000-being-the-default-fetchsize-to-retrieve-the-rows-beyond-this-default-size-use-one-of-the-following-paging-mechanisms-paging-is-enabled-by-default-and-you-can-disable-paging-by-setting-queryoptionspaged-to-false"><a class="header" href="#when-dealing-with-a-large-number-of-rows-the-driver-breaks-the-result-into-pages-only-requesting-a-limited-number-of-rows-each-time-5000-being-the-default-fetchsize-to-retrieve-the-rows-beyond-this-default-size-use-one-of-the-following-paging-mechanisms-paging-is-enabled-by-default-and-you-can-disable-paging-by-setting-queryoptionspaged-to-false">When dealing with a large number of rows, the driver breaks the result into <em>pages</em>, only requesting a limited number of
+rows each time (<code>5000</code> being the default <code>fetchSize</code>). To retrieve the rows beyond this default size, use one of the
+following paging mechanisms. Paging is enabled by default and you can disable paging by setting <code>QueryOptions.paged</code> to false.</a></dt>
+<dd>
+<p>::{warning}
+Issuing unpaged SELECTs
+may have dramatic performance consequences! <strong>BEWARE!</strong><br>If the result set is big (or, e.g., there are a lot of tombstones), those atrocities can happen:</p>
+</dd>
+</dl>
+<ul>
+<li>cluster may experience high load,</li>
+<li>queries may time out,</li>
+<li>the driver may devour a lot of RAM,</li>
+<li>latency will likely spike.</li>
+</ul>
+<dl>
+<dt id="stay-safe-page-your-selects"><a class="header" href="#stay-safe-page-your-selects">Stay safe. Page your SELECTs.</a></dt>
+<dd>::</dd>
+</dl>
+<h2 id="automatic-paging"><a class="header" href="#automatic-paging">Automatic paging</a></h2>
+<h3 id="async-iterators"><a class="header" href="#async-iterators">Async iterators</a></h3>
+<p>The driver supports asynchronous iteration of the <code>ResultSet</code> using the built-in <a href="https://github.com/tc39/proposal-async-iteration">Async Iterator</a>, fetching
+the following result pages after the previous one has been yielded.</p>
+<p>Large result sets can be iterated using the <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/for-await...of"><code>for await ... of</code></a> statement:</p>
+<pre><code class="language-javascript">const result = await client.execute(query, params, { prepare: true });
+
+for await (const row of result) {
+  console.log(row[columnName]);
+}
+</code></pre>
+<p>Under the hood, the driver will get all the rows of the query result using multiple requests. Initially,
+when calling <code>execute()</code> it will retrieve the first page of results according to the fetch size (defaults to <code>5000</code>).
+If there are additional rows, those will be retrieved once the async iterator yielded the rows from the previous page.</p>
+<dl>
+<dt id="if-needed-you-can-use-ispaged-method-of-resultset-instance-to-determine-whether-there-are-more-pages-of-results-than-initially-fetched"><a class="header" href="#if-needed-you-can-use-ispaged-method-of-resultset-instance-to-determine-whether-there-are-more-pages-of-results-than-initially-fetched">If needed, you can use <code>isPaged()</code> method of <code>ResultSet</code> instance to determine whether there are more pages of results
+than initially fetched.</a></dt>
+<dd>
+<p>::{warning}
+Note that using either the async or sync iterators will not affect the internal state of the <code>ResultSet</code> instance.
+The following methods are mutually exclusive, so you should use only one per ResultSet instance:</p>
+</dd>
+</dl>
+<ul>
+<li>rows property, which contains the row instances of the first page of results,</li>
+<li>sync iterator, which will yield all the rows in the current page,</li>
+<li>async iterator, which will yield all the rows in the result regardless of the number of pages.
+:::</li>
+</ul>
+<h3 id="each-row-callback"><a class="header" href="#each-row-callback">Each row callback</a></h3>
+<p>You can also iterate through pages by setting a per-page callback.
+<code>eachRow()</code> works in two modes, depending on the <code>QueryOptions.autoPage</code> configuration:</p>
+<ul>
+<li>automatic paging: keeps fetching pages until all rows are processed (this is the default mode),</li>
+<li>manual paging: fetches one page at a time. This mode gives you access to result sets of intermediate pages.
+To fetch the next page, you need to call <code>result.nextPage()</code>.</li>
+</ul>
+<p><code>eachRow()</code> calls:</p>
+<ul>
+<li><code>rowCallback(rowIndex, row)</code> for each row as soon as it is received,</li>
+<li><code>callback(err, result)</code>:
+<ul>
+<li>when <code>autoPage</code> is set to true: after all pages are fetched and <code>rowCallback</code> was called for each row,</li>
+<li>when <code>autoPage</code> is set to false: after the current page is fetched and <code>rowCallback</code> was called for each row,</li>
+<li>when an error occurs.</li>
+</ul>
+</li>
+</ul>
+<pre><code class="language-javascript">client.eachRow(
+  query,
+  parameters,
+  { prepare: true, autoPage },
+  (rowIndex, row) =&gt; {
+    // process row
+  },
+  (err, result) =&gt; {
+    if (err) {
+      // handle error
+      return;
+    }
+    if (result.nextPage) {
+      // Handle intermediate page result set. This branch will be taken only when autoPage is disabled.
+      // When autoPage is enabled you will not have access to those result sets.
+      result.nextPage();
+    } else {
+      // Handle last page result.
+    }
+  }
+);
+</code></pre>
+<h3 id="row-streams"><a class="header" href="#row-streams">Row streams</a></h3>
+<p>If you want to handle a large result set as a <a href="https://nodejs.org/api/stream.html"><code>Stream</code></a> of rows, you can use <code>stream()</code> method of the
+<code>Client</code> instance. The <code>stream()</code> method automatically fetches the following pages, yielding the rows as they come
+through the network and retrieving the following page only after the previous rows were read (throttling).</p>
+<pre><code class="language-javascript">client.stream(query, parameters, options)
+  .on('readable', function () {
+    // readable is emitted as soon as a row is received and parsed
+    let row;
+    while (row = this.read()) {
+      // process row
+    }
+  })
+  .on('end', function () {
+    // emitted when all rows have been retrieved and read
+  });
+</code></pre>
+<h2 id="manual-paging"><a class="header" href="#manual-paging">Manual paging</a></h2>
+<p>Sometimes it is convenient to save the paging state in order to restore it later. For example, consider a stateless
+web service that displays a list of results with a link to the next page. When the user clicks that link, we want to
+run the exact same query, except that the iteration should start where we stopped on the previous page.</p>
+<p>To do so, the driver exposes a <code>pagingState</code> object that represents where we were in the result set when the last page
+was fetched:</p>
+<pre><code class="language-javascript">const options = { prepare: true, fetchSize: 1000 };
+const result = await client.execute(query, parameters, options);
+
+// Property 'rows' will contain only the amount of items of the first page (max 1000 in this case)
+const rows = result.rows;
+
+// Store the page state
+let pageState = result.pageState;
+</code></pre>
+<p>In the next request, use the <code>pageState</code> to fetch the following rows.</p>
+<pre><code class="language-javascript">// Use the pageState in the queryOptions to continue where you left it.
+const options = { pageState, prepare: true, fetchSize: 1000 };
+const result = await client.execute(query, parameters, options);
+
+// Following rows up to fetch size (1000)
+const rows = result.rows;
+
+// Store the next paging state.
+pageState = result.pageState;
+</code></pre>
+<p>Saving the paging state works well when you only let the user move from one page to the next. But it doesn’t allow
+arbitrary jumps (like “go directly to page 10”), because you can’t fetch a page unless you have the paging state of the
+previous one. Such a feature would require offset queries, which are not natively supported by ScyllaDB and Apache Cassandra.</p>
+<p><strong>Note</strong>: The page state token can be manipulated to retrieve other results within the same column family, so it is not
+safe to expose it to the users in plain text.</p>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best practices</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Query result fetching</th><th>Unpaged</th><th>Paged manually</th><th>Paged automatically</th></tr>
+</thead>
+<tbody>
+<tr><td>Exposed Client API</td><td><code>execute</code> with <code>QueryOptions.paged = false</code></td><td><code>execute</code> with <code>QueryOptions.pageState</code></td><td>Async iterators, each row callbacks, streams</td></tr>
+<tr><td>Working</td><td>get all results in a single CQL frame, into a single result set</td><td>get one page of results in a single CQL frame, into a single result set</td><td>upon high-level iteration, fetch consecutive CQL frames and transparently iterate over their rows</td></tr>
+<tr><td>Cluster load</td><td>potentially <strong>HIGH</strong> for large results, beware!</td><td>normal</td><td>normal</td></tr>
+<tr><td>Driver overhead</td><td>low - simple frame fetch</td><td>low - simple frame fetch</td><td>low - simple frame fetch</td></tr>
+<tr><td>Driver memory footprint</td><td>potentially <strong>BIG</strong> - all results have to be stored at once!</td><td>small - only one page stored at a time</td><td>small - at most constant number of pages stored at a time</td></tr>
+<tr><td>Latency</td><td>potentially <strong>BIG</strong> - all results have to be generated at once!</td><td>considerable on page boundary - new page needs to be fetched</td><td>considerable on page boundary - new page needs to be fetched</td></tr>
+<tr><td>Suitable operations</td><td>- in general: operations with empty result set (non-SELECTs) - as possible optimisation: SELECTs with LIMIT clause</td><td>- for advanced users who prefer more control over paging</td><td>- in general: all SELECTs</td></tr>
+</tbody>
+</table>
+</div>
+<div style="break-before: page; page-break-before: always;"></div><!-- This document is heavily based on the DSx driver documentation:
+https://docs.datastax.com/en/developer/nodejs-driver/4.8/features/batch/index.html
+and rust driver documentation:
+https://rust-driver.docs.scylladb.com/stable/statements/batch.html -->
+<h1 id="batch-statements"><a class="header" href="#batch-statements">Batch statements</a></h1>
+<p>It’s common for applications to require atomic batching of multiple <code>INSERT</code>, <code>UPDATE</code>, or <code>DELETE</code> statements, even in
+different partitions or column families. The driver allows you to execute multiple statements atomically
+without the need to concatenate multiple queries.</p>
+<blockquote>
+<p><em><strong>Warning</strong></em><br>Batches containing statements that target different partitions will no longer
+be correctly token- and shard-aware, which will hurt performance.
+Batches should not normally be used to boost performance in ScyllaDB.
+Batches’ goal is enabling atomicity, not increased efficiency.
+If you want to execute multiple statements efficiently and you do not
+care about atomicity of the operation, we would recommend using <code>executeConcurrent</code> endpoint.</p>
+</blockquote>
+<p>The method <code>batch()</code> accepts the list of queries as first parameter.
+Each query can be either just a statement string, or <code>{ query, params }</code> object:</p>
+<pre><code class="language-javascript">const query1 = 'INSERT INTO user_profiles (email) VALUES (\'example@example.com\`)';
+const query2 = 'UPDATE user_profiles SET email = ? WHERE key = ?';
+const query3 = 'INSERT INTO user_track (key, text, date) VALUES (?, ?, ?)';
+const queries = [
+  query1,
+  { query: query2, params: [emailAddress, 'hendrix'] },
+  { query: query3, params: ['hendrix', 'Changed email', new Date()] }
+];
+// Promise-based call
+client.batch(queries, { prepare: true })
+  .then(function() {
+    // All queries have been executed successfully
+  })
+  .catch(function(err) {
+    // None of the changes have been applied
+  });
+</code></pre>
+<p>Or using the callback-based invocation</p>
+<pre><code class="language-javascript">client.batch(queries, { prepare: true }, function (err) {
+   // All queries have been executed successfully
+   // Or none of the changes have been applied, check err
+});
+</code></pre>
+<p>By preparing your queries, you will get the best performance and your JavaScript parameters correctly mapped to
+Cassandra types. The driver will prepare each query once on each host and execute the batch every time with the
+different parameters provided.</p>
+<blockquote>
+<p><em><strong>Warning</strong></em><br>Using unprepared statements with bind markers in batches is strongly discouraged.
+For each unprepared statement with a non-empty list of values in the batch,
+the driver will send a prepare request, and it will be done <strong>sequentially</strong>.
+Results of preparation are not cached between <code>batch</code> calls.
+Consider preparing the statements before putting them into the batch.</p>
+</blockquote>
+<p>Note that batches are not suitable for bulk loading, there are dedicated tools for that. Batches allow you
+to group related updates in a single request, so keep the batch size small (in the order of tens).
+Refer to <a href="https://docs.scylladb.com/manual/stable/cql/dml/batch.html">CQL documentation</a> for information about correct and incorrect use of batches.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="shutdown"><a class="header" href="#shutdown">Shutdown</a></h1>
 <p>It is not possible to explicitly close connection to the database.
 A connection is closed when the client variable associated with this connection is collected by the garbage collector.<br>Even though removal of references to the object is explicit,
 the actual GC run that frees objects that have no active references to is implicit.</p>

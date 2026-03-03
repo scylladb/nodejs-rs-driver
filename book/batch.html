@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Unprepared statement parameters - ScyllaDB JavaScript Driver</title>
+        <title>Batch statements - ScyllaDB JavaScript Driver</title>
 
 
         <!-- Custom HTML head -->
@@ -174,207 +174,70 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="unprepared-statements"><a class="header" href="#unprepared-statements">Unprepared statements</a></h1>
-<p>Whenever you want to execute statements without their prior preparation, you need to inform the driver what the inserted data is.
-There are multiple ways you can achieve that:</p>
-<ol>
-<li>passing recognizable types,</li>
-<li>passing a <em>type hint</em> alongside the value,</li>
-<li>passing already serialized values.</li>
-</ol>
-<h2 id="recognizable-types"><a class="header" href="#recognizable-types">Recognizable types</a></h2>
-<p>When you pass a value of a specific type, the driver will attempt to guess the type of the value
-that should be inserted into the database. This is also known as <strong>type guessing</strong>.
-While this is useful for simple types, this may not work properly with more advanced types,
-or multiple types that look the same in JS but are encoded differently in CQL protocol (undesired unification).</p>
-<p>Here you can find for each CQL type, what JS values can be used to represent given type and be guessed:</p>
-<!-- TODO: In some place list all accepted types without type guessing -->
-<ul>
-<li>Ascii, Text:
-<ul>
-<li><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String">String</a> (except strings that match UUID regex).
-Please note that when using type guessing all the strings will be encoded with utf-8 encoding.</li>
-</ul>
-</li>
-<li>BigInt, Counter:
-<ul>
-<li><a href="https://www.npmjs.com/package/long">Long</a> class</li>
-</ul>
-<!-- Internal note. BigInt is not guess into any type. Maybe add guessing for that? -->
-</li>
-<li>Boolean:
-<ul>
-<li><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Boolean">boolean</a></li>
-</ul>
-</li>
-<li>Blob:
-<ul>
-<li>Blobs can be encoded only from Buffer, which formally is already a serialized value</li>
-</ul>
-</li>
-<li>Decimal:
-<ul>
-<li>BigDecimal class (class exposed by this driver)</li>
-</ul>
-</li>
-<li>Double:
-<ul>
-<li><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number">Number</a></li>
-</ul>
-</li>
-<li>Date:
-<ul>
-<li>LocalDate class (class exposed by this driver)</li>
-</ul>
-</li>
-<li>Duration:
-<ul>
-<li>Duration class (class exposed by this driver)</li>
-</ul>
-</li>
-<li>Float, Int, SmallInt, TinyInt:
-<ul>
-<li>It’s not possible to guess those types</li>
-</ul>
-</li>
-<li>Timestamp:
-<ul>
-<li><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date">Date</a></li>
-</ul>
-</li>
-<li>Inet:
-<ul>
-<li>InetAddress class (class exposed by this driver)</li>
-</ul>
-</li>
-<li>List, Set:
-<ul>
-<li><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array">Array</a></li>
-</ul>
-</li>
-<li>Map:
-<ul>
-<li>It’s not possible to guess this type</li>
-</ul>
-</li>
-<li>UDT:
-<ul>
-<li>It’s not possible to guess this type</li>
-</ul>
-</li>
-<li>Time:
-<ul>
-<li>LocalTime class (class exposed by this driver)</li>
-</ul>
-</li>
-<li>Uuid, TimeUuid:
-<ul>
-<li>any string matching Uuid regex</li>
-<li>Uuid class (class exposed by this driver)</li>
-</ul>
-</li>
-<li>Tuple:
-<ul>
-<li>Tuple class (class exposed by this driver)</li>
-</ul>
-</li>
-<li>Varint:
-<ul>
-<li>Integer class (class exposed by this driver)</li>
-</ul>
-</li>
-</ul>
-<h2 id="type-hints"><a class="header" href="#type-hints">Type hints</a></h2>
-<p>Sometimes you might want to use CQL types which cannot be guessed,
-or use one of the value formats you cannot use for guessing.
-One example is that you are passing a string that matches uuid regex.
-It would be guessed as uuid CQL type, so if you want to pass it as a CQL string (Text or Ascii),
-you need another way: you can provide <em>a type hint</em>. With the type hint, you provide the desired CQL type of the value,
-which allows to properly serialize the value into CQL protocol format.</p>
-<p>There are two supported formats of providing type hints:</p>
-<ul>
-<li>Text representation,</li>
-<li>Object representation.</li>
-</ul>
-<h3 id="text-representation"><a class="header" href="#text-representation">Text representation</a></h3>
-<p>You can provide a string containing the type of the value. Examples:</p>
-<ul>
-<li><code>timestamp</code>,</li>
-<li><code>list&lt;int&gt;</code>,</li>
-<li><code>map</code> (this is a <em>partial hint</em>!),</li>
-<li><code>tuple&lt;int, boolean&gt;</code>, <code>udt&lt;name_of_the_udt&gt;</code>,</li>
-<li><code>vector&lt;float, 7&gt;</code> (for vectors, first provide type, then dimension).</li>
-</ul>
-<h3 id="object-representation"><a class="header" href="#object-representation">Object representation</a></h3>
-<p>Due to the complexity of this form of hint representation, we recommend using text representation of the type hints.</p>
-<p>You can provide a type hint as an object with the following structure:</p>
-<pre><code class="language-javascript">{
-  code: number,             // A variant of types.dataTypes enum
-  info: type_info?,         // Additional type information (necessary for complex types: see bellow)
-  customTypeName: string?   // Type name (necessary when code is set to dataTypes.custom)
-}
+                        <!-- This document is heavily based on the DSx driver documentation:
+https://docs.datastax.com/en/developer/nodejs-driver/4.8/features/batch/index.html
+and rust driver documentation:
+https://rust-driver.docs.scylladb.com/stable/statements/batch.html -->
+<h1 id="batch-statements"><a class="header" href="#batch-statements">Batch statements</a></h1>
+<p>It’s common for applications to require atomic batching of multiple <code>INSERT</code>, <code>UPDATE</code>, or <code>DELETE</code> statements, even in
+different partitions or column families. The driver allows you to execute multiple statements atomically
+without the need to concatenate multiple queries.</p>
+<blockquote>
+<p><em><strong>Warning</strong></em><br>Batches containing statements that target different partitions will no longer
+be correctly token- and shard-aware, which will hurt performance.
+Batches should not normally be used to boost performance in ScyllaDB.
+Batches’ goal is enabling atomicity, not increased efficiency.
+If you want to execute multiple statements efficiently and you do not
+care about atomicity of the operation, we would recommend using <code>executeConcurrent</code> endpoint.</p>
+</blockquote>
+<p>The method <code>batch()</code> accepts the list of queries as first parameter.
+Each query can be either just a statement string, or <code>{ query, params }</code> object:</p>
+<pre><code class="language-javascript">const query1 = 'INSERT INTO user_profiles (email) VALUES (\'example@example.com\`)';
+const query2 = 'UPDATE user_profiles SET email = ? WHERE key = ?';
+const query3 = 'INSERT INTO user_track (key, text, date) VALUES (?, ?, ?)';
+const queries = [
+  query1,
+  { query: query2, params: [emailAddress, 'hendrix'] },
+  { query: query3, params: ['hendrix', 'Changed email', new Date()] }
+];
+// Promise-based call
+client.batch(queries, { prepare: true })
+  .then(function() {
+    // All queries have been executed successfully
+  })
+  .catch(function(err) {
+    // None of the changes have been applied
+  });
 </code></pre>
-<p>The <code>code</code> property should represent the base type of the value - you can find possible values in the
-<a href="https://github.com/scylladb/nodejs-rs-driver/blob/0342b6789b59106ce3d9d2964fd27514a0b42d68/lib/types/index.js#L93-L121"><code>types.dataTypes</code></a>.</p>
-<p>The <code>info</code> property depends on the type:</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Type</th><th><code>info</code> value</th></tr>
-</thead>
-<tbody>
-<tr><td>Simple types (int, text, boolean, etc.)</td><td><code>null</code> or omitted</td></tr>
-<tr><td>List, Set</td><td>A type hint object for the element type</td></tr>
-<tr><td>Map</td><td>An array of two type hint objects: <code>[keyType, valueType]</code></td></tr>
-<tr><td>Tuple</td><td>An array of type hint objects, one for each element</td></tr>
-<tr><td>UDT</td><td>Object of UdtColumnInfo type</td></tr>
-<tr><td>Vector</td><td>An array: <code>[elementTypeHint, dimension]</code> where dimension is a number</td></tr>
-</tbody>
-</table>
-</div>
-<p>See the <a href="https://github.com/scylladb/nodejs-rs-driver/blob/0342b6789b59106ce3d9d2964fd27514a0b42d68/lib/encoder.js#L22-L32">type definitions</a> for more detailed information
-on how info field should look like.</p>
-<h4 id="examples"><a class="header" href="#examples">Examples</a></h4>
-<pre><code class="language-javascript">// equivalent to `int`
-const intHint = { code: 0x9 /* types.dataTypes.int */ }; 
-
-// equivalent to `map&lt;text, boolean&gt;`
-const mapHint = { 
-  code: 0x21 /* types.dataTypes.map */, 
-  info: [
-    { code: 0xa /* types.dataTypes.text */ },
-    { code: 0x4 /* types.dataTypes.boolean */ }
-  ] 
-};
-
-// equivalent to `vector&lt;float, 3&gt;`
-const vectorHint = { 
-  code: 0x0 /* types.dataTypes.custom */, 
-  customTypeName: "vector",
-  info: [{ code: 0x8 /* types.dataTypes.float */ }, 3] 
-};
+<p>Or using the callback-based invocation</p>
+<pre><code class="language-javascript">client.batch(queries, { prepare: true }, function (err) {
+   // All queries have been executed successfully
+   // Or none of the changes have been applied, check err
+});
 </code></pre>
-<hr>
-<p>Hints can be provided for all or only some of the parameters.<br>A hint can be full or partial. A hint is considered <em>full</em> when<br>it specifies either:</p>
-<ul>
-<li>a simple type (like int or date),</li>
-<li>or a complex type (like a list or a map) with all its subtypes specified.<br>A hint is considered <em>partial</em> if it defines a complex type without<br>specifying hints for its subtypes.<br>A complex type hint with hints provided for only some subtypes — such as specifying<br>the type of map keys but not the values — is not considered a valid hint.<br>When a partial hint is provided, the driver attempts to guess the remaining part of the value’s type.</li>
-</ul>
-<p>In prepared statements any hints you provide will be ignored.</p>
-<h2 id="serialized-values"><a class="header" href="#serialized-values">Serialized values</a></h2>
-<p>It’s possible to pass an already serialized value as a <a href="https://nodejs.org/api/buffer.html#buffer">Buffer</a>.
-Normally, this is not recommended unless you want to write your own encoder.
-This might be a viable way if you, for some reason, have already serialized CQL values at hand.</p>
+<p>By preparing your queries, you will get the best performance and your JavaScript parameters correctly mapped to
+Cassandra types. The driver will prepare each query once on each host and execute the batch every time with the
+different parameters provided.</p>
+<blockquote>
+<p><em><strong>Warning</strong></em><br>Using unprepared statements with bind markers in batches is strongly discouraged.
+For each unprepared statement with a non-empty list of values in the batch,
+the driver will send a prepare request, and it will be done <strong>sequentially</strong>.
+Results of preparation are not cached between <code>batch</code> calls.
+Consider preparing the statements before putting them into the batch.</p>
+</blockquote>
+<p>Note that batches are not suitable for bulk loading, there are dedicated tools for that. Batches allow you
+to group related updates in a single request, so keep the batch size small (in the order of tens).
+Refer to <a href="https://docs.scylladb.com/manual/stable/cql/dml/batch.html">CQL documentation</a> for information about correct and incorrect use of batches.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="load_balancing.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="paging.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="internal/SUMMARY.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="shutdown.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -384,11 +247,11 @@ This might be a viable way if you, for some reason, have already serialized CQL 
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="load_balancing.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="paging.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="internal/SUMMARY.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="shutdown.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
