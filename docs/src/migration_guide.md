@@ -143,3 +143,14 @@ re-implementing its functionality. You do not have to update your code to migrat
 #### IdempotenceAwareRetryPolicy
 
 This policy was deprecated in the `cassandra-driver`, and for this reason was removed from this driver.
+
+## Metadata
+
+### Hosts
+
+#### Hosts order
+
+The `cassandra-driver` driver had some undocumented assumptions about the order of hosts,
+when using `client.hosts.keys()` - see issue [#282](https://github.com/scylladb/nodejs-rs-driver/issues/282)
+(they were checked in the driver tests). Those assumptions no longer hold true,
+the hosts returned from `client.hosts.keys()` may be in a random order, that may vary from run to run.
