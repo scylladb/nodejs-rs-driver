@@ -29,7 +29,7 @@ export class Client extends events.EventEmitter {
   metadata: metadata.Metadata;
   metrics: metrics.ClientMetrics;
 
-  constructor(options: DseClientOptions);
+  constructor(options: ClientOptions);
 
   connect(): Promise<void>;
 
@@ -240,6 +240,9 @@ export interface ClientOptions {
     tcpNoDelay?: boolean;
   };
   sslOptions?: SslOptions;
+  id?: Uuid;
+  applicationName?: string;
+  applicationVersion?: string;
 }
 
 export interface SslOptions {
@@ -279,12 +282,6 @@ export interface QueryOptions {
   serialConsistency?: number;
   timestamp?: number | Long;
   traceQuery?: boolean;
-}
-
-export interface DseClientOptions extends ClientOptions {
-  id?: Uuid;
-  applicationName?: string;
-  applicationVersion?: string;
 }
 
 export class ExecutionProfile {
