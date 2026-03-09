@@ -48,6 +48,10 @@ The ability to use the driver with types is kept as a legacy option, and may be 
 
 ## Load balancing policies
 
+Unless you have specific requirements about load balancing policies, we recommend using the default
+load balancing policy. Below you can find a detailed list of changes made to the load balancing
+policies compared to the `cassandra-driver`.
+
 ### Supported load balancing policies
 
 The following policies are still supported by the driver:
@@ -117,6 +121,9 @@ This is a change in behavior. In the DataStax driver, when `localDc` would not b
 
 ## Retry policies
 
+A new version of the default retry policy was introduced. We recommend using it as a replacement
+for the legacy default policy.
+
 ### Supported retry policies
 
 - `FallthroughRetryPolicy`
@@ -131,7 +138,7 @@ This is a change in behavior. In the DataStax driver, when `localDc` would not b
 
 The `RetryPolicy` as present in the DataStax driver is no longer supported.
 It was replaced with a [new implementation](./retry_policies.md). There are no plans for
-re-implementing its functionality. You do not have to update a code to migrate to the new policy.
+re-implementing its functionality. You do not have to update your code to migrate to the new policy.
 
 #### IdempotenceAwareRetryPolicy
 
