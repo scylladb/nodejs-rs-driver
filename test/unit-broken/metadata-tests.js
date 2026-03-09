@@ -19,8 +19,6 @@ const dataTypes = types.dataTypes;
 const utils = require("../../lib/utils");
 const errors = require("../../lib/errors");
 const Encoder = require("../../lib/encoder");
-const isDoneForToken =
-    require("../../lib/metadata/schema-parser").isDoneForToken;
 
 describe("Metadata", function () {
     this.timeout(5000);
@@ -4978,47 +4976,6 @@ describe("Metadata", function () {
             return metadata
                 .checkSchemaAgreement()
                 .then((agreement) => assert.strictEqual(agreement, false));
-        });
-    });
-});
-
-describe("SchemaParser", function () {
-    describe("isDoneForToken()", function () {
-        it("should skip if dc not included in topology", function () {
-            const replicationFactors = { dc1: 3, dc2: 1 };
-            // dc2 does not exist
-            const datacenters = {
-                dc1: { hostLength: 6 },
-            };
-            assert.strictEqual(
-                false,
-                isDoneForToken(replicationFactors, datacenters, {}),
-            );
-        });
-
-        it("should skip if rf equals to 0", function () {
-            // rf 0 for dc2
-            const replicationFactors = { dc1: 4, dc2: 0 };
-            const datacenters = {
-                dc1: { hostLength: 6 },
-                dc2: { hostLength: 6 },
-            };
-            assert.strictEqual(
-                true,
-                isDoneForToken(replicationFactors, datacenters, { dc1: 4 }),
-            );
-        });
-
-        it("should return false for undefined replicasByDc[dcName]", function () {
-            const replicationFactors = { dc1: 3, dc2: 1 };
-            // dc2 does not exist
-            const datacenters = {
-                dc1: { hostLength: 6 },
-            };
-            assert.strictEqual(
-                false,
-                isDoneForToken(replicationFactors, datacenters, {}),
-            );
         });
     });
 });
