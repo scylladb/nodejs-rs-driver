@@ -1,4 +1,4 @@
-use crate::session::{
+use crate::session::config::{
     LoadBalancingConfig, RetryPolicyKind, SessionOptions, SslOptions, TlsVersion,
 };
 use napi::bindgen_prelude::BigInt;
