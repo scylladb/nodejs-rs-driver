@@ -70,34 +70,6 @@ export interface Index {
     isKeysKind(): boolean;
   }
 
-export interface DataCollection {
-    bloomFilterFalsePositiveChance: number;
-    caching: string;
-    clusteringKeys: ColumnInfo[];
-    clusteringOrder: string[];
-    columns: ColumnInfo[];
-    columnsByName: { [key: string]: ColumnInfo };
-    comment: string;
-    compactionClass: string;
-    compactionOptions: { [option: string]: any };
-    compression: {
-      class?: string;
-      [option: string]: any;
-    };
-    crcCheckChange?: number;
-    defaultTtl: number;
-    extensions: { [option: string]: any };
-    gcGraceSeconds: number;
-    localReadRepairChance: number;
-    maxIndexInterval?: number;
-    minIndexInterval?: number;
-    name: string;
-    partitionKeys: ColumnInfo[];
-    populateCacheOnFlush: boolean;
-    readRepairChance: number;
-    speculativeRetry: string;
-  }
-
 export interface MaterializedView extends TableMetadata {
     tableName: string;
   }
