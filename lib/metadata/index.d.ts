@@ -1,11 +1,10 @@
-import { types } from "../types";
+import * as types from "../types";
 import { EmptyCallback, Host, token, ValueCallback } from "../../";
 import dataTypes = types.dataTypes;
 import Uuid = types.Uuid;
 import InetAddress = types.InetAddress;
 
-export namespace metadata {
-  interface Aggregate {
+export interface Aggregate {
     argumentTypes: Array<{ code: dataTypes; info: any }>;
     finalFunction: string;
     initCondition: string;
@@ -16,7 +15,7 @@ export namespace metadata {
     stateType: string;
   }
 
-  interface ClientState {
+export interface ClientState {
     getConnectedHosts(): Host[];
 
     getInFlightQueries(host: Host): number;
@@ -26,7 +25,7 @@ export namespace metadata {
     toString(): string;
   }
 
-  interface DataTypeInfo {
+export interface DataTypeInfo {
     code: dataTypes;
     info: string | DataTypeInfo | DataTypeInfo[];
     options: {
@@ -35,18 +34,30 @@ export namespace metadata {
     };
   }
 
-  interface ColumnInfo {
+export interface ColumnInfo {
     name: string;
     type: DataTypeInfo;
   }
 
-  enum IndexKind {
+export enum ColumnKind {
+    Regular = 0,
+    Static,
+    Clustering,
+    PartitionKey,
+  }
+
+export interface ColumnMetadata {
+    type: string;
+    kind: ColumnKind;
+  }
+
+export enum IndexKind {
     custom = 0,
     keys,
     composites,
   }
 
-  interface Index {
+export interface Index {
     kind: IndexKind;
     name: string;
     options: object;
@@ -59,7 +70,7 @@ export namespace metadata {
     isKeysKind(): boolean;
   }
 
-  interface DataCollection {
+export interface DataCollection {
     bloomFilterFalsePositiveChance: number;
     caching: string;
     clusteringKeys: ColumnInfo[];
@@ -87,23 +98,18 @@ export namespace metadata {
     speculativeRetry: string;
   }
 
-  interface MaterializedView extends DataCollection {
+export interface MaterializedView extends TableMetadata {
     tableName: string;
-    whereClause: string;
-    includeAllColumns: boolean;
   }
 
-  interface TableMetadata extends DataCollection {
-    indexes: Index[];
-    indexInterval?: number;
-    isCompact: boolean;
-    memtableFlushPeriod: number;
-    replicateOnWrite: boolean;
-    cdc?: boolean;
-    virtual: boolean;
+export interface TableMetadata {
+    columns: { [name: string]: ColumnMetadata };
+    partitionKey: string[];
+    clusteringKey: string[];
+    partitioner: string | null;
   }
 
-  interface QueryTrace {
+export interface QueryTrace {
     requestType: string;
     coordinator: InetAddress;
     parameters: { [key: string]: any };
@@ -119,7 +125,7 @@ export namespace metadata {
     }>;
   }
 
-  interface SchemaFunction {
+export interface SchemaFunction {
     argumentNames: string[];
     argumentTypes: Array<{ code: dataTypes; info: any }>;
     body: string;
@@ -131,12 +137,33 @@ export namespace metadata {
     signature: string[];
   }
 
-  interface Udt {
+export interface Udt {
     name: string;
     fields: ColumnInfo[];
   }
 
-  interface Metadata {
+export enum StrategyKind {
+    SimpleStrategy = 0,
+    NetworkTopologyStrategy,
+    LocalStrategy,
+    Other,
+  }
+
+export type Strategy =
+    | { kind: StrategyKind.SimpleStrategy; replicationFactor: number }
+    | { kind: StrategyKind.NetworkTopologyStrategy; datacenterRepfactors: { [datacenter: string]: number } }
+    | { kind: StrategyKind.LocalStrategy }
+    | { kind: StrategyKind.Other; name: string; data: { [key: string]: string } };
+
+export interface KeyspaceMetadata {
+    strategy: Strategy;
+    durableWrites: boolean;
+    tables: { [name: string]: TableMetadata };
+    views: { [name: string]: MaterializedView };
+    userDefinedTypes: { [name: string]: Udt };
+  }
+
+export interface Metadata {
     keyspaces: { [name: string]: { name: string; strategy: string } };
 
     clearPrepared(): void;
@@ -252,4 +279,3 @@ export namespace metadata {
 
     refreshKeyspaces(callback: EmptyCallback): void;
   }
-}

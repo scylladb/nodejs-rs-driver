@@ -1,7 +1,6 @@
 import { ExecutionOptions, Host } from "../../";
 
-export namespace tracker {
-  interface RequestTracker {
+export interface RequestTracker {
     onError(
       host: Host,
       query: string | Array<{ query: string; params?: any }>,
@@ -25,7 +24,7 @@ export namespace tracker {
     shutdown(): void;
   }
 
-  class RequestLogger implements RequestTracker {
+export class RequestLogger implements RequestTracker {
     constructor(options: {
       slowThreshold?: number;
       logNormalRequests?: boolean;
@@ -57,4 +56,3 @@ export namespace tracker {
 
     shutdown(): void;
   }
-}

@@ -1,18 +1,18 @@
 import * as events from "events";
 import * as tls from "tls";
 import { URL } from "url";
-import { auth } from "./lib/auth";
-import { policies } from "./lib/policies";
-import { types } from "./lib/types";
-import { metrics } from "./lib/metrics";
-import { tracker } from "./lib/tracker";
-import { metadata } from "./lib/metadata";
+import * as auth from "./lib/auth";
+import * as policies from "./lib/policies";
+import * as types from "./lib/types";
+import * as metrics from "./lib/metrics";
+import * as tracker from "./lib/tracker";
+import * as metadata from "./lib/metadata";
 import Long = types.Long;
 import Uuid = types.Uuid;
 
 // Export imported submodules
-export { concurrent } from "./lib/concurrent";
-export { mapping } from "./lib/mapping";
+export * as concurrent from "./lib/concurrent";
+export * as mapping from "./lib/mapping";
 export { auth, metadata, metrics, policies, tracker, types };
 
 export const version: number;
