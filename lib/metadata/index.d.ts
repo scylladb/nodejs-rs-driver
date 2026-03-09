@@ -39,6 +39,18 @@ export interface ColumnInfo {
     type: DataTypeInfo;
   }
 
+export enum ColumnKind {
+    Regular = 0,
+    Static,
+    Clustering,
+    PartitionKey,
+  }
+
+export interface ColumnMetadata {
+    type: string;
+    kind: ColumnKind;
+  }
+
 export enum IndexKind {
     custom = 0,
     keys,
@@ -92,14 +104,11 @@ export interface MaterializedView extends DataCollection {
     includeAllColumns: boolean;
   }
 
-export interface TableMetadata extends DataCollection {
-    indexes: Index[];
-    indexInterval?: number;
-    isCompact: boolean;
-    memtableFlushPeriod: number;
-    replicateOnWrite: boolean;
-    cdc?: boolean;
-    virtual: boolean;
+export interface TableMetadata {
+    columns: { [name: string]: ColumnMetadata };
+    partitionKey: string[];
+    clusteringKey: string[];
+    partitioner: string | null;
   }
 
 export interface QueryTrace {
