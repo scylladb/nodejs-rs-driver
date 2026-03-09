@@ -1,5 +1,5 @@
 use crate::{
-    session::{
+    session::config::{
         FixedAddressTranslatorConfig, LoadBalancingConfig, RetryPolicyKind, SessionOptions,
         SslOptions, TlsVersion,
     },
