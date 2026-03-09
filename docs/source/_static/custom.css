@@ -1,0 +1,65 @@
+/* Left sidebar — break long names like UnderscoreCqlToCamelCaseMappings */
+.side-nav__content a {
+    overflow-wrap: break-word;
+    word-break: break-word;
+}
+
+/* JSDoc embedded content styles */
+
+/* Parameters, Returns, Example, Type, Throws, Extends — bold block labels */
+.jsdoc-content h4,
+.jsdoc-content h5,
+.jsdoc-content h6 {
+    font-size: 1em;
+    font-weight: 700;
+    margin-top: 1.2em;
+    margin-bottom: 0.4em;
+}
+
+/* Muted text for attribs, ancestors, and type signatures */
+.jsdoc-content .attribs,
+.jsdoc-content .ancestors,
+.jsdoc-content .type-signature {
+    color: var(--text-muted);
+}
+
+.jsdoc-content .ancestors a {
+    color: var(--text-muted);
+}
+
+/* Indent content after labels (Parameters, Returns, Type, Throws, etc.) */
+.jsdoc-content h5 + dl,
+.jsdoc-content h5 + .table-wrapper,
+.jsdoc-content h5 + table,
+.jsdoc-content h5 + ul,
+.jsdoc-content h5 + .param-desc,
+.jsdoc-content h6 + dl,
+.jsdoc-content h6 + .table-wrapper,
+.jsdoc-content h6 + table,
+.jsdoc-content h6 + ul {
+    margin-left: 1.5em;
+}
+
+/* Override table within tables style */
+.jsdoc-content .table-wrapper .table-wrapper {
+    margin: 0;
+}
+
+.jsdoc-content .table-wrapper .table-wrapper tbody,
+.jsdoc-content .table-wrapper .table-wrapper tr {
+    border: 0;
+}
+
+/* JSDoc parameter tables — give description column more space */
+.jsdoc-content table.params {
+    table-layout: fixed;
+    width: 100%;
+}
+
+.jsdoc-content table.params th.last {
+    width: 50%;
+}
+
+.jsdoc-content table.params td {
+    overflow-wrap: break-word;
+}

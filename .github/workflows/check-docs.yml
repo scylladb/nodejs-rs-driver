@@ -1,4 +1,5 @@
-name: Compile js-doc and build mdBook
+name: Check docs
+# Builds all documentation sources: js-doc, mdBook, and Sphinx.
 
 on:
   push:
@@ -12,24 +13,50 @@ permissions:
   contents: read
 
 jobs:
-  build-and-deploy:
+  check-docs:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      # --- js-doc ---
+
       - name: Set up Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
-      - name: Install dependencies
+
+      - name: Install npm dependencies
         run: npm install --dev
-      - name: Generate documentation
+
+      - name: Build js-doc
         run: npm run js-doc
-      - name: Setup mdBook
+
+      # --- mdBook ---
+
+      - name: Set up mdBook
         uses: peaceiris/actions-mdbook@v2
         with:
           mdbook-version: 'latest'
-      - run: mdbook build
+
+      - name: Build mdBook
+        run: mdbook build
         working-directory: ./docs
+
+      # --- Sphinx ---
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Set up Sphinx environment
+        run: make -C docs setupenv
+
+      - name: Build Sphinx docs
+        run: make -C docs test

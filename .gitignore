@@ -235,3 +235,7 @@ Cargo.lock
 __pycache__/
 *.pyc
 *.pyo
+
+#docs
+docs/_build
+docs/source/api/
