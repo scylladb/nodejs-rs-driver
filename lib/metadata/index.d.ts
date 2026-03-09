@@ -142,6 +142,27 @@ export interface Udt {
     fields: ColumnInfo[];
   }
 
+export enum StrategyKind {
+    SimpleStrategy = 0,
+    NetworkTopologyStrategy,
+    LocalStrategy,
+    Other,
+  }
+
+export type Strategy =
+    | { kind: StrategyKind.SimpleStrategy; replicationFactor: number }
+    | { kind: StrategyKind.NetworkTopologyStrategy; datacenterRepfactors: { [datacenter: string]: number } }
+    | { kind: StrategyKind.LocalStrategy }
+    | { kind: StrategyKind.Other; name: string; data: { [key: string]: string } };
+
+export interface KeyspaceMetadata {
+    strategy: Strategy;
+    durableWrites: boolean;
+    tables: { [name: string]: TableMetadata };
+    views: { [name: string]: MaterializedView };
+    userDefinedTypes: { [name: string]: Udt };
+  }
+
 export interface Metadata {
     keyspaces: { [name: string]: { name: string; strategy: string } };
 
