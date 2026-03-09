@@ -71,7 +71,7 @@ The (new) `DefaultLoadBalancingPolicy` can be used as a child policy to `TokenAw
 
 ### Not supported load balancing policies
 
-The following policies, that were present in the DataStax driver are not supported:
+The following policies that were present in the `cassandra-driver` are not supported:
 
 - `WhiteListPolicy`
 - (legacy) `DefaultLoadBalancingPolicy`
@@ -79,12 +79,12 @@ The following policies, that were present in the DataStax driver are not support
 
 #### WhiteListPolicy
 
-This policy was deprecated in the DataStax driver, and for this reason was removed from this driver.
+This policy was deprecated in the `cassandra-driver`, and for this reason was removed from this driver.
 You can use `AllowListPolicy` instead.
 
 #### legacy DefaultLoadBalancingPolicy
 
-The `DefaultLoadBalancingPolicy` as present in the DataStax driver is no longer supported.
+The `DefaultLoadBalancingPolicy` as present in the `cassandra-driver` is no longer supported.
 It was replaced with a [new implementation](./load_balancing.md). There are no plans for
 re-creating its functionality.
 
@@ -116,7 +116,7 @@ the load balancing will be set to allow connection to the provided datacenter.
 When `localDc` is not provided connections to all nodes will be allowed.
 
 **WARNING**:
-This is a change in behavior. In the DataStax driver, when `localDc` would not be provided,
+This is a change in behavior. In the `cassandra-driver`, when `localDc` would not be provided,
 `localDataCenter` from client options would be used.
 
 ## Retry policies
@@ -136,10 +136,10 @@ for the legacy default policy.
 
 #### legacy RetryPolicy
 
-The `RetryPolicy` as present in the DataStax driver is no longer supported.
+The `RetryPolicy` as present in the `cassandra-driver` is no longer supported.
 It was replaced with a [new implementation](./retry_policies.md). There are no plans for
 re-implementing its functionality. You do not have to update your code to migrate to the new policy.
 
 #### IdempotenceAwareRetryPolicy
 
-This policy was deprecated in the DataStax driver, and for this reason was removed from this driver.
+This policy was deprecated in the `cassandra-driver`, and for this reason was removed from this driver.
