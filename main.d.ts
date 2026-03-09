@@ -221,7 +221,6 @@ export interface ClientOptions {
   protocolOptions?: {
     maxSchemaAgreementWaitSeconds?: number;
     maxVersion?: number;
-    noCompact?: boolean;
     port?: number;
   };
   promiseFactory?: (
@@ -286,7 +285,6 @@ export interface DseClientOptions extends ClientOptions {
   id?: Uuid;
   applicationName?: string;
   applicationVersion?: string;
-  monitorReporting?: { enabled?: boolean };
 }
 
 export class ExecutionProfile {
