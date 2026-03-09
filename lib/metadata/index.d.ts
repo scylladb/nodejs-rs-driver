@@ -98,10 +98,8 @@ export interface DataCollection {
     speculativeRetry: string;
   }
 
-export interface MaterializedView extends DataCollection {
+export interface MaterializedView extends TableMetadata {
     tableName: string;
-    whereClause: string;
-    includeAllColumns: boolean;
   }
 
 export interface TableMetadata {
