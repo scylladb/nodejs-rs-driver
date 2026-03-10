@@ -154,7 +154,7 @@ jobs:
       - name: Publish
         run: |
           npm config set provenance true
-          npm publish --provenance --access public
+          npm publish --provenance --access public --dry-run
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
