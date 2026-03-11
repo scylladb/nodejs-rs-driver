@@ -20,7 +20,8 @@
   "napi": {
     "binary-name": "scylladb-driver-alpha",
     "targets": [
-      "x86_64-unknown-linux-gnu"
+      "x86_64-unknown-linux-gnu",
+      "x86_64-apple-darwin"
     ]
   },
   "repository": {
