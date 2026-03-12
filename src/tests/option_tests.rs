@@ -1,5 +1,9 @@
-use crate::session::{
-    LoadBalancingConfig, RetryPolicyKind, SessionOptions, SslOptions, TlsVersion,
+use crate::{
+    session::{
+        FixedAddressTranslatorConfig, LoadBalancingConfig, RetryPolicyKind, SessionOptions,
+        SslOptions, TlsVersion,
+    },
+    types::type_helpers::SocketAddrWrapper,
 };
 use napi::bindgen_prelude::BigInt;
 
@@ -47,7 +51,17 @@ pub fn tests_check_client_option(options: SessionOptions, test_case: i32) {
                         enable_shuffling_replicas: Some(false),
                         allow_list: Some(vec!["127.0.0.1:7312".to_owned()]),
                     }),
-                    retry_policy: Some(RetryPolicyKind::Default)
+                    retry_policy: Some(RetryPolicyKind::Default),
+                    address_translator_config: Some(FixedAddressTranslatorConfig {
+                        address_mapping: Some(vec![(
+                            SocketAddrWrapper {
+                                socket: "2.1.3.7:690".parse().unwrap()
+                            },
+                            SocketAddrWrapper {
+                                socket: "7.3.1.2:960".parse().unwrap()
+                            }
+                        )])
+                    })
                 }
             )
         }
@@ -65,7 +79,8 @@ pub fn tests_check_client_option(options: SessionOptions, test_case: i32) {
                     cache_size: None,
                     ssl_options: None,
                     load_balancing_config: None,
-                    retry_policy: None
+                    retry_policy: None,
+                    address_translator_config: None
                 }
             )
         }

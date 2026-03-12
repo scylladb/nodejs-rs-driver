@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
 
@@ -29,6 +30,7 @@ use crate::options;
 use crate::paging::{PagingResult, PagingResultWithExecutor, PagingStateWrapper};
 use crate::requests::request::{QueryOptionsObj, QueryOptionsWrapper};
 use crate::types::encoded_data::EncodedValuesWrapper;
+use crate::types::type_helpers::SocketAddrWrapper;
 use crate::types::type_wrappers::ComplexType;
 use crate::utils::bigint_to_i64;
 use crate::utils::from_napi_obj::define_js_to_rust_convertible_object;
@@ -86,6 +88,14 @@ pub enum RetryPolicyKind {
     Fallthrough,
 }
 
+// For now, we support only fixed address translator.
+// Once we decide to support more, we can come up with more generic configuration.
+define_js_to_rust_convertible_object!(
+struct FixedAddressTranslatorConfig {
+    // HashMap cannot be retrieved directly.
+    address_mapping, addressMapping: Vec<(SocketAddrWrapper, SocketAddrWrapper)>,
+});
+
 define_js_to_rust_convertible_object!(
 struct SessionOptions {
     connect_points, connectPoints: Vec<String>,
@@ -99,6 +109,7 @@ struct SessionOptions {
     ssl_options, sslOptions: SslOptions,
     load_balancing_config, loadBalancingConfig: LoadBalancingConfig,
     retry_policy, retryPolicy: RetryPolicyKind,
+    address_translator_config, addressTranslatorConfig: FixedAddressTranslatorConfig,
 });
 
 #[napi]
@@ -216,12 +227,10 @@ impl SessionWrapper {
     #[napi]
     pub async fn create_session(options: SessionOptions) -> JsResult<SessionWrapper> {
         with_custom_error_async(async || {
-            let builder = configure_session_builder(&options)?;
+            let cache_size = options.cache_size.unwrap_or(DEFAULT_CACHE_SIZE) as usize;
+            let builder = configure_session_builder(options)?;
             let session = builder.build().await?;
-            let session: CachingSession = CachingSession::from(
-                session,
-                options.cache_size.unwrap_or(DEFAULT_CACHE_SIZE) as usize,
-            );
+            let session: CachingSession = CachingSession::from(session, cache_size);
             ConvertedResult::Ok(SessionWrapper { inner: session })
         })
         .await
@@ -553,9 +562,9 @@ fn configure_ssl(options: &SslOptions) -> ConvertedResult<Option<SslContext>> {
     Ok(Some(ssl_context_builder.build()))
 }
 
-fn configure_session_builder(options: &SessionOptions) -> ConvertedResult<SessionBuilder> {
+fn configure_session_builder(options: SessionOptions) -> ConvertedResult<SessionBuilder> {
     let mut builder = SessionBuilder::new();
-    builder = builder.custom_identity(self_identity(options));
+    builder = builder.custom_identity(self_identity(&options));
     builder = builder.known_nodes(options.connect_points.as_deref().unwrap_or(&[]));
     if let Some(keyspace) = &options.keyspace {
         builder = builder.use_keyspace(keyspace, false);
@@ -601,6 +610,17 @@ fn configure_session_builder(options: &SessionOptions) -> ConvertedResult<Sessio
             RetryPolicyKind::Fallthrough => Arc::new(FallthroughRetryPolicy::new()),
         };
         exec_profile_builder = exec_profile_builder.retry_policy(policy);
+    }
+
+    if let Some(address_translator_config) = options.address_translator_config
+        && let Some(address_mapping) = address_translator_config.address_mapping
+    {
+        let address_mapping: HashMap<_, _> = address_mapping
+            .into_iter()
+            .map(|e| (e.0.into_inner(), e.1.into_inner()))
+            .collect();
+
+        builder = builder.address_translator(Arc::new(address_mapping));
     }
 
     builder = builder.default_execution_profile_handle(exec_profile_builder.build().into_handle());
