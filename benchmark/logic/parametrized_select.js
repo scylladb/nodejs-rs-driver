@@ -15,7 +15,7 @@ function selectWithRows(number) {
                 utils.prepareDatabase(client, utils.tableSchemaBasic, next);
             },
             async function insert(next) {
-                utils.insertSimple(client, 10, next);
+                utils.insertSimple(client, number, next);
             },
             async function query(next) {
                 await utils.queryWithRowCheck(client, number, iterCnt, next);
