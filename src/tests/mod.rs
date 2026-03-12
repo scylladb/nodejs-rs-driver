@@ -1,3 +1,4 @@
+pub mod casync_tests;
 pub mod js_results_tests;
 pub mod option_tests;
 pub mod socket_addr_tests;
