@@ -1,4 +1,5 @@
 name: Setup the driver
+description: "Sets up all of the dependencies used in the CI" 
 
 inputs:
   host:
@@ -9,8 +10,8 @@ inputs:
     type: string
   node-version:
     required: false
-    type: number
-    default: 20
+    type: string
+    default: "20"
 
 
 runs:

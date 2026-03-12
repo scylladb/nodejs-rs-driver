@@ -2,7 +2,6 @@
 name: Run examples
 env:
   DEBUG: napi:*
-  APP_NAME: scylladb-javascript-driver
   PEDANTIC: true
 "on":
   push:
@@ -23,7 +22,7 @@ jobs:
         host:
         - ubuntu-latest
         - ubuntu-24.04-arm
-        node: [ 20, 22, 24, current ]
+        node: [ 20, current ]
         include:
           - host: ubuntu-latest
             target: x86_64-unknown-linux-gnu
@@ -33,37 +32,16 @@ jobs:
             build: npm run build -- --target aarch64-unknown-linux-gnu
         exclude:
           - host: ubuntu-24.04-arm
-            node: 22
-          - host: ubuntu-24.04-arm
-            node: 24
+            node: 20
     name: Build and run examples - ${{ matrix.target }} - node@${{ matrix.node }}
     runs-on: ${{ matrix.host }}
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/setup
+      - uses: ./.github/common/setup
         with:
           host: ${{ matrix.host }}
           target: ${{ matrix.target }}
           node-version: ${{ matrix.node }}
-      - name: Build
-        run: ${{ matrix.build }}
-        shell: bash
-      # Scylla docker setup copied from https://github.com/scylladb/scylla-rust-driver/blob/main/.github/workflows/rust.yml
-      - name: Setup 3-node Scylla cluster
-        run: |
-          sudo sh -c "echo 2097152 >> /proc/sys/fs/aio-max-nr"
-          docker compose -f .github/docker-compose.yml up -d --wait
-      - name: Install examples dependencies
-        run: |
-          cd examples
-          npm i
-      - name: Run all examples
-        run: SCYLLA_URI=172.42.0.2:9042 npm run examples
-      - name: Stop the cluster
-        if: ${{ always() }}
-        run: docker compose -f .github/docker-compose.yml stop
-      - name: Print the cluster logs
-        if: ${{ always() }}
-        run: docker compose -f .github/docker-compose.yml logs
-      - name: Remove cluster
-        run: docker compose -f .github/docker-compose.yml down
+      - uses: ./.github/common/example
+        with:
+          build-command: ${{ matrix.build }}

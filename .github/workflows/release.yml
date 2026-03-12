@@ -1,7 +1,6 @@
 name: Release package
 env:
   DEBUG: napi:*
-  APP_NAME: scylladb-javascript-driver
   PEDANTIC: true
 on:
   release:
@@ -27,7 +26,7 @@ jobs:
     runs-on: ${{ matrix.settings.host }}
     steps:
       - uses: actions/checkout@v6
-      - uses: ./.github/setup
+      - uses: ./.github/common/setup
         with:
           node-version: 24
           host: ubuntu-latest

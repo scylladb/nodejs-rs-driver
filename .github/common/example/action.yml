@@ -1,0 +1,40 @@
+name: Run examples
+description: "Runs all examples on a single architecture and node version" 
+
+inputs:
+  build-command:
+    required: true
+    type: string
+
+runs:
+  using: "composite"
+  steps:
+    - name: Build
+      run: ${{ inputs.build-command }}
+      shell: bash
+    # Scylla docker setup copied from https://github.com/scylladb/scylla-rust-driver/blob/4532bdcf46955af57b902be25e0c419d9d6e3f20/.github/workflows/rust.yml
+    - name: Setup 3-node Scylla cluster
+      run: |
+        sudo sh -c "echo 2097152 >> /proc/sys/fs/aio-max-nr"
+        docker compose -f .github/docker-compose.yml up -d --wait
+      shell: bash
+    - name: Install examples dependencies
+      run: |
+        cd examples
+        npm i
+      shell: bash
+    - name: Run all examples
+      run: SCYLLA_URI=172.42.0.2:9042 npm run examples
+      shell: bash
+    - name: Stop the cluster
+      if: ${{ always() }}
+      run: docker compose -f .github/docker-compose.yml stop
+      shell: bash
+    - name: Print the cluster logs
+      if: ${{ always() }}
+      run: docker compose -f .github/docker-compose.yml logs
+      shell: bash
+    - name: Remove cluster
+      if: ${{ always() }}
+      run: docker compose -f .github/docker-compose.yml down
+      shell: bash

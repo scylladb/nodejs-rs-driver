@@ -1,7 +1,6 @@
 name: Run benchmarks
 env:
   DEBUG: napi:*
-  APP_NAME: scylladb-javascript-driver
   PEDANTIC: true
 on:
     workflow_dispatch:
@@ -22,7 +21,7 @@ jobs:
     name: Build and run benchmarks - benchmarks-only - node@${{ matrix.node }}
     runs-on: benchmarks-only
     steps:
-      - uses: ./.github/setup
+      - uses: ./.github/common/setup
         with:
           host: ${{ matrix.settings.host }}
           target: ${{ matrix.settings.target }}

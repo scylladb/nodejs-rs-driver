@@ -1,0 +1,33 @@
+name: Run integration tests
+description: "Runs integration tests on a single architecture and node version" 
+
+inputs:
+  build-command:
+    required: true
+    type: string
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '8'
+    - name: Install ccm
+      # We need a copy of the repo for the ssl tests.
+      # When installing ccm as a package, we do not save the certificates
+      # that are present in the ./ssl directory
+      shell: bash
+      run: |
+        git clone https://github.com/scylladb/scylla-ccm.git
+        pip install --user --upgrade psutil
+        pip install --user ./scylla-ccm
+    - name: Build
+      run: ${{ inputs.build-command }}
+      shell: bash
+    - name: Run integration tests on scylla
+      env:
+        CCM_IS_SCYLLA: "true"
+        CCM_PATH: "./scylla-ccm"
+      shell: bash
+      run: npm run integration
