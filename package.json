@@ -49,7 +49,7 @@
   },
   "scripts": {
     "build": "napi build --platform --release",
-    "all-tests": "npm run unit && npm run integration_short && npm run integration_long",
+    "all-tests": "npm run unit && npm run integration && npm run unit-not-supported",
     "unit": "./node_modules/.bin/mocha test/unit -t 5000 --recursive",
     "unit-not-supported": "./node_modules/.bin/mocha test/unit-not-supported -t 5000 --recursive",
     "examples": "node ./examples/runner.js",

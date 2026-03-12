@@ -1,14 +1,13 @@
 import { Client } from "../../";
 import { Readable } from "stream";
 
-export namespace concurrent {
-  interface ResultSetGroup {
+export interface ResultSetGroup {
     errors: Error[];
     resultItems: any[];
     totalExecuted: number;
   }
 
-  type Options = {
+export type Options = {
     collectResults?: boolean;
     concurrencyLevel?: number;
     executionProfile?: string;
@@ -16,16 +15,15 @@ export namespace concurrent {
     raiseOnFirstError?: boolean;
   };
 
-  function executeConcurrent(
-    client: Client,
-    query: string,
+export function executeConcurrent(
+  client: Client,
+  query: string,
     parameters: any[][] | Readable,
-    options?: Options,
-  ): Promise<ResultSetGroup>;
+  options?: Options,
+): Promise<ResultSetGroup>;
 
-  function executeConcurrent(
-    client: Client,
-    queries: Array<{ query: string; params: any[] }>,
-    options?: Options,
-  ): Promise<ResultSetGroup>;
-}
+export function executeConcurrent(
+  client: Client,
+  queries: Array<{ query: string; params: any[] }>,
+  options?: Options,
+): Promise<ResultSetGroup>;
