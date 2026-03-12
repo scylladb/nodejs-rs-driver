@@ -41,6 +41,11 @@ const { ProfileManager } = executionProfile;
 const description = packageInfo.description;
 const { version } = packageInfo;
 
+// Initialize the direct-poll bridge once per process.
+// This sets up the Tokio reactor thread and the wake mechanism used by all
+// bridged async Rust functions (session queries, paging, etc.).
+rust.initPollBridge();
+
 /**
  * Callback used by execution methods.
  * @param err Error occurred in the execution of the query.
