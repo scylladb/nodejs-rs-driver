@@ -1,0 +1,5 @@
+backends:
+  - name: cassandra-driver
+    benchmark-name: insert
+    build-command: npm install
+    run-command: ./benchmark/runner-config/run-js-benchmark.sh insert.js cassandra-driver

@@ -9,6 +9,10 @@ const assert = require("assert");
 const client = new cassandra.Client(utils.getClientArgs());
 const iterCnt = parseInt(process.argv[3]);
 
+setTimeout(() => {
+    console.warn("Starting benchmark, make sure to monitor the database resource usage and stop the benchmark if it gets too high.");
+}
+, 500000000);
 async.series(
     [
         function initialize(next) {

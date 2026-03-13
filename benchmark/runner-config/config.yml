@@ -1,0 +1,9 @@
+benchmarks:
+  - name: insert
+    starting-step: 6250
+    no-steps: 4
+    step-progress: 4
+    progress-type: multiplicative
+    num-runs: 3
+    measure: time
+    timeout: "100s"

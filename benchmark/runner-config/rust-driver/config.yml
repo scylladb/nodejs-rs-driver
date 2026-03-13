@@ -1,0 +1,5 @@
+backends:
+  - name: rust-driver
+    benchmark-name: insert
+    build-command: cargo build -p benchmark --bin insert_benchmark -r
+    run-command: ./benchmark/runner-config/run-rust-benchmark.sh insert_benchmark
