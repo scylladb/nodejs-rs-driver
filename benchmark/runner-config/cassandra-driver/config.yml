@@ -1,60 +1,40 @@
+defaults:
+  name: cassandra-driver
+  build-command: npm install
+
 backends:
-  - name: cassandra-driver
-    benchmark-name: insert
-    build-command: npm install
+  - benchmark-name: insert
     run-command: ./benchmark/runner-config/run-js-benchmark.sh insert.js cassandra-driver
 
-  - name: cassandra-driver
-    benchmark-name: concurrent_insert
-    build-command: npm install
+  - benchmark-name: concurrent_insert
     run-command: ./benchmark/runner-config/run-js-benchmark.sh concurrent_insert.js cassandra-driver
 
-  - name: cassandra-driver
-    benchmark-name: select
-    build-command: npm install
+  - benchmark-name: select
     run-command: ./benchmark/runner-config/run-js-benchmark.sh select.js cassandra-driver
 
-  - name: cassandra-driver
-    benchmark-name: concurrent_select
-    build-command: npm install
+  - benchmark-name: concurrent_select
     run-command: ./benchmark/runner-config/run-js-benchmark.sh concurrent_select.js cassandra-driver
 
-  - name: cassandra-driver
-    benchmark-name: batch
-    build-command: npm install
+  - benchmark-name: batch
     run-command: ./benchmark/runner-config/run-js-benchmark.sh batch.js cassandra-driver
 
-  - name: cassandra-driver
-    benchmark-name: paging
-    build-command: npm install
+  - benchmark-name: paging
     run-command: ./benchmark/runner-config/run-js-benchmark.sh paging.js cassandra-driver
 
-  - name: cassandra-driver
-    benchmark-name: concurrent_paging
-    build-command: npm install
+  - benchmark-name: concurrent_paging
     run-command: ./benchmark/runner-config/run-js-benchmark.sh concurrent_paging.js cassandra-driver
 
-  - name: cassandra-driver
-    benchmark-name: large_select
-    build-command: npm install
+  - benchmark-name: large_select
     run-command: ./benchmark/runner-config/run-js-benchmark.sh large_select.js cassandra-driver
 
-  - name: cassandra-driver
-    benchmark-name: deser
-    build-command: npm install
+  - benchmark-name: deser
     run-command: ./benchmark/runner-config/run-js-benchmark.sh deser.js cassandra-driver
 
-  - name: cassandra-driver
-    benchmark-name: concurrent_deser
-    build-command: npm install
+  - benchmark-name: concurrent_deser
     run-command: ./benchmark/runner-config/run-js-benchmark.sh concurrent_deser.js cassandra-driver
 
-  - name: cassandra-driver
-    benchmark-name: ser
-    build-command: npm install
+  - benchmark-name: ser
     run-command: ./benchmark/runner-config/run-js-benchmark.sh ser.js cassandra-driver
 
-  - name: cassandra-driver
-    benchmark-name: concurrent_ser
-    build-command: npm install
+  - benchmark-name: concurrent_ser
     run-command: ./benchmark/runner-config/run-js-benchmark.sh concurrent_ser.js cassandra-driver

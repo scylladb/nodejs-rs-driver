@@ -1,108 +1,33 @@
+defaults:
+  no-steps: 4
+  step-progress: 4
+  progress-type: multiplicative
+  num-runs: 3
+  measure: time
+  timeout: "100s"
+
 benchmarks:
   - name: insert
     starting-step: 6250
-    no-steps: 4
-    step-progress: 4
-    progress-type: multiplicative
-    num-runs: 3
-    measure: time
-    timeout: "100s"
-
   - name: concurrent_insert
     starting-step: 62500
-    no-steps: 4
-    step-progress: 4
-    progress-type: multiplicative
-    num-runs: 3
-    measure: time
-    timeout: "100s"
-
   - name: select
     starting-step: 1563
-    no-steps: 4
-    step-progress: 4
-    progress-type: multiplicative
-    num-runs: 3
-    measure: time
-    timeout: "100s"
-
   - name: concurrent_select
     starting-step: 6250
-    no-steps: 4
-    step-progress: 4
-    progress-type: multiplicative
-    num-runs: 3
-    measure: time
-    timeout: "100s"
-
   - name: batch
     starting-step: 46875
-    no-steps: 4
-    step-progress: 4
-    progress-type: multiplicative
-    num-runs: 3
-    measure: time
-    timeout: "100s"
-
   - name: paging
     starting-step: 63
-    no-steps: 4
-    step-progress: 4
-    progress-type: multiplicative
-    num-runs: 3
-    measure: time
-    timeout: "100s"
-
   - name: concurrent_paging
     starting-step: 20
-    no-steps: 4
-    step-progress: 4
-    progress-type: multiplicative
-    num-runs: 3
-    measure: time
-    timeout: "100s"
-
   - name: large_select
     starting-step: 63
-    no-steps: 4
-    step-progress: 4
-    progress-type: multiplicative
-    num-runs: 3
-    measure: time
-    timeout: "100s"
-
   - name: deser
     starting-step: 32
-    no-steps: 4
-    step-progress: 4
-    progress-type: multiplicative
-    num-runs: 3
-    measure: time
-    timeout: "100s"
-
   - name: concurrent_deser
     starting-step: 32
-    no-steps: 4
-    step-progress: 4
-    progress-type: multiplicative
-    num-runs: 3
-    measure: time
-    timeout: "100s"
-
   - name: ser
     starting-step: 15
-    no-steps: 4
-    step-progress: 4
-    progress-type: multiplicative
-    num-runs: 3
-    measure: time
-    timeout: "100s"
-
   - name: concurrent_ser
     starting-step: 19
-    no-steps: 4
-    step-progress: 4
-    progress-type: multiplicative
-    num-runs: 3
-    measure: time
-    timeout: "100s"
