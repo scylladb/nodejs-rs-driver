@@ -1,6 +1,6 @@
 use crate::errors::{ConvertedError, JsResult, make_js_error};
 
-#[napi]
+#[napi(ts_return_type = "number")]
 pub fn tests_return_js_result(kind: i32) -> JsResult<i32> {
     match kind {
         1 => JsResult::Ok(1),
@@ -10,7 +10,7 @@ pub fn tests_return_js_result(kind: i32) -> JsResult<i32> {
     }
 }
 
-#[napi]
+#[napi(ts_return_type = "Promise<number>")]
 pub async fn tests_return_js_result_async(kind: i32) -> JsResult<i32> {
     tests_return_js_result(kind)
 }

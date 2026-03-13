@@ -210,7 +210,7 @@ impl QueryExecutor {
 }
 #[napi]
 impl QueryExecutor {
-    #[napi]
+    #[napi(ts_return_type = "Promise<PagingResult>")]
     pub async fn fetch_next_page(
         &self,
         session: &SessionWrapper,
@@ -224,7 +224,7 @@ impl QueryExecutor {
 #[napi]
 impl SessionWrapper {
     /// Creates session based on the provided session options.
-    #[napi]
+    #[napi(ts_return_type = "Promise<SessionWrapper>")]
     pub async fn create_session(options: SessionOptions) -> JsResult<SessionWrapper> {
         with_custom_error_async(async || {
             let cache_size = options.cache_size.unwrap_or(DEFAULT_CACHE_SIZE) as usize;
@@ -253,7 +253,7 @@ impl SessionWrapper {
     /// All parameters must be in a type recognizable by ParameterWrapper
     /// -- each value must be tuple of its ComplexType and the value itself.
     /// If the provided types will not be correct, this query will fail.
-    #[napi]
+    #[napi(ts_return_type = "Promise<QueryResultWrapper>")]
     pub async fn query_unpaged_encoded(
         &self,
         query: String,
@@ -275,7 +275,7 @@ impl SessionWrapper {
 
     /// Prepares a statement through rust driver for a given session
     /// Return expected types for the prepared statement
-    #[napi]
+    #[napi(ts_return_type = "Promise<Array<ComplexType>>")]
     pub async fn prepare_statement(
         &self,
         statement: String,
@@ -303,7 +303,7 @@ impl SessionWrapper {
     ///
     /// Currently `execute_unpaged` from rust driver is used, so no paging is done
     /// and there is no support for any query options
-    #[napi]
+    #[napi(ts_return_type = "Promise<QueryResultWrapper>")]
     pub async fn execute_prepared_unpaged_encoded(
         &self,
         query: String,
@@ -320,7 +320,7 @@ impl SessionWrapper {
     /// Executes all statements in the provided batch. Those statements can be either prepared or unprepared.
     ///
     /// Returns a wrapper of the result provided by the rust driver
-    #[napi]
+    #[napi(ts_return_type = "Promise<QueryResultWrapper>")]
     pub async fn batch_encoded(
         &self,
         batch: &BatchWrapper,
@@ -338,7 +338,7 @@ impl SessionWrapper {
     /// For the first page, paging state is not required.
     /// For the following pages you need to provide page state
     /// received from the previous page
-    #[napi]
+    #[napi(ts_return_type = "Promise<PagingResultWithExecutor>")]
     pub async fn query_single_page_encoded(
         &self,
         query: String,
@@ -367,7 +367,7 @@ impl SessionWrapper {
     /// For the first page, paging state is not required.
     /// For the following pages you need to provide page state
     /// received from the previous page
-    #[napi]
+    #[napi(ts_return_type = "Promise<PagingResultWithExecutor>")]
     pub async fn execute_single_page_encoded(
         &self,
         query: String,
@@ -392,7 +392,7 @@ impl SessionWrapper {
     }
 
     /// Creates object representing batch of statements.
-    #[napi]
+    #[napi(ts_return_type = "BatchWrapper")]
     pub fn create_batch(
         &self,
         statements: Vec<String>,
