@@ -5,7 +5,7 @@
 
 This is a client-side driver for [ScyllaDB](https://www.scylladb.com/) written in Node.js and Rust.
 This driver is an overlay over the [ScyllaDB Rust Driver](https://github.com/scylladb/scylla-rust-driver),
-with the interface based on the [DataStax Node.js Driver](https://github.com/datastax/nodejs-driver).
+with the interface based on the [Node.js Driver for Apache Cassandra](https://github.com/apache/cassandra-nodejs-driver) (formerly known as DataStax Node.js Driver).
 Although optimized for ScyllaDB, the driver is also compatible with [Apache Cassandra®](https://cassandra.apache.org/).
 
 This driver is currently in the experimental state. We are working on features necessary for the driver to be considered production ready.
@@ -20,11 +20,11 @@ Currently only linux x86_64 architecture is supported with planned support for o
 
 ### Documentation
 
-The API ([documentation](https://scylladb.github.io/nodejs-rs-driver/docs/)) of the driver is based on the DataStax driver.
+The API ([documentation](https://nodejs-rs-driver.docs.scylladb.com/stable/api/)) of the driver is based on the Cassandra driver.
 Some of the endpoints are already implemented, others are planned, and some parts of the API (including features that were deprecated and are specific to DataStax databases) are removed.
-The status of each API endpoint is listed in [this document](https://docs.google.com/spreadsheets/d/e/2PACX-1vQyg-WhZaMVdBKttbDq7Iuec4KjoMJnU7XEGyiRBlgNubid8T7WqtAH1VDy32meQq5-04P72jLqhF3O/pubhtml#gid=2021765806) and unimplemented features are tracked in the repository [issues](https://github.com/scylladb/nodejs-rs-driver/issues).
+The status of each API endpoint is listed in [this document](https://docs.google.com/spreadsheets/d/e/2PACX-1vRR8BUXy5u_DLNMet4L2MEmjSE0eeOX2SQIq8Sxy5BI8OoLeOopWlD2I_6-IWcas-rKw06o19la5-q6/pubhtml?gid=2021765806) and unimplemented features are tracked in the repository [issues](https://github.com/scylladb/nodejs-rs-driver/issues).
 
-<!-- Currently there is very little content in the book, so I don't think we should list it in the readme -->
+<!-- Currently the book is not included in the documentation release -->
 <!-- Book is available [here](https://scylladb.github.io/nodejs-rs-driver/book) -->
 
 ## Examples
