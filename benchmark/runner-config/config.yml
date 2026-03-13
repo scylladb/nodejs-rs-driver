@@ -1,0 +1,33 @@
+defaults:
+  no-steps: 4
+  step-progress: 4
+  progress-type: multiplicative
+  num-runs: 3
+  measure: time
+  timeout: "100s"
+
+benchmarks:
+  - name: insert
+    starting-step: 6250
+  - name: concurrent_insert
+    starting-step: 62500
+  - name: select
+    starting-step: 1563
+  - name: concurrent_select
+    starting-step: 6250
+  - name: batch
+    starting-step: 46875
+  - name: paging
+    starting-step: 63
+  - name: concurrent_paging
+    starting-step: 20
+  - name: large_select
+    starting-step: 63
+  - name: deser
+    starting-step: 32
+  - name: concurrent_deser
+    starting-step: 32
+  - name: ser
+    starting-step: 15
+  - name: concurrent_ser
+    starting-step: 19

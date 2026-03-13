@@ -1,0 +1,40 @@
+defaults:
+  name: scylladb-driver
+  build-command: npm install
+
+backends:
+  - benchmark-name: insert
+    run-command: ./benchmark/runner-config/run-js-benchmark.sh insert.js scylladb-driver-alpha
+
+  - benchmark-name: concurrent_insert
+    run-command: ./benchmark/runner-config/run-js-benchmark.sh concurrent_insert.js scylladb-driver-alpha
+
+  - benchmark-name: select
+    run-command: ./benchmark/runner-config/run-js-benchmark.sh select.js scylladb-driver-alpha
+
+  - benchmark-name: concurrent_select
+    run-command: ./benchmark/runner-config/run-js-benchmark.sh concurrent_select.js scylladb-driver-alpha
+
+  - benchmark-name: batch
+    run-command: ./benchmark/runner-config/run-js-benchmark.sh batch.js scylladb-driver-alpha
+
+  - benchmark-name: paging
+    run-command: ./benchmark/runner-config/run-js-benchmark.sh paging.js scylladb-driver-alpha
+
+  - benchmark-name: concurrent_paging
+    run-command: ./benchmark/runner-config/run-js-benchmark.sh concurrent_paging.js scylladb-driver-alpha
+
+  - benchmark-name: large_select
+    run-command: ./benchmark/runner-config/run-js-benchmark.sh large_select.js scylladb-driver-alpha
+
+  - benchmark-name: deser
+    run-command: ./benchmark/runner-config/run-js-benchmark.sh deser.js scylladb-driver-alpha
+
+  - benchmark-name: concurrent_deser
+    run-command: ./benchmark/runner-config/run-js-benchmark.sh concurrent_deser.js scylladb-driver-alpha
+
+  - benchmark-name: ser
+    run-command: ./benchmark/runner-config/run-js-benchmark.sh ser.js scylladb-driver-alpha
+
+  - benchmark-name: concurrent_ser
+    run-command: ./benchmark/runner-config/run-js-benchmark.sh concurrent_ser.js scylladb-driver-alpha
