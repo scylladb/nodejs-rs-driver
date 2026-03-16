@@ -145,7 +145,7 @@ fn configure_ssl(options: &SslOptions) -> ConvertedResult<Option<SslContext>> {
             // but the list of possible values comes from a function that returns lowercase.
             // Let's be liberal here, and allow both kinds of values: https://nodejs.org/docs/latest-v24.x/api/tls.html#tlsgetciphers
             let part = part.to_uppercase();
-            // valid cipersuite names start with "TLS_"
+            // valid ciphersuite names start with "TLS_"
             // while none of cipher string names start with that prefix (see: https://docs.openssl.org/master/man3/SSL_CTX_set_cipher_list/#description)
             if part.starts_with("TLS_") {
                 ciphersuites.push(part);
@@ -380,7 +380,7 @@ fn self_identity(options: &SessionOptions) -> SelfIdentity<'static> {
     if let Some(app_name) = &options.application_name {
         self_identity.set_application_name(app_name.clone());
     }
-    if let Some(app_version) = &options.application_name {
+    if let Some(app_version) = &options.application_version {
         self_identity.set_application_version(app_version.clone());
     }
     if let Some(client_id) = &options.client_id {
