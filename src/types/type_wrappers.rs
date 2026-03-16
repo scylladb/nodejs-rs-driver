@@ -74,8 +74,8 @@ impl ToNapiValue for ComplexType<'_> {
         let mut obj = Object::new(&env)?;
 
         let base_type_name = "baseType";
-        let first_support_type_name = "supportType1";
-        let second_support_type_name = "supportType2";
+        let first_subtype_name = "subtype1";
+        let second_subtype_name = "subtype2";
 
         match val.typ.as_ref() {
             ColumnType::Native(native_type) => {
@@ -131,17 +131,14 @@ impl ToNapiValue for ComplexType<'_> {
                     }
                 };
                 obj.set_named_property(base_type_name, name)?;
-                obj.set_named_property(first_support_type_name, ComplexType::new_borrowed(typ1))?;
+                obj.set_named_property(first_subtype_name, ComplexType::new_borrowed(typ1))?;
                 if let Some(typ2) = typ2 {
-                    obj.set_named_property(
-                        second_support_type_name,
-                        ComplexType::new_borrowed(typ2),
-                    )?;
+                    obj.set_named_property(second_subtype_name, ComplexType::new_borrowed(typ2))?;
                 }
             }
             ColumnType::Vector { typ, dimensions } => {
                 obj.set_named_property(base_type_name, CqlType::Vector)?;
-                obj.set_named_property(first_support_type_name, ComplexType::new_borrowed(typ))?;
+                obj.set_named_property(first_subtype_name, ComplexType::new_borrowed(typ))?;
                 obj.set_named_property("dimensions", dimensions)?;
             }
             ColumnType::UserDefinedType { frozen, definition } => {
