@@ -48,6 +48,10 @@ The ability to use the driver with types is kept as a legacy option, and may be 
 
 ## Load balancing policies
 
+Unless you have specific requirements about load balancing policies, we recommend using the default
+load balancing policy. Below you can find a detailed list of changes made to the load balancing
+policies compared to the `cassandra-driver`.
+
 ### Supported load balancing policies
 
 The following policies are still supported by the driver:
@@ -67,7 +71,7 @@ The (new) `DefaultLoadBalancingPolicy` can be used as a child policy to `TokenAw
 
 ### Not supported load balancing policies
 
-The following policies, that were present in the DataStax driver are not supported:
+The following policies that were present in the `cassandra-driver` are not supported:
 
 - `WhiteListPolicy`
 - (legacy) `DefaultLoadBalancingPolicy`
@@ -75,12 +79,12 @@ The following policies, that were present in the DataStax driver are not support
 
 #### WhiteListPolicy
 
-This policy was deprecated in the DataStax driver, and for this reason was removed from this driver.
+This policy was deprecated in the `cassandra-driver`, and for this reason was removed from this driver.
 You can use `AllowListPolicy` instead.
 
 #### legacy DefaultLoadBalancingPolicy
 
-The `DefaultLoadBalancingPolicy` as present in the DataStax driver is no longer supported.
+The `DefaultLoadBalancingPolicy` as present in the `cassandra-driver` is no longer supported.
 It was replaced with a [new implementation](./load_balancing.md). There are no plans for
 re-creating its functionality.
 
@@ -112,10 +116,13 @@ the load balancing will be set to allow connection to the provided datacenter.
 When `localDc` is not provided connections to all nodes will be allowed.
 
 **WARNING**:
-This is a change in behavior. In the DataStax driver, when `localDc` would not be provided,
+This is a change in behavior. In the `cassandra-driver`, when `localDc` would not be provided,
 `localDataCenter` from client options would be used.
 
 ## Retry policies
+
+A new version of the default retry policy was introduced. We recommend using it as a replacement
+for the legacy default policy.
 
 ### Supported retry policies
 
@@ -129,10 +136,10 @@ This is a change in behavior. In the DataStax driver, when `localDc` would not b
 
 #### legacy RetryPolicy
 
-The `RetryPolicy` as present in the DataStax driver is no longer supported.
+The `RetryPolicy` as present in the `cassandra-driver` is no longer supported.
 It was replaced with a [new implementation](./retry_policies.md). There are no plans for
-re-implementing its functionality. You do not have to update a code to migrate to the new policy.
+re-implementing its functionality. You do not have to update your code to migrate to the new policy.
 
 #### IdempotenceAwareRetryPolicy
 
-This policy was deprecated in the DataStax driver, and for this reason was removed from this driver.
+This policy was deprecated in the `cassandra-driver`, and for this reason was removed from this driver.
