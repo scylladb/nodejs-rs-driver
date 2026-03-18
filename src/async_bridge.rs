@@ -17,6 +17,7 @@ use napi::{Env, Error, Result, Status, sys};
 use napi_derive::napi;
 
 use crate::errors::{ConvertedError, ConvertedResult, JsResult, with_custom_error_sync};
+use crate::napi_helpers::{DeferredPtr, ResolveOrReject};
 
 /// JsPromise — lightweight wrapper over the promise pointer that indicates the type used to resolve the promise
 /// The promise can be either resolved with type T or rejected with any error value (`ConvertedError` when used with `submit_future`).
@@ -31,14 +32,14 @@ impl<T> ToNapiValue for JsPromise<T> {
     }
 }
 
-type SettleCallback = Box<dyn FnOnce(Env, sys::napi_deferred) + Send>;
+type SettleCallback = Box<dyn FnOnce(Env, DeferredPtr) + Send>;
 type BridgedFuture = Pin<Box<dyn Future<Output = SettleCallback> + Send>>;
 
 struct FutureEntry {
     future: BridgedFuture,
     /// Raw deferred handle — resolved/rejected in `poll_woken` on the
     /// main thread where we have a valid `napi_env`.
-    deferred: sys::napi_deferred,
+    deferred: DeferredPtr,
     waker: Waker,
 }
 
@@ -124,12 +125,7 @@ impl FutureRegistry {
         }
     }
 
-    fn insert(
-        &mut self,
-        env: &Env,
-        future: BridgedFuture,
-        deferred: sys::napi_deferred,
-    ) -> Result<u64> {
+    fn insert(&mut self, env: &Env, future: BridgedFuture, deferred: DeferredPtr) -> Result<u64> {
         let was_empty = self.futures.is_empty();
 
         let id = self.next_id;
@@ -235,7 +231,7 @@ thread_local! {
   static REGISTRY: RefCell<FutureRegistry> = RefCell::new(FutureRegistry::new());
 }
 
-fn create_promise(env: &Env) -> Result<(sys::napi_deferred, sys::napi_value)> {
+fn create_promise(env: &Env) -> Result<(DeferredPtr, sys::napi_value)> {
     let mut deferred = ptr::null_mut();
     let mut promise = ptr::null_mut();
     // SAFETY: `raw_env` is taken from Env, which is guaranteed to be valid for the lifetime of the current napi call.
@@ -246,12 +242,13 @@ fn create_promise(env: &Env) -> Result<(sys::napi_deferred, sys::napi_value)> {
             &mut promise
         ))?
     };
-    Ok((deferred, promise))
+    // SAFETY: deferred is assigned to valid value in napi_create_promise call, that have just succeeded.
+    // This promise had no chance to be resolved yet.
+    let deferred_ptr = unsafe { DeferredPtr::new(deferred) };
+    Ok((deferred_ptr, promise))
 }
 
-/// # Safety
-/// The deferred must not have been resolved or rejected yet
-unsafe fn reject_with_reason(env: Env, deferred: sys::napi_deferred, reason: &str) -> Result<()> {
+fn reject_with_reason(env: Env, deferred: DeferredPtr, reason: &str) -> Result<()> {
     // We can unwrap in the second place, because the only case when Cstring::new can fail is when the string contains a null byte.
     let c_reason = CString::new(reason).unwrap_or_else(|_| {
         CString::new("[Unknown error] Error message contained illegal null byte").unwrap()
@@ -259,8 +256,7 @@ unsafe fn reject_with_reason(env: Env, deferred: sys::napi_deferred, reason: &st
     let mut msg: sys::napi_value = std::ptr::null_mut();
     let mut error: sys::napi_value = std::ptr::null_mut();
 
-    // SAFETY: Env guarantees that raw pointer is a valid main-thread env and
-    // caller ensured that `deferred` has not yet been resolved or rejected.
+    // SAFETY: Env guarantees that raw pointer is a valid main-thread env.
     // Remaining arguments are created in this function and are valid for the whole duration.
     unsafe {
         check_status!(sys::napi_create_string_utf8(
@@ -275,7 +271,7 @@ unsafe fn reject_with_reason(env: Env, deferred: sys::napi_deferred, reason: &st
             msg,
             &mut error
         ))?;
-        check_status!(sys::napi_reject_deferred(env.raw(), deferred, error))?;
+        deferred.resolve(env, error, ResolveOrReject::Reject)?;
     }
     Ok(())
 }
@@ -365,33 +361,26 @@ where
 
     let boxed: BridgedFuture = Box::pin(async move {
         let result = fut.await;
-        Box::new(move |env: Env, deferred| unsafe {
+        Box::new(move |env: Env, deferred: DeferredPtr| unsafe {
             // SAFETY: This closure is only ever invoked from `poll_woken`, which runs
             // on the Node main thread inside the TSFN callback - the only place where
             // `env` is a valid napi_env. `deferred` is consumed exactly once here,
             // satisfying the napi contract that each deferred is resolved or rejected
             // exactly once. `to_napi_value` receives the same valid `env`.
             let (js_val, resolve) = match result {
-                Ok(val) => (T::to_napi_value(env.raw(), val), true),
-                Err(err) => (ConvertedError::to_napi_value(env.raw(), err), false),
+                Ok(val) => (T::to_napi_value(env.raw(), val), ResolveOrReject::Resolve),
+                Err(err) => (
+                    ConvertedError::to_napi_value(env.raw(), err),
+                    ResolveOrReject::Reject,
+                ),
             };
-            let status = js_val
-                // First we try to accept / reject with converted value / error.
-                .and_then(|v| {
-                    if resolve {
-                        check_status!(sys::napi_resolve_deferred(env.raw(), deferred, v))
-                    } else {
-                        check_status!(sys::napi_reject_deferred(env.raw(), deferred, v))
-                    }
-                })
-                // If this fails, or we failed to convert the value / error into a JS value,
-                // we reject with a fallback reason.
-                .or_else(|e| reject_with_reason(env, deferred, &e.reason));
+
+            let status = match js_val {
+                Ok(v) => deferred.resolve(env, v, resolve),
+                Err(e) => reject_with_reason(env, deferred, &e.reason),
+            };
 
             if let Err(e) = status {
-                // If both fail, we assume something terrible has happened. We cannot
-                // inform JS side about the error by regular error handling, so we panic to
-                // avoid silent failures and orphaned promises.
                 panic!(
                     "Failed to settle promise in TSFN callback. This may indicate either a bug in the driver or a severe runtime error.\nRoot cause:\n {}",
                     e.reason

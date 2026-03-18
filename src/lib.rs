@@ -5,6 +5,7 @@ extern crate napi_derive;
 pub mod async_bridge;
 pub mod errors;
 pub mod metadata;
+pub mod napi_helpers;
 pub mod options;
 pub mod paging;
 pub mod requests;
