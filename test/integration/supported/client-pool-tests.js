@@ -1,6 +1,6 @@
 "use strict";
 
-const { assert } = require("chai");
+const { assert, expect } = require("chai");
 const dns = require("dns");
 const util = require("util");
 
@@ -152,13 +152,11 @@ describe("Client", function () {
                 // the 3 original hosts
                 assert.strictEqual(client.hosts.length, 3);
                 const hosts = client.hosts.keys();
-                // TODO: Rust returns hosts in arbitrary order
-                // See: #282
-                // assert.strictEqual(hosts[0], contactPoints[0] + ":9042");
-                assert.notEqual(hosts[1], contactPoints[1] + ":9042");
-                assert.notEqual(hosts[2], contactPoints[1] + ":9042");
-                assert.notEqual(hosts[1], contactPoints[2] + ":9042");
-                assert.notEqual(hosts[2], contactPoints[2] + ":9042");
+
+                // Hosts can be arranged in any order.
+                expect(hosts).to.include(contactPoints[0] + ":9042");
+                expect(hosts).to.not.include(contactPoints[1] + ":9042");
+                expect(hosts).to.not.include(contactPoints[2] + ":9042");
                 done();
             });
         });

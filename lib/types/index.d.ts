@@ -2,436 +2,434 @@ import _Long = require("long");
 import * as stream from "stream";
 import { ValueCallback } from "../../";
 
-export namespace types {
-  class Long extends _Long {}
-
-  enum consistencies {
-    any = 0x00,
-    one = 0x01,
-    two = 0x02,
-    three = 0x03,
-    quorum = 0x04,
-    all = 0x05,
-    localQuorum = 0x06,
-    eachQuorum = 0x07,
-    serial = 0x08,
-    localSerial = 0x09,
-    localOne = 0x0a,
-  }
-
-  enum dataTypes {
-    custom = 0x0000,
-    ascii = 0x0001,
-    bigint = 0x0002,
-    blob = 0x0003,
-    boolean = 0x0004,
-    counter = 0x0005,
-    decimal = 0x0006,
-    double = 0x0007,
-    float = 0x0008,
-    int = 0x0009,
-    text = 0x000a,
-    timestamp = 0x000b,
-    uuid = 0x000c,
-    varchar = 0x000d,
-    varint = 0x000e,
-    timeuuid = 0x000f,
-    inet = 0x0010,
-    date = 0x0011,
-    time = 0x0012,
-    smallint = 0x0013,
-    tinyint = 0x0014,
-    duration = 0x0015,
-    list = 0x0020,
-    map = 0x0021,
-    set = 0x0022,
-    udt = 0x0030,
-    tuple = 0x0031,
-  }
-
-  enum distance {
-    local = 0,
-    remote,
-    ignored,
-  }
-
-  enum responseErrorCodes {
-    serverError = 0x0000,
-    protocolError = 0x000a,
-    badCredentials = 0x0100,
-    unavailableException = 0x1000,
-    overloaded = 0x1001,
-    isBootstrapping = 0x1002,
-    truncateError = 0x1003,
-    writeTimeout = 0x1100,
-    readTimeout = 0x1200,
-    readFailure = 0x1300,
-    functionFailure = 0x1400,
-    writeFailure = 0x1500,
-    syntaxError = 0x2000,
-    unauthorized = 0x2100,
-    invalid = 0x2200,
-    configError = 0x2300,
-    alreadyExists = 0x2400,
-    unprepared = 0x2500,
-    clientWriteFailure = 0x8000,
-  }
+export class Long extends _Long {}
+
+export enum consistencies {
+  any = 0x00,
+  one = 0x01,
+  two = 0x02,
+  three = 0x03,
+  quorum = 0x04,
+  all = 0x05,
+  localQuorum = 0x06,
+  eachQuorum = 0x07,
+  serial = 0x08,
+  localSerial = 0x09,
+  localOne = 0x0a,
+}
+
+export enum dataTypes {
+  custom = 0x0000,
+  ascii = 0x0001,
+  bigint = 0x0002,
+  blob = 0x0003,
+  boolean = 0x0004,
+  counter = 0x0005,
+  decimal = 0x0006,
+  double = 0x0007,
+  float = 0x0008,
+  int = 0x0009,
+  text = 0x000a,
+  timestamp = 0x000b,
+  uuid = 0x000c,
+  varchar = 0x000d,
+  varint = 0x000e,
+  timeuuid = 0x000f,
+  inet = 0x0010,
+  date = 0x0011,
+  time = 0x0012,
+  smallint = 0x0013,
+  tinyint = 0x0014,
+  duration = 0x0015,
+  list = 0x0020,
+  map = 0x0021,
+  set = 0x0022,
+  udt = 0x0030,
+  tuple = 0x0031,
+}
+
+export enum distance {
+  local = 0,
+  remote,
+  ignored,
+}
+
+export enum responseErrorCodes {
+  serverError = 0x0000,
+  protocolError = 0x000a,
+  badCredentials = 0x0100,
+  unavailableException = 0x1000,
+  overloaded = 0x1001,
+  isBootstrapping = 0x1002,
+  truncateError = 0x1003,
+  writeTimeout = 0x1100,
+  readTimeout = 0x1200,
+  readFailure = 0x1300,
+  functionFailure = 0x1400,
+  writeFailure = 0x1500,
+  syntaxError = 0x2000,
+  unauthorized = 0x2100,
+  invalid = 0x2200,
+  configError = 0x2300,
+  alreadyExists = 0x2400,
+  unprepared = 0x2500,
+  clientWriteFailure = 0x8000,
+}
 
-  enum protocolVersion {
-    v1 = 0x01,
-    v2 = 0x02,
-    v3 = 0x03,
-    v4 = 0x04,
-    v5 = 0x05,
-    v6 = 0x06,
-    dseV1 = 0x41,
-    dseV2 = 0x42,
-    maxSupported = dseV2,
-    minSupported = v1,
-  }
+export enum protocolVersion {
+  v1 = 0x01,
+  v2 = 0x02,
+  v3 = 0x03,
+  v4 = 0x04,
+  v5 = 0x05,
+  v6 = 0x06,
+  dseV1 = 0x41,
+  dseV2 = 0x42,
+  maxSupported = dseV2,
+  minSupported = v1,
+}
 
-  namespace protocolVersion {
-    function isSupported(version: protocolVersion): boolean;
-  }
+export namespace protocolVersion {
+  function isSupported(version: protocolVersion): boolean;
+}
 
-  const unset: object;
+export const unset: object;
 
-  class BigDecimal {
-    constructor(unscaledValue: number, scale: number);
+export class BigDecimal {
+  constructor(unscaledValue: number, scale: number);
 
-    static fromBuffer(buf: Buffer): BigDecimal;
+  static fromBuffer(buf: Buffer): BigDecimal;
 
-    static fromString(value: string): BigDecimal;
+  static fromString(value: string): BigDecimal;
 
-    static toBuffer(value: BigDecimal): Buffer;
+  static toBuffer(value: BigDecimal): Buffer;
 
-    static fromNumber(value: number): BigDecimal;
+  static fromNumber(value: number): BigDecimal;
 
-    add(other: BigDecimal): BigDecimal;
+  add(other: BigDecimal): BigDecimal;
 
-    compare(other: BigDecimal): number;
+  compare(other: BigDecimal): number;
 
-    equals(other: BigDecimal): boolean;
+  equals(other: BigDecimal): boolean;
 
-    greaterThan(other: BigDecimal): boolean;
+  greaterThan(other: BigDecimal): boolean;
 
-    isNegative(): boolean;
+  isNegative(): boolean;
 
-    isZero(): boolean;
+  isZero(): boolean;
 
-    notEquals(other: BigDecimal): boolean;
+  notEquals(other: BigDecimal): boolean;
 
-    subtract(other: BigDecimal): BigDecimal;
+  subtract(other: BigDecimal): BigDecimal;
 
-    toNumber(): number;
+  toNumber(): number;
 
-    toString(): string;
+  toString(): string;
 
-    toJSON(): string;
-  }
+  toJSON(): string;
+}
 
-  class Duration {
-    constructor(month: number, days: number, nanoseconds: number | Long);
+export class Duration {
+  constructor(month: number, days: number, nanoseconds: number | Long);
 
-    static fromBuffer(buffer: Buffer): Duration;
+  static fromBuffer(buffer: Buffer): Duration;
 
-    static fromString(input: string): Duration;
+  static fromString(input: string): Duration;
 
-    equals(other: Duration): boolean;
+  equals(other: Duration): boolean;
 
-    toBuffer(): Buffer;
+  toBuffer(): Buffer;
 
-    toString(): string;
-  }
+  toString(): string;
+}
 
-  class InetAddress {
-    length: number;
+export class InetAddress {
+  length: number;
 
-    version: number;
+  version: number;
 
-    constructor(buffer: Buffer);
+  constructor(buffer: Buffer);
 
-    static fromString(value: string): InetAddress;
+  static fromString(value: string): InetAddress;
 
-    equals(other: InetAddress): boolean;
+  equals(other: InetAddress): boolean;
 
-    getBuffer(): Buffer;
+  getBuffer(): Buffer;
 
-    toString(): string;
+  toString(): string;
 
-    toJSON(): string;
-  }
+  toJSON(): string;
+}
 
-  class Integer {
-    static ONE: Integer;
-    static ZERO: Integer;
+export class Integer {
+  static ONE: Integer;
+  static ZERO: Integer;
 
-    constructor(bits: Array<number>, sign: number);
+  constructor(bits: Array<number>, sign: number);
 
-    static fromBits(bits: Array<number>): Integer;
+  static fromBits(bits: Array<number>): Integer;
 
-    static fromBuffer(bits: Buffer): Integer;
+  static fromBuffer(bits: Buffer): Integer;
 
-    static fromInt(value: number): Integer;
+  static fromInt(value: number): Integer;
 
-    static fromNumber(value: number): Integer;
+  static fromNumber(value: number): Integer;
 
-    static fromString(str: string, opt_radix?: number): Integer;
+  static fromString(str: string, opt_radix?: number): Integer;
 
-    static toBuffer(value: Integer): Buffer;
+  static toBuffer(value: Integer): Buffer;
 
-    abs(): Integer;
+  abs(): Integer;
 
-    add(other: Integer): Integer;
+  add(other: Integer): Integer;
 
-    compare(other: Integer): number;
+  compare(other: Integer): number;
 
-    divide(other: Integer): Integer;
+  divide(other: Integer): Integer;
 
-    equals(other: Integer): boolean;
+  equals(other: Integer): boolean;
 
-    getBits(index: number): number;
+  getBits(index: number): number;
 
-    getBitsUnsigned(index: number): number;
+  getBitsUnsigned(index: number): number;
 
-    getSign(): number;
+  getSign(): number;
 
-    greaterThan(other: Integer): boolean;
+  greaterThan(other: Integer): boolean;
 
-    greaterThanOrEqual(other: Integer): boolean;
+  greaterThanOrEqual(other: Integer): boolean;
 
-    isNegative(): boolean;
+  isNegative(): boolean;
 
-    isOdd(): boolean;
+  isOdd(): boolean;
 
-    isZero(): boolean;
+  isZero(): boolean;
 
-    lessThan(other: Integer): boolean;
+  lessThan(other: Integer): boolean;
 
-    lessThanOrEqual(other: Integer): boolean;
+  lessThanOrEqual(other: Integer): boolean;
 
-    modulo(other: Integer): Integer;
+  modulo(other: Integer): Integer;
 
-    multiply(other: Integer): Integer;
+  multiply(other: Integer): Integer;
 
-    negate(): Integer;
+  negate(): Integer;
 
-    not(): Integer;
+  not(): Integer;
 
-    notEquals(other: Integer): boolean;
+  notEquals(other: Integer): boolean;
 
-    or(other: Integer): Integer;
+  or(other: Integer): Integer;
 
-    shiftLeft(numBits: number): Integer;
+  shiftLeft(numBits: number): Integer;
 
-    shiftRight(numBits: number): Integer;
+  shiftRight(numBits: number): Integer;
 
-    shorten(numBits: number): Integer;
+  shorten(numBits: number): Integer;
 
-    subtract(other: Integer): Integer;
+  subtract(other: Integer): Integer;
 
-    toInt(): number;
+  toInt(): number;
 
-    toJSON(): string;
+  toJSON(): string;
 
-    toNumber(): number;
+  toNumber(): number;
 
-    toString(opt_radix?: number): string;
+  toString(opt_radix?: number): string;
 
-    xor(other: Integer): Integer;
-  }
+  xor(other: Integer): Integer;
+}
 
-  class LocalDate {
-    year: number;
-    month: number;
-    day: number;
+export class LocalDate {
+  year: number;
+  month: number;
+  day: number;
 
-    constructor(year: number, month: number, day: number);
+  constructor(year: number, month: number, day: number);
 
-    static fromDate(date: Date): LocalDate;
+  static fromDate(date: Date): LocalDate;
 
-    static fromString(value: string): LocalDate;
+  static fromString(value: string): LocalDate;
 
-    static fromBuffer(buffer: Buffer): LocalDate;
+  static fromBuffer(buffer: Buffer): LocalDate;
 
-    static now(): LocalDate;
+  static now(): LocalDate;
 
-    static utcNow(): LocalDate;
+  static utcNow(): LocalDate;
 
-    equals(other: LocalDate): boolean;
+  equals(other: LocalDate): boolean;
 
-    inspect(): string;
+  inspect(): string;
 
-    toBuffer(): Buffer;
+  toBuffer(): Buffer;
 
-    toJSON(): string;
+  toJSON(): string;
 
-    toString(): string;
-  }
+  toString(): string;
+}
 
-  class LocalTime {
-    hour: number;
-    minute: number;
-    nanosecond: number;
-    second: number;
+export class LocalTime {
+  hour: number;
+  minute: number;
+  nanosecond: number;
+  second: number;
 
-    constructor(totalNanoseconds: Long);
+  constructor(totalNanoseconds: Long);
 
-    static fromBuffer(value: Buffer): LocalTime;
+  static fromBuffer(value: Buffer): LocalTime;
 
-    static fromDate(date: Date, nanoseconds: number): LocalTime;
+  static fromDate(date: Date, nanoseconds: number): LocalTime;
 
-    static fromMilliseconds(
-      milliseconds: number,
-      nanoseconds?: number,
-    ): LocalTime;
+  static fromMilliseconds(
+    milliseconds: number,
+    nanoseconds?: number,
+  ): LocalTime;
 
-    static fromString(value: string): LocalTime;
+  static fromString(value: string): LocalTime;
 
-    static now(nanoseconds?: number): LocalTime;
+  static now(nanoseconds?: number): LocalTime;
 
-    compare(other: LocalTime): boolean;
+  compare(other: LocalTime): boolean;
 
-    equals(other: LocalTime): boolean;
+  equals(other: LocalTime): boolean;
 
-    getTotalNanoseconds(): Long;
+  getTotalNanoseconds(): Long;
 
-    inspect(): string;
+  inspect(): string;
 
-    toBuffer(): Buffer;
+  toBuffer(): Buffer;
 
-    toJSON(): string;
+  toJSON(): string;
 
-    toString(): string;
-  }
+  toString(): string;
+}
 
-  interface ResultSet extends Iterable<Row>, AsyncIterable<Row> {
-    info: {
-      queriedHost: string;
-      triedHosts: { [key: string]: any };
-      speculativeExecutions: number;
-      achievedConsistency: consistencies;
-      traceId: Uuid;
-      warnings: string[];
-      customPayload: any;
-    };
+export interface ResultSet extends Iterable<Row>, AsyncIterable<Row> {
+  info: {
+    queriedHost: string;
+    triedHosts: { [key: string]: any };
+    speculativeExecutions: number;
+    achievedConsistency: consistencies;
+    traceId: Uuid;
+    warnings: string[];
+    customPayload: any;
+  };
 
-    columns: Array<{ name: string; type: { code: dataTypes; info: any } }>;
-    nextPage: (() => void) | null;
-    pageState: string;
-    rowLength: number;
-    rows: Row[];
+  columns: Array<{ name: string; type: { code: dataTypes; info: any } }>;
+  nextPage: (() => void) | null;
+  pageState: string;
+  rowLength: number;
+  rows: Row[];
 
-    first(): Row;
+  first(): Row;
 
-    wasApplied(): boolean;
-  }
+  wasApplied(): boolean;
+}
 
-  interface ResultStream extends stream.Readable {
-    buffer: Buffer;
-    paused: boolean;
+export interface ResultStream extends stream.Readable {
+  buffer: Buffer;
+  paused: boolean;
 
-    add(chunk: Buffer): void;
-  }
+  add(chunk: Buffer): void;
+}
 
-  interface Row {
-    get(columnName: string | number): any;
+export interface Row {
+  get(columnName: string | number): any;
 
-    keys(): string[];
+  keys(): string[];
 
-    forEach(callback: (row: Row) => void): void;
+  forEach(callback: (row: Row) => void): void;
 
-    values(): any[];
+  values(): any[];
 
-    [key: string]: any;
-  }
+  [key: string]: any;
+}
 
-  class TimeUuid extends Uuid {
-    static now(): TimeUuid;
+export class TimeUuid extends Uuid {
+  static now(): TimeUuid;
 
-    static now(nodeId: string | Buffer, clockId?: string | Buffer): TimeUuid;
+  static now(nodeId: string | Buffer, clockId?: string | Buffer): TimeUuid;
 
-    static now(
-      nodeId: string | Buffer,
-      clockId: string | Buffer,
-      callback: ValueCallback<TimeUuid>,
-    ): void;
+  static now(
+    nodeId: string | Buffer,
+    clockId: string | Buffer,
+    callback: ValueCallback<TimeUuid>,
+  ): void;
 
-    static now(callback: ValueCallback<TimeUuid>): void;
+  static now(callback: ValueCallback<TimeUuid>): void;
 
-    static fromDate(
-      date: Date,
-      ticks?: number,
-      nodeId?: string | Buffer,
-      clockId?: string | Buffer,
-    ): TimeUuid;
+  static fromDate(
+    date: Date,
+    ticks?: number,
+    nodeId?: string | Buffer,
+    clockId?: string | Buffer,
+  ): TimeUuid;
 
-    static fromDate(
-      date: Date,
-      ticks: number,
-      nodeId: string | Buffer,
-      clockId: string | Buffer,
-      callback: ValueCallback<TimeUuid>,
-    ): void;
+  static fromDate(
+    date: Date,
+    ticks: number,
+    nodeId: string | Buffer,
+    clockId: string | Buffer,
+    callback: ValueCallback<TimeUuid>,
+  ): void;
 
-    static fromString(value: string): TimeUuid;
+  static fromString(value: string): TimeUuid;
 
-    static max(date: Date, ticks: number): TimeUuid;
+  static max(date: Date, ticks: number): TimeUuid;
 
-    static min(date: Date, ticks: number): TimeUuid;
+  static min(date: Date, ticks: number): TimeUuid;
 
-    getDatePrecision(): { date: Date; ticks: number };
+  getDatePrecision(): { date: Date; ticks: number };
 
-    getDate(): Date;
-  }
+  getDate(): Date;
+}
 
-  class Tuple {
-    elements: any[];
-    length: number;
+export class Tuple {
+  elements: any[];
+  length: number;
 
-    constructor(...args: any[]);
+  constructor(...args: any[]);
 
-    static fromArray(elements: any[]): Tuple;
+  static fromArray(elements: any[]): Tuple;
 
-    get(index: number): any;
+  get(index: number): any;
 
-    toString(): string;
+  toString(): string;
 
-    toJSON(): string;
+  toJSON(): string;
 
-    values(): any[];
-  }
+  values(): any[];
+}
 
-  class Uuid {
-    constructor(buffer: Buffer);
+export class Uuid {
+  constructor(buffer: Buffer);
 
-    static fromString(value: string): Uuid;
+  static fromString(value: string): Uuid;
 
-    static random(callback: ValueCallback<Uuid>): void;
+  static random(callback: ValueCallback<Uuid>): void;
 
-    static random(): Uuid;
+  static random(): Uuid;
 
-    equals(other: Uuid): boolean;
+  equals(other: Uuid): boolean;
 
-    getBuffer(): Buffer;
+  getBuffer(): Buffer;
 
-    toString(): string;
+  toString(): string;
 
-    toJSON(): string;
-  }
+  toJSON(): string;
+}
 
-  class Vector {
-    static get [Symbol.species](): typeof Vector;
-    constructor(elements: Float32Array | Array<any>, subtype?: string);
-    elements: any[];
-    length: number;
-    subtype: string | undefined;
+export class Vector {
+  static get [Symbol.species](): typeof Vector;
+  constructor(elements: Float32Array | Array<any>, subtype?: string);
+  elements: any[];
+  length: number;
+  subtype: string | undefined;
 
-    toString(): string;
-    at(index: number): any;
-    forEach(callback: (value: any, index: number, array: any[]) => void): void;
-    getSubtype(): string | undefined;
+  toString(): string;
+  at(index: number): any;
+  forEach(callback: (value: any, index: number, array: any[]) => void): void;
+  getSubtype(): string | undefined;
 
-    [Symbol.iterator](): IterableIterator<any>;
-  }
+  [Symbol.iterator](): IterableIterator<any>;
 }

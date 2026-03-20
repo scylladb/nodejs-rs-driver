@@ -1,19 +1,17 @@
-export namespace auth {
-  interface Authenticator {
-    initialResponse(callback: Function): void;
+export interface Authenticator {
+  initialResponse(callback: Function): void;
 
-    evaluateChallenge(challenge: Buffer, callback: Function): void;
+  evaluateChallenge(challenge: Buffer, callback: Function): void;
 
-    onAuthenticationSuccess(token?: Buffer): void;
-  }
+  onAuthenticationSuccess(token?: Buffer): void;
+}
 
-  interface AuthProvider {
-    newAuthenticator(endpoint: string, name: string): Authenticator;
-  }
+export interface AuthProvider {
+  newAuthenticator(endpoint: string, name: string): Authenticator;
+}
 
-  class PlainTextAuthProvider implements AuthProvider {
-    constructor(username: string, password: string);
+export class PlainTextAuthProvider implements AuthProvider {
+  constructor(username: string, password: string);
 
-    newAuthenticator(endpoint: string, name: string): Authenticator;
-  }
+  newAuthenticator(endpoint: string, name: string): Authenticator;
 }
