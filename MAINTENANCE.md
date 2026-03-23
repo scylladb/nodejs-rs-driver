@@ -86,19 +86,35 @@ launched through CCM. Split between regular and extended CI is not yet decided.
 
 ## Releasing process
 
-1. Bump the package version. Remember to update the version in `package-lock.json` in
-main directory, examples and benchmarks
+1. Update the driver dependencies. When updating / upgrading node dependencies,
+you can either run `npm update` in the main directory, or manually update `package.json` or `package-lock.json` and run `npm i`.
+Remember to run `npm i` in the `examples/` and `benchmark/` directories once you update the packages. See [Updating packages](#updating-packages) for more details.
+2. Bump the package version. Remember to update the version in `package-lock.json` in
+the main directory, `examples/`, and `benchmark/`. You can do this by running `npm i` in all 3 directories
 (see [example commit](https://github.com/scylladb/nodejs-rs-driver/pull/363/changes/41250609737052975129c7514439869324478008) on how to do that).
-2. Create a new tag
-3. Ensure the extended CI passes.
-4. Create release notes on GitHub. The version tag must match version from `package.json` with `v` prefix (for example: `v0.2.0`).
+3. Create a new tag.
+4. Ensure the extended CI passes.
+5. Create release notes on GitHub. The version tag must match version from `package.json` with `v` prefix (for example: `v0.2.0`).
 Once you publish release notes, CI action will trigger automatically. This action will build and publish the npm package.
-5. Once the CI action finishes, check if it succeeded. If it failed, you will have to fix the underlying issue, and re-run the CI action.
-6. Verify that the new release is visible at [npmjs site](https://www.npmjs.com/package/scylladb-driver-alpha).
-7. Test the package, by installing it directly from npm. Go to `examples` directory, in `package.json` update the line:
+6. Once the CI action finishes, check if it succeeded. If it failed, you will have to fix the underlying issue, and re-run the CI action.
+7. Verify that the new release is visible at [npmjs site](https://www.npmjs.com/package/scylladb-driver-alpha).
+8. Test the package, by installing it directly from npm. Go to `examples` directory, in `package.json` update the line:
 `"scylladb-driver-alpha": "file:./../"`
 to:
 `"scylladb-driver-alpha": "<just-released-version>"`,
 then run the following command:
 `npm i && node ./runner.js`
 <!-- The last step can potentially be set up as a CI action step. -->
+
+### Updating packages
+
+As we only have a single dependency (`long` package) used for released version of the package, the main goal of this is to update dev dependencies.
+This is done to:
+
+1. Resolve dependabot alerts. Doing it for every alert individually would be too tiresome,
+but we still want to resolve those alerts.
+2. Have access to new features. (But the point 1. is way more important).
+
+When bumping version with `npm update` packages will be updated according to `package.json` semantics.
+Updating this way will only update the lock file.
+If this is not enough, you can manually update `package.json` or `package-lock.json`.

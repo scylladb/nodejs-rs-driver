@@ -1984,8 +1984,9 @@ function executeIfVersion(testVersion, func, args) {
 /**
  * Policy only suitable for testing, it creates a fixed query plan containing the nodes in the same order, i.e. [a, b].
  */
-class OrderedLoadBalancingPolicy extends policies.loadBalancing
-    .RoundRobinPolicy {
+class OrderedLoadBalancingPolicy
+    extends policies.loadBalancing.RoundRobinPolicy
+{
     /**
      * Creates a new instance.
      * @param {Array<String>} [addresses] When specified, it uses the order from the provided host
