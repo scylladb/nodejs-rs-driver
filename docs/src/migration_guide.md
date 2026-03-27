@@ -33,6 +33,23 @@ The following options remain unchanged:
 - `encoding.useUndefinedAsUnset`
 - `maxPrepared`
 
+### Contact points and ports
+
+The port can be specified either per contact point (e.g. `'10.0.1.1:9043'`) or globally via
+`protocolOptions.port`, but not both. When `protocolOptions.port` is set, the port is appended
+to all contact point addresses and individual contact points must not include a port.
+
+When neither is specified, the default port (9042) is used.
+
+### Keep-alive options
+
+The keep-alive behavior has changed compared to the `cassandra-driver`:
+
+- `socketOptions.keepAlive` and `socketOptions.keepAliveDelay` now control the TCP-layer
+  keep-alive interval. When `keepAlive` is `true` and `keepAliveDelay` is `0` (or not set),
+  a default interval of 60 seconds is used. Setting `keepAlive` to `false` disables
+  TCP-layer keep-alive entirely.
+
 The following option implementation has changed significantly,
 but the meaning of those option remains unchanged:
 

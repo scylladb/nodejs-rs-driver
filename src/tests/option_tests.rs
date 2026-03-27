@@ -61,7 +61,14 @@ pub fn tests_check_client_option(options: SessionOptions, test_case: i32) {
                                 socket: "7.3.1.2:960".parse().unwrap()
                             }
                         )])
-                    })
+                    }),
+                    connect_timeout_millis: Some(3000),
+                    tcp_nodelay: Some(false),
+                    tcp_keepalive_interval_millis: Some(5000),
+                    keepalive_interval_millis: Some(15000),
+                    schema_agreement_timeout_secs: Some(20),
+                    schema_agreement_interval_millis: Some(500),
+                    default_port: Some(9043),
                 }
             )
         }
@@ -80,9 +87,19 @@ pub fn tests_check_client_option(options: SessionOptions, test_case: i32) {
                     ssl_options: None,
                     load_balancing_config: None,
                     retry_policy: None,
-                    address_translator_config: None
+                    address_translator_config: None,
+                    connect_timeout_millis: None,
+                    tcp_nodelay: None,
+                    tcp_keepalive_interval_millis: None,
+                    keepalive_interval_millis: None,
+                    schema_agreement_timeout_secs: None,
+                    schema_agreement_interval_millis: None,
+                    default_port: None,
                 }
             )
+        }
+        3 => {
+            assert_eq!(options.keepalive_interval_millis, None)
         }
         _ => {}
     }

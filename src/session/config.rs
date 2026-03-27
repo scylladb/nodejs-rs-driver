@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
+use std::time::Duration;
 
 use napi::bindgen_prelude::BigInt;
 use openssl::pkcs12::Pkcs12;
@@ -94,6 +95,13 @@ struct SessionOptions {
     load_balancing_config, loadBalancingConfig: LoadBalancingConfig,
     retry_policy, retryPolicy: RetryPolicyKind,
     address_translator_config, addressTranslatorConfig: FixedAddressTranslatorConfig,
+    connect_timeout_millis, connectTimeoutMillis: u32,
+    tcp_nodelay, tcpNodelay: bool,
+    tcp_keepalive_interval_millis, tcpKeepaliveIntervalMillis: u32,
+    keepalive_interval_millis, keepaliveIntervalMillis: u32,
+    schema_agreement_timeout_secs, schemaAgreementTimeoutSecs: u32,
+    schema_agreement_interval_millis, schemaAgreementIntervalMillis: u32,
+    default_port, defaultPort: u32,
 });
 
 impl Debug for SslOptions {
@@ -268,12 +276,45 @@ fn configure_ssl(options: &SslOptions) -> ConvertedResult<Option<SslContext>> {
     Ok(Some(ssl_context_builder.build()))
 }
 
+/// Appends the port to a contact point address.
+///
+/// The port can be specified either per contact point (e.g. `"10.0.1.1:9043"`)
+/// or globally via `protocolOptions.port`, but not both. This function is only
+/// called when `protocolOptions.port` is set, in which case it is appended to
+/// all contact points.
+///
+/// IPv6 addresses are wrapped in brackets to produce the `[addr]:port` form
+/// expected by the Rust driver.
+fn append_port(cp: &str, port: u32) -> String {
+    // Bare IPv6 address (contains colons, e.g. "::1", "2001:db8::1") — wrap in brackets.
+    // This branch will also catch and properly handle IPv4 addresses.
+    if let Ok(ip) = cp.parse::<std::net::IpAddr>() {
+        return std::net::SocketAddr::new(ip, port as u16).to_string();
+    }
+
+    format!("{}:{}", cp, port)
+}
+
 pub(crate) fn configure_session_builder(
     options: SessionOptions,
 ) -> ConvertedResult<SessionBuilder> {
     let mut builder = SessionBuilder::new();
     builder = builder.custom_identity(self_identity(&options));
-    builder = builder.known_nodes(options.connect_points.as_deref().unwrap_or(&[]));
+
+    // JS: protocolOptions.port → appended to all contact point addresses.
+    // When not set, contact points are passed through as-is and the Rust driver
+    // applies its own default (9042).
+    let connect_points: Vec<String> = match options.default_port {
+        Some(port) => options
+            .connect_points
+            .unwrap_or_default()
+            .iter()
+            .map(|cp| append_port(cp, port))
+            .collect(),
+        None => options.connect_points.unwrap_or_default(),
+    };
+    builder = builder.known_nodes(&connect_points);
+
     if let Some(keyspace) = &options.keyspace {
         builder = builder.use_keyspace(keyspace, false);
     }
@@ -294,6 +335,29 @@ pub(crate) fn configure_session_builder(
 
     if let Some(ssl_options) = &options.ssl_options {
         builder = builder.tls_context(configure_ssl(ssl_options)?);
+    }
+
+    if let Some(connect_timeout_millis) = options.connect_timeout_millis {
+        builder = builder.connection_timeout(Duration::from_millis(connect_timeout_millis as u64));
+    }
+    if let Some(tcp_nodelay) = options.tcp_nodelay {
+        builder = builder.tcp_nodelay(tcp_nodelay);
+    }
+    // JS side ensures this is set only, when keepAlive is enabled.
+    if let Some(tcp_keepalive_millis) = options.tcp_keepalive_interval_millis {
+        builder =
+            builder.tcp_keepalive_interval(Duration::from_millis(tcp_keepalive_millis as u64));
+    }
+
+    if let Some(keepalive_millis) = options.keepalive_interval_millis {
+        builder = builder.keepalive_interval(Duration::from_millis(keepalive_millis as u64));
+    }
+
+    if let Some(timeout_secs) = options.schema_agreement_timeout_secs {
+        builder = builder.schema_agreement_timeout(Duration::from_secs(timeout_secs as u64));
+    }
+    if let Some(interval_millis) = options.schema_agreement_interval_millis {
+        builder = builder.schema_agreement_interval(Duration::from_millis(interval_millis as u64));
     }
 
     if let Some(allow_list) = options
@@ -387,4 +451,46 @@ fn self_identity(options: &SessionOptions) -> SelfIdentity<'static> {
         self_identity.set_client_id(client_id.to_owned());
     }
     self_identity
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ipv4() {
+        assert_eq!(append_port("10.0.1.1", 9042), "10.0.1.1:9042");
+    }
+
+    #[test]
+    fn ipv6_loopback() {
+        assert_eq!(append_port("::1", 9042), "[::1]:9042");
+    }
+
+    #[test]
+    fn ipv6_full() {
+        assert_eq!(append_port("2001:db8::1", 9042), "[2001:db8::1]:9042");
+    }
+
+    #[test]
+    fn ipv6_all_zeros() {
+        assert_eq!(append_port("::", 9042), "[::]:9042");
+    }
+
+    #[test]
+    fn hostname() {
+        assert_eq!(append_port("myhost", 9042), "myhost:9042");
+    }
+
+    #[test]
+    fn fqdn() {
+        assert_eq!(append_port("db1.example.com", 9042), "db1.example.com:9042");
+    }
+
+    #[test]
+    fn custom_port() {
+        assert_eq!(append_port("10.0.1.1", 7000), "10.0.1.1:7000");
+        assert_eq!(append_port("::1", 7000), "[::1]:7000");
+        assert_eq!(append_port("myhost", 7000), "myhost:7000");
+    }
 }
