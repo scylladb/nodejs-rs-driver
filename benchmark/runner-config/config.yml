@@ -21,23 +21,43 @@ benchmarks:
     starting-step: 6250
   - name: concurrent_insert
     starting-step: 62500
+  - name: concurrency_parametrized_insert
+    starting-step: 16
+    step-progress: 2
+    no-steps: 8
   - name: select
     starting-step: 1563
   - name: concurrent_select
     starting-step: 6250
+  - name: concurrency_parametrized_select
+    starting-step: 16
+    step-progress: 2
+    no-steps: 8
   - name: batch
     starting-step: 46875
   - name: paging
     starting-step: 63
   - name: concurrent_paging
     starting-step: 20
+  - name: concurrency_parametrized_paging
+    starting-step: 16
+    step-progress: 2
+    no-steps: 8
   - name: large_select
     starting-step: 63
   - name: deser
     starting-step: 32
   - name: concurrent_deser
     starting-step: 32
+  - name: concurrency_parametrized_deser
+    starting-step: 16
+    step-progress: 2
+    no-steps: 8
   - name: ser
     starting-step: 15
   - name: concurrent_ser
     starting-step: 19
+  - name: concurrency_parametrized_ser
+    starting-step: 16
+    step-progress: 2
+    no-steps: 8
