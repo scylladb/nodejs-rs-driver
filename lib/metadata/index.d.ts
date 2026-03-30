@@ -109,9 +109,15 @@ export interface SchemaFunction {
     signature: string[];
   }
 
+export interface UdtField {
+    name: string;
+    type: DataTypeInfo;
+  }
+
 export interface Udt {
     name: string;
-    fields: ColumnInfo[];
+    keyspace: string;
+    fields: UdtField[];
   }
 
 export enum StrategyKind {
