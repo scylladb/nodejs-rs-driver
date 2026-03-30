@@ -63,6 +63,8 @@ Result will be saved to `out.svg`. You can read more in the benchmarker document
 
 ## Legacy python script
 
+This script is no longer updated, so it may be broken.
+
 A file that runs all benchmarks: `runner.py`
 
 The script compares benchmark results for our driver, [Cassandra driver](https://github.com/apache/cassandra-nodejs-driver) and [Rust driver](https://github.com/scylladb/scylla-rust-driver). Parameters for the benchmarks can be modified inside it. The result is a `graph.png` file that presents a graph of time on a logarithmic scale. The graphs are uploaded to the provided discord webhook.
@@ -95,7 +97,7 @@ This benchmark uses `executeConcurrent` endpoint to insert `n` rows containing `
 JS:
 
 ```bash
-node concurrent_insert.js <driver> <Number of queries>
+node benchmark.js concurrent_insert <driver> <Number of queries>
 ```
 
 Rust:
@@ -111,7 +113,7 @@ This benchmark executes `n` `client.execute` queries, that insert a single row c
 JS:
 
 ```bash
-node insert.js <driver> <Number of queries>
+node benchmark.js insert <driver> <Number of queries>
 ```
 
 Rust:
@@ -127,7 +129,7 @@ This benchmark first inserts `10` rows containing `uuid` and `int`. Afterwards i
 JS:
 
 ```bash
-node concurrent_select.js <driver> <Number of queries>
+node benchmark.js concurrent_select <driver> <Number of queries>
 ```
 
 Rust:
@@ -143,7 +145,7 @@ This benchmark first inserts 10 rows containing `uuid` and `int`. Afterwards it 
 JS:
 
 ```bash
-node select.js <driver> <Number of queries>
+node benchmark.js select <driver> <Number of queries>
 ```
 
 Rust:
@@ -156,12 +158,15 @@ CNT=<Number of queries> cargo run --bin select_benchmark -r
 
 This benchmark uses `executeConcurrent` endpoint to insert `n` rows containing `uuid`, `int`, `timeuuid`, `inet`, `date`, `time` into the database.  Afterwards it uses `executeConcurrent` endpoint to select all (`n`) of the inserted rows from the database `n` times.
 
-JS: 
+JS:
+
+```bash
+node benchmark.js concurrent_deser <driver> <Number of queries>
 ```
-node concurrent_deser.js <driver> <Number of queries>
-```
+
 Rust:
-```
+
+```bash
 CNT=<Number of queries> cargo run --bin concurrent_deser_benchmark -r
 ```
 
@@ -169,40 +174,47 @@ CNT=<Number of queries> cargo run --bin concurrent_deser_benchmark -r
 
 This benchmark executes `n` `client.execute` queries, that insert a single row containing `uuid`, `int`, `timeuuid`, `inet`, `date`, `time` waiting for the result of the previous query before executing the next one. Afterwards it executes `n` `client.execute` queries, that select all (`n`) of the inserted rows, waiting for the result of the previous query before executing the next one.
 
-JS: 
+JS:
+
+```bash
+node benchmark.js deser <driver> <Number of queries>
 ```
-node deser.js <driver> <Number of queries>
-```
+
 Rust:
-```
+
+```bash
 CNT=<Number of queries> cargo run --bin deser_benchmark -r
 ```
-
-
 
 - **concurrent serialization**
 
 This benchmark uses `executeConcurrent` endpoint to insert `n*n` rows containing `uuid`, `int`, `timeuuid`, `inet`, `date`, `time` into the database.
 
-JS: 
+JS:
+
+```bash
+node benchmark.js concurrent_ser <driver> <Number of queries>
 ```
-node concurrent_ser.js <driver> <Number of queries>
-```
+
 Rust:
-```
+
+```bash
 CNT=<Number of queries> cargo run --bin concurrent_ser_benchmark -r
 ```
 
 - **serialization**
 
-This benchmark executes `n*n` `client.execute` queries, that insert a single row containing `uuid`, `int`, `timeuuid`, `inet`, `date`, `time` waiting for the result of the previous query before executing the next one. 
+This benchmark executes `n*n` `client.execute` queries, that insert a single row containing `uuid`, `int`, `timeuuid`, `inet`, `date`, `time` waiting for the result of the previous query before executing the next one.
 
-JS: 
+JS:
+
+```bash
+node benchmark.js ser <driver> <Number of queries>
 ```
-node ser.js <driver> <Number of queries>
-```
+
 Rust:
-```
+
+```bash
 CNT=<Number of queries> cargo run --bin ser_benchmark -r
 ```
 
@@ -213,7 +225,7 @@ This benchmark uses `client.batch` endpoint to insert `n` rows containing `uuid`
 JS:
 
 ```bash
-node batch.js <driver> <Number of queries>
+node benchmark.js batch <driver> <Number of queries>
 ```
 
 Rust:

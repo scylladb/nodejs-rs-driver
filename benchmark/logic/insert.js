@@ -1,36 +1,35 @@
 "use strict";
 const async = require("async");
-// Possible values of argv[2] (driver) are scylladb-driver-alpha and cassandra-driver.
-const cassandra = require(process.argv[2]);
 const utils = require("./utils");
 const { exit } = require("process");
 
-const client = new cassandra.Client(utils.getClientArgs());
-const iterCnt = parseInt(process.argv[3]);
+module.exports = function (cassandra, client, stepCount, _concurrencyLevel) {
+    // REMEMBER: update benchmark config.yml when changing the constant value.
+    const iterCnt = stepCount || 400000;
 
-async.series(
-    [
-        function initialize(next) {
-            utils.prepareDatabase(client, utils.tableSchemaBasic, next);
-        },
-        async function insert(next) {
-            for (let i = 0; i < iterCnt; i++) {
-                const id = cassandra.types.Uuid.random();
-                const query =
-                    "INSERT INTO benchmarks.basic (id, val) VALUES (?, ?)";
-                try {
-                    await client.execute(query, [id, 100], { prepare: true });
-                } catch (err) {
-                    return next(err);
+    async.series(
+        [
+            function initialize(next) {
+                utils.prepareDatabase(client, utils.tableSchemaBasic, next);
+            },
+            async function insert(next) {
+                for (let i = 0; i < iterCnt; i++) {
+                    const id = cassandra.types.Uuid.random();
+                    const query =
+                        "INSERT INTO benchmarks.basic (id, val) VALUES (?, ?)";
+                    try {
+                        await client.execute(query, [id, 100], { prepare: true });
+                    } catch (err) {
+                        return next(err);
+                    }
                 }
+                next();
+            },
+            async function test(next) {
+                utils.checkRowCount(client, iterCnt, next);
+            },
+            function r() {
+                exit(0);
             }
-            next();
-        },
-        async function test(next) {
-            utils.checkRowCount(client, iterCnt, next);
-        },
-        function r() {
-            exit(0);
-        }
-    ], utils.onError);
-
+        ], utils.onError);
+};

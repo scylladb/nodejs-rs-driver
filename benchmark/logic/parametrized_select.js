@@ -1,31 +1,26 @@
 "use strict";
 const async = require("async");
-// Possible values of argv[2] (driver) are scylladb-driver-alpha and cassandra-driver.
-const cassandra = require(process.argv[2]);
 const utils = require("./utils");
 const { exit } = require("process");
 
-const client = new cassandra.Client(utils.getClientArgs());
-const iterCnt = parseInt(process.argv[3]);
+function selectWithRows(cassandra, client, rowCount, stepCount) {
+    const iterCnt = stepCount;
 
-function selectWithRows(number) {
     async.series(
         [
             function initialize(next) {
                 utils.prepareDatabase(client, utils.tableSchemaBasic, next);
             },
             async function insert(next) {
-                utils.insertSimple(client, 10, next);
+                utils.insertSimple(client, rowCount, next);
             },
             async function query(next) {
-                await utils.queryWithRowCheck(client, number, iterCnt, next);
+                await utils.queryWithRowCheck(client, rowCount, iterCnt, next);
             },
             function r() {
                 exit(0);
             }
-
         ], utils.onError);
 }
-
 
 module.exports = selectWithRows;
