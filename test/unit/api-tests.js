@@ -51,6 +51,16 @@ describe("API", function () {
         checkConstructor(api.types, "Uuid");
         checkConstructor(api.types, "TimeUuid");
     });
+
+    it("should expose logLevels enum on types", function () {
+        assert.ok(api.types.logLevels);
+        assert.strictEqual(api.types.logLevels.trace, "trace");
+        assert.strictEqual(api.types.logLevels.debug, "debug");
+        assert.strictEqual(api.types.logLevels.info, "info");
+        assert.strictEqual(api.types.logLevels.warning, "warning");
+        assert.strictEqual(api.types.logLevels.error, "error");
+        assert.strictEqual(api.types.logLevels.off, "off");
+    });
 });
 
 function checkConstructor(module, constructorName) {
