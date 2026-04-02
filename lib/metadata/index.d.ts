@@ -39,6 +39,18 @@ export interface ColumnInfo {
     type: DataTypeInfo;
   }
 
+export enum ColumnKind {
+    Regular = 0,
+    Static = 1,
+    ClusteringKey = 2,
+    PartitionKey = 3,
+  }
+
+export interface ColumnMetadata {
+    type: string;
+    kind: ColumnKind;
+  }
+
 export enum IndexKind {
     custom = 0,
     keys,
@@ -58,48 +70,15 @@ export interface Index {
     isKeysKind(): boolean;
   }
 
-export interface DataCollection {
-    bloomFilterFalsePositiveChance: number;
-    caching: string;
-    clusteringKeys: ColumnInfo[];
-    clusteringOrder: string[];
-    columns: ColumnInfo[];
-    columnsByName: { [key: string]: ColumnInfo };
-    comment: string;
-    compactionClass: string;
-    compactionOptions: { [option: string]: any };
-    compression: {
-      class?: string;
-      [option: string]: any;
-    };
-    crcCheckChange?: number;
-    defaultTtl: number;
-    extensions: { [option: string]: any };
-    gcGraceSeconds: number;
-    localReadRepairChance: number;
-    maxIndexInterval?: number;
-    minIndexInterval?: number;
-    name: string;
-    partitionKeys: ColumnInfo[];
-    populateCacheOnFlush: boolean;
-    readRepairChance: number;
-    speculativeRetry: string;
-  }
-
-export interface MaterializedView extends DataCollection {
+export interface MaterializedView extends TableMetadata {
     tableName: string;
-    whereClause: string;
-    includeAllColumns: boolean;
   }
 
-export interface TableMetadata extends DataCollection {
-    indexes: Index[];
-    indexInterval?: number;
-    isCompact: boolean;
-    memtableFlushPeriod: number;
-    replicateOnWrite: boolean;
-    cdc?: boolean;
-    virtual: boolean;
+export interface TableMetadata {
+    columns: { [name: string]: ColumnMetadata };
+    partitionKey: string[];
+    clusteringKey: string[];
+    partitioner: string | null;
   }
 
 export interface QueryTrace {
@@ -130,9 +109,36 @@ export interface SchemaFunction {
     signature: string[];
   }
 
+export interface UdtField {
+    name: string;
+    type: DataTypeInfo;
+  }
+
 export interface Udt {
     name: string;
-    fields: ColumnInfo[];
+    keyspace: string;
+    fields: UdtField[];
+  }
+
+export enum StrategyKind {
+    SimpleStrategy = 0,
+    NetworkTopologyStrategy = 1,
+    LocalStrategy = 2,
+    Other = 3,
+  }
+
+export type Strategy =
+    | { kind: StrategyKind.SimpleStrategy; replicationFactor: number }
+    | { kind: StrategyKind.NetworkTopologyStrategy; datacenterRepfactors: { [datacenter: string]: number } }
+    | { kind: StrategyKind.LocalStrategy }
+    | { kind: StrategyKind.Other; name: string; data: { [key: string]: string } };
+
+export interface KeyspaceMetadata {
+    strategy: Strategy;
+    durableWrites: boolean;
+    tables: { [name: string]: TableMetadata };
+    views: { [name: string]: MaterializedView };
+    userDefinedTypes: { [name: string]: Udt };
   }
 
 export interface Metadata {
