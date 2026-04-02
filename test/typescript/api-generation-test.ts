@@ -64,6 +64,7 @@ export async function generatedFn() {
     printEnum(types.protocolVersion, "types.protocolVersion");
     printEnum(types.distance, "types.distance");
     printEnum(types.responseErrorCodes, "types.responseErrorCodes");
+    printStringEnum(types.logLevels, "types.logLevels");
     console.log(`  o = types.unset;\n\n`);
     printClasses(
         types,
@@ -92,6 +93,28 @@ function printEnum(enumObject: { [key: string]: any }, name: string): void {
         .filter((k) => typeof enumObject[k] === "number")
         .forEach((k) => {
             console.log(`  n = ${name}.${k};`);
+        });
+    console.log();
+}
+
+/**
+ * Prints string enum values as type-safe assignment statements.
+ * For example, given `{ trace: "trace", debug: "debug" }` and name `"types.logLevels"`,
+ * outputs:
+ *   // types.logLevels enum values
+ *   s = types.logLevels.trace;
+ *   s = types.logLevels.debug;
+ */
+function printStringEnum(
+    enumObject: { [key: string]: any },
+    name: string,
+): void {
+    console.log(`  // ${name} enum values`);
+
+    Object.keys(enumObject)
+        .filter((k) => typeof enumObject[k] === "string")
+        .forEach((k) => {
+            console.log(`  s = ${name}.${k};`);
         });
     console.log();
 }
