@@ -93,6 +93,18 @@ async function myTest(): Promise<any> {
     applicationVersion: "3.1.2",
   });
 
+  otherClient = new Client({
+    contactPoints: ["h1", "h2"],
+    localDataCenter: "dc1",
+    logLevel: types.logLevels.info,
+  });
+
+  otherClient = new Client({
+    contactPoints: ["h1", "h2"],
+    localDataCenter: "dc1",
+    logLevel: types.logLevels.off,
+  });
+
   let ep1: ExecutionProfile = new ExecutionProfile("oltp1", {
     consistency: types.consistencies.localOne,
   });
