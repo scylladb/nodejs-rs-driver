@@ -1,7 +1,7 @@
-"use strict";
-const Long = require("long");
-const util = require("util");
-const utils = require("../utils");
+import Long = require("long");
+import util = require("util");
+import utils = require("../utils");
+
 /** @module types */
 
 const maxNanos = Long.fromString("86399999999999");
@@ -19,27 +19,20 @@ const millisInDay = 86400000;
  * For example, the value "13:45.30.123456789" can be stored in a LocalTime.
  */
 class LocalTime {
-    /**
-     * @type {Number}
-     */
-    #hour;
-    /**
-     * @type {Number}
-     */
-    #minute;
-    /**
-     * @type {Number}
-     */
-    #second;
-    /**
-     * @type {Number}
-     */
-    #nanosecond;
+    #hour: number;
+    #minute: number;
+    #second: number;
+    #nanosecond: number;
+
+    value: Long;
+    /** @internal */
+    _partsCache: number[] | undefined;
+
     /**
      * Creates a new instance of LocalTime.
-     * @param {Long} totalNanoseconds Total nanoseconds since midnight.
+     * @param totalNanoseconds Total nanoseconds since midnight.
      */
-    constructor(totalNanoseconds) {
+    constructor(totalNanoseconds: Long) {
         if (!(totalNanoseconds instanceof Long)) {
             throw new Error(
                 "You must specify a Long value as totalNanoseconds",
@@ -55,22 +48,18 @@ class LocalTime {
 
         /**
          * Gets the hour component of the time represented by the current instance, a number from 0 to 23.
-         * @type Number
          */
         this.#hour = this.#getParts()[0];
         /**
          * Gets the minute component of the time represented by the current instance, a number from 0 to 59.
-         * @type Number
          */
         this.#minute = this.#getParts()[1];
         /**
          * Gets the second component of the time represented by the current instance, a number from 0 to 59.
-         * @type Number
          */
         this.#second = this.#getParts()[2];
         /**
          * Gets the nanoseconds component of the time represented by the current instance, a number from 0 to 999999999.
-         * @type Number
          */
         this.#nanosecond = this.#getParts()[3];
     }
@@ -78,61 +67,55 @@ class LocalTime {
     /**
      * Gets the nanoseconds, a number from 0 to 999 999 999.
      * @readonly
-     * @type {Number}
      */
-    get nanosecond() {
+    get nanosecond(): number {
         return this.#nanosecond;
     }
 
-    set nanosecond(_) {
+    set nanosecond(_: number) {
         throw new SyntaxError("LocalTime nanosecond is read-only");
     }
 
     /**
      * Gets the seconds, a number from 0 to 59.
      * @readonly
-     * @type {Number}
      */
-    get second() {
+    get second(): number {
         return this.#second;
     }
 
-    set second(_) {
+    set second(_: number) {
         throw new SyntaxError("LocalTime second is read-only");
     }
 
     /**
      * Gets the minutes, a number from 0 to 59.
      * @readonly
-     * @type {Number}
      */
-    get minute() {
+    get minute(): number {
         return this.#minute;
     }
 
-    set minute(_) {
+    set minute(_: number) {
         throw new SyntaxError("LocalTime minute is read-only");
     }
 
     /**
      * Gets the hours, a number from 0 to 24.
      * @readonly
-     * @type {Number}
      */
-    get hour() {
+    get hour(): number {
         return this.#hour;
     }
 
-    set hour(_) {
+    set hour(_: number) {
         throw new SyntaxError("LocalTime hour is read-only");
     }
 
     /**
      * Parses a string representation and returns a new LocalDate.
-     * @param {String} value
-     * @returns {LocalTime}
      */
-    static fromString(value) {
+    static fromString(value: string): LocalTime {
         if (typeof value !== "string") {
             throw new TypeError(
                 `Argument type invalid: ${util.inspect(value)}, expected string type`,
@@ -183,20 +166,18 @@ class LocalTime {
 
     /**
      * Uses the current local time (in milliseconds) and the nanoseconds to create a new instance of LocalTime
-     * @param {Number} [nanoseconds] A Number from 0 to 999,999,999, representing the time nanosecond portion.
-     * @returns {LocalTime}
+     * @param nanoseconds A Number from 0 to 999,999,999, representing the time nanosecond portion.
      */
-    static now(nanoseconds) {
+    static now(nanoseconds?: number): LocalTime {
         return LocalTime.fromDate(new Date(), nanoseconds);
     }
 
     /**
      * Uses the provided local time (in milliseconds) and the nanoseconds to create a new instance of LocalTime
-     * @param {Date} date Local date portion to extract the time passed since midnight.
-     * @param {Number} [nanoseconds] A Number from 0 to 999,999,999 representing the nanosecond time portion.
-     * @returns {LocalTime}
+     * @param date Local date portion to extract the time passed since midnight.
+     * @param nanoseconds A Number from 0 to 999,999,999 representing the nanosecond time portion.
      */
-    static fromDate(date, nanoseconds) {
+    static fromDate(date: Date, nanoseconds?: number): LocalTime {
         if (!(date instanceof Date)) {
             throw new Error("Not a valid date");
         }
@@ -209,11 +190,13 @@ class LocalTime {
 
     /**
      * Uses the provided local time (in milliseconds) and the nanoseconds to create a new instance of LocalTime
-     * @param {Number} milliseconds A Number from 0 to 86,399,999.
-     * @param {Number} [nanoseconds] A Number from 0 to 999,999,999 representing the time nanosecond portion.
-     * @returns {LocalTime}
+     * @param milliseconds A Number from 0 to 86,399,999.
+     * @param nanoseconds A Number from 0 to 999,999,999 representing the time nanosecond portion.
      */
-    static fromMilliseconds(milliseconds, nanoseconds) {
+    static fromMilliseconds(
+        milliseconds: number,
+        nanoseconds?: number,
+    ): LocalTime {
         if (typeof nanoseconds !== "number") {
             nanoseconds = 0;
         }
@@ -229,10 +212,8 @@ class LocalTime {
 
     /**
      * Creates a new instance of LocalTime from the bytes representation.
-     * @param {Buffer} value
-     * @returns {LocalTime}
      */
-    static fromBuffer(value) {
+    static fromBuffer(value: Buffer): LocalTime {
         if (!(value instanceof Buffer)) {
             throw new TypeError(
                 "Expected Buffer, obtained " + util.inspect(value),
@@ -245,40 +226,36 @@ class LocalTime {
 
     /**
      * Compares this LocalTime with the given one.
-     * @param {LocalTime} other time to compare against.
-     * @return {number} 0 if they are the same, 1 if the this is greater, and -1
+     * @param other time to compare against.
+     * @return 0 if they are the same, 1 if the this is greater, and -1
      * if the given one is greater.
      */
-    compare(other) {
+    compare(other: LocalTime): number {
         return this.value.compare(other.value);
     }
 
     /**
      * Returns true if the value of the LocalTime instance and other are the same
-     * @param {LocalTime} other
-     * @returns {Boolean}
      */
-    equals(other) {
+    equals(other: LocalTime): boolean {
         return other instanceof LocalTime && this.compare(other) === 0;
     }
 
     /**
      * Gets the total amount of nanoseconds since midnight for this instance.
-     * @returns {Long}
      */
-    getTotalNanoseconds() {
+    getTotalNanoseconds(): Long {
         return this.value;
     }
 
-    inspect() {
+    inspect(): string {
         return `${this.constructor.name}: ${this.toString()}`;
     }
 
     /**
      * Returns a big-endian bytes representation of the instance
-     * @returns {Buffer}
      */
-    toBuffer() {
+    toBuffer(): Buffer {
         const buffer = utils.allocBufferUnsafe(8);
         buffer.writeUInt32BE(this.value.getHighBitsUnsigned(), 0);
         buffer.writeUInt32BE(this.value.getLowBitsUnsigned(), 4);
@@ -287,25 +264,22 @@ class LocalTime {
 
     /**
      * Returns the string representation of the instance in the form of hh:MM:ss.ns
-     * @returns {String}
      */
-    toString() {
+    toString(): string {
         return formatTime(this.#getParts());
     }
 
     /**
      * Gets the string representation of the instance in the form: hh:MM:ss.ns
-     * @returns {String}
      */
-    toJSON() {
+    toJSON(): string {
         return this.toString();
     }
 
     /**
-     * @returns {Array.<Number>}
      * @ignore
      */
-    #getParts() {
+    #getParts(): number[] {
         if (!this._partsCache) {
             // hours, minutes, seconds and nanos
             const parts = [0, 0, 0, 0];
@@ -334,10 +308,9 @@ class LocalTime {
 }
 
 /**
- * @param {Array.<Number>} values
  * @private
  */
-function formatTime(values) {
+function formatTime(values: number[]): string {
     let result;
     if (values[0] < 10) {
         result = "0" + values[0] + ":";
@@ -375,4 +348,4 @@ function formatTime(values) {
     return result;
 }
 
-module.exports = LocalTime;
+export = LocalTime;
