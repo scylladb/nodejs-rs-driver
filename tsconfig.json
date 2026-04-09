@@ -1,0 +1,19 @@
+/* This config is just for testing type safety, not building the TS code. */
+{
+    "compilerOptions": {
+        /* Highest version supported by lowest acceptable Node.js version */
+        "target": "es2022",
+        "module": "node18",
+        "moduleResolution": "nodenext",
+        /* We check both TS and JS with TS compiler */
+        "allowJs": true,
+        "checkJs": true,
+        "strict": true,
+        /* Just checking */
+        "noEmit": true,
+        "esModuleInterop": true,
+        /* Necessary for retrieving driver version from package.json */
+        "resolveJsonModule": true
+    },
+    "include": ["lib/**/*.js"],
+}

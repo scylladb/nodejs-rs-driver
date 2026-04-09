@@ -39,4 +39,6 @@ jobs:
       - name: Prettier for JS
         run: npx prettier "{lib,examples,test}/**/*.js" --check
       - name: Eslint
-        run: npm run eslint      
+        run: npm run eslint
+      - name: Typecheck
+        run: npm run typecheck
