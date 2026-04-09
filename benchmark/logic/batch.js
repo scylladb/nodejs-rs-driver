@@ -2,7 +2,6 @@
 const async = require("async");
 const utils = require("./utils");
 const { exit } = require("process");
-const assert = require("assert");
 
 module.exports = function (cassandra, client, stepCount, _concurrencyLevel) {
     // REMEMBER: update benchmark config.yml when changing the constant value.
@@ -33,14 +32,7 @@ module.exports = function (cassandra, client, stepCount, _concurrencyLevel) {
                 next();
             },
             async function test(next) {
-                const query = "SELECT COUNT(1) FROM benchmarks.basic USING TIMEOUT 120s;";
-                try {
-                    let res = await client.execute(query);
-                    assert(res.rows[0].count == iterCnt);
-                } catch (err) {
-                    return next(err);
-                }
-                next();
+                utils.checkRowCount(client, iterCnt, next);
             },
             function r() {
                 exit(0);
