@@ -133,3 +133,37 @@ an [impostor commit](https://www.chainguard.dev/unchained/what-the-fork-imposter
 and ensure there is no `This commit does not belong to any branch on this repository` message at the top of the page.
 When updating the workflow you need to update both the `uses:` directive in workflow files and
 `Actions -> General -> Allow or block specified actions and reusable workflows` option in repository options.
+
+## TypeScript migration
+
+While most of the codebase is currently written in JS, we have a goal of incremental transition to TypeScript (see #350).
+When converting existing code from JS to TS you can do it in 2 parts:
+
+- Ensuring type safety within JS code,
+- Converting JS to TS.
+
+The repository is set up in a way that supports files at all 3 conversion steps (including fully unconverted files).
+
+### Ensuring type safety
+
+All files that do not have `// @ts-nocheck` at the top of the file will be checked by TS compiler,
+to ensure type safety. The compiler will use information from js docs for determining type information.
+
+### Converting JS to TS
+
+Once the `.js` file passes TypeScript checks it should be trivial to convert the file to TypeScript.
+As this may require major trivial refactors, it's best to do this step with the use of LLMs.
+You should still ensure no changes other than conversion were made and all tests pass.
+
+TS files compilation results are placed in the same directory as the source file, which means that
+you must manually add both `*.d.ts` and `*.js` to gitignore (do it in the same directory as the file, not in the global gitignore).
+This approach guarantees imports work correctly both when running the code and using it in editor (type recognition).
+
+Converted `.ts` files are compiled in-place by `tsc`, emitting `.js` and `.d.ts` next to the source.
+This means `require("./foo")` continues to work for all consumers without any path changes.
+
+### CI considerations
+
+Any CI job that runs JavaScript from `lib/` needs the compiled output.
+Workflows that call `npm run build` get this automatically, since `build` includes `build:ts`.
+Jobs that skip the full build (e.g. the release test and publish steps) run `npm run build:ts` explicitly.
