@@ -40,5 +40,7 @@ jobs:
         run: npx prettier "{lib,examples,test}/**/*.js" --check
       - name: Eslint
         run: npm run eslint
+      - name: Build native module
+        run: npx napi build --platform
       - name: Typecheck
         run: npm run typecheck

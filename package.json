@@ -49,7 +49,8 @@
     "typescript": "^5.9.3"
   },
   "scripts": {
-    "build": "napi build --platform --release",
+    "build:ts": "tsc -p tsconfig.build.json",
+    "build": "sh -c 'napi build --platform --release \"$@\" && npm run build:ts' --",
     "all-tests": "npm run unit && npm run integration && npm run unit-not-supported",
     "unit": "./node_modules/.bin/mocha test/unit -t 5000 --recursive",
     "unit-not-supported": "./node_modules/.bin/mocha test/unit-not-supported -t 5000 --recursive",
