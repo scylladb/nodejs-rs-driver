@@ -1,18 +1,17 @@
 use scylla::{response::PagingState, statement::Statement};
-use std::{env, ops::ControlFlow, sync::Arc};
+use std::{ops::ControlFlow, sync::Arc};
 use uuid::Uuid;
 
 use crate::common::SIMPLE_INSERT_QUERY;
 
 mod common;
 
-const CONCURRENCY_LEVEL: usize = 20;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let n: i32 = env::var("CNT")
-        .ok()
-        .and_then(|s: String| s.parse::<i32>().ok())
-        .expect("CNT parameter is required.");
+    // REMEMBER: update benchmark config.yml when changing the constant value.
+    let n: i32 = common::get_cnt_with_default(1_280);
+
+    let concurrency = common::get_concurrency(20);
 
     let session = Arc::new(common::init_simple_table_caching().await?);
 
@@ -29,7 +28,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .await?;
     }
     let mut tasks = vec![];
-    for _ in 0..(CONCURRENCY_LEVEL) {
+    for _ in 0..concurrency {
         let session = session.clone();
         tasks.push(tokio::task::spawn(async move {
             let mut select_query = Statement::new("SELECT * FROM benchmarks.basic");

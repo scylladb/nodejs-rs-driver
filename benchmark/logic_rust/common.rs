@@ -106,11 +106,28 @@ pub(crate) fn get_deser_data() -> (
     (id, 100, tuuid, ip, date, time, tuple, udt, set, duration)
 }
 
+#[allow(dead_code)]
 pub(crate) fn get_cnt() -> i32 {
     env::var("CNT")
         .ok()
         .and_then(|s: String| s.parse::<i32>().ok())
         .expect("CNT parameter is required.")
+}
+
+#[allow(dead_code)]
+pub(crate) fn get_cnt_with_default(default: i32) -> i32 {
+    env::var("CNT")
+        .ok()
+        .and_then(|s: String| s.parse::<i32>().ok())
+        .unwrap_or(default)
+}
+
+#[allow(dead_code)]
+pub(crate) fn get_concurrency(default: usize) -> usize {
+    env::var("CONCURRENCY")
+        .ok()
+        .and_then(|s: String| s.parse::<usize>().ok())
+        .unwrap_or(default)
 }
 
 // This may be imported by binaries that use only one of the helpers

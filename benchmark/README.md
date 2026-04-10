@@ -107,7 +107,7 @@ node benchmark.js concurrent_insert <driver> <Number of queries> <Concurrency le
 Rust:
 
 ```bash
-CNT=<Number of queries> cargo run --bin concurrent_insert_benchmark -r
+CNT=<Number of queries> CONCURRENCY=<Concurrency level> cargo run --bin concurrent_insert_benchmark -r
 ```
 
 - **insert**
@@ -141,7 +141,7 @@ node benchmark.js concurrent_select <driver> <Number of queries> <Concurrency le
 Rust:
 
 ```bash
-CNT=<Number of queries> cargo run --bin concurrent_select_benchmark -r
+CNT=<Number of queries> CONCURRENCY=<Concurrency level> cargo run --bin concurrent_select_benchmark -r
 ```
 
 - **select**
@@ -176,7 +176,7 @@ node benchmark.js concurrent_deser <driver> <Number of queries> <Concurrency lev
 Rust:
 
 ```bash
-CNT=<Number of queries> cargo run --bin concurrent_deser_benchmark -r
+CNT=<Number of queries> CONCURRENCY=<Concurrency level> cargo run --bin concurrent_deser_benchmark -r
 ```
 
 - **deserialization**
@@ -210,7 +210,7 @@ node benchmark.js concurrent_ser <driver> <Number of queries> <Concurrency level
 Rust:
 
 ```bash
-CNT=<Number of queries> cargo run --bin concurrent_ser_benchmark -r
+CNT=<Number of queries> CONCURRENCY=<Concurrency level> cargo run --bin concurrent_ser_benchmark -r
 ```
 
 - **serialization**
