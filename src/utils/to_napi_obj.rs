@@ -13,6 +13,8 @@ use napi::{
 /// This is done to keep both the Rust and JS conventions for naming variables.
 /// Each of the fields is passed by value.
 ///
+/// It can be applied on both a struct and enum with named values at variants.
+///
 /// # Example
 ///
 /// Calling this macro in a following way:
@@ -36,6 +38,30 @@ use napi::{
 /// Which will create the following JS Object:
 /// ```js
 /// {someField: false, otherField: 42}
+/// ```
+///
+/// Similarly when creating an enum in a following way:
+/// ```rust
+/// define_rust_to_js_convertible_object!(
+/// pub enum ExampleEnum
+/// where VariantName: kind {
+///     Case1 = 1,
+///     Case2{some_data, someData: bool,} = 2,
+/// });
+/// ```
+/// Will create the following type:
+/// ```rust
+/// pub enum ExampleEnum {
+///     Case1,
+///     Case2{some_data: bool}
+/// }
+/// ```
+///
+/// Which will create the following JS Object:
+///
+/// ```js
+/// {kind: 1} // Case 1
+/// {kind: 2, someData: false} // Case 2
 /// ```
 macro_rules! define_rust_to_js_convertible_object {
     (pub struct $struct_name: ident{
@@ -64,6 +90,51 @@ macro_rules! define_rust_to_js_convertible_object {
         }
 
     };
+    (pub enum $enum_name:ident
+        where VariantName: $variant_val_name: ident$(,)?
+        {
+        $($variant_name:ident
+            $( { $(
+                $field_name:ident, $js_name:ident: $field_type:ty),*,
+            } )?
+        = $val: literal),*,}) => {
+        pub enum $enum_name {
+            $(
+                $variant_name $( {
+                    $(
+                        $field_name: $field_type,
+                    )*
+                } )?,
+            )*
+        }
+
+        impl ::napi::bindgen_prelude::ToNapiValue for $enum_name {
+            /// # Safety
+            ///
+            /// Valid pointer to napi env must be provided
+            unsafe fn to_napi_value(
+                env: ::napi::sys::napi_env,
+                val: Self,
+            ) -> ::napi::Result<napi::sys::napi_value> {
+                use ::napi::{JsValue, bindgen_prelude::JsObjectValue};
+                let env = ::napi::Env::from_raw(env);
+                let mut o = ::napi::bindgen_prelude::Object::new(&env)?;
+                match val{
+                    $(
+                        $enum_name::$variant_name $( {
+                            $( $field_name, )*
+                        } )? => {
+                            o.set_named_property(stringify!($variant_val_name), $val)?;
+                            $(
+                                $(o.set_named_property(stringify!($js_name), $field_name)?;)*
+                            )?
+                        },
+                    )*
+                }
+                Ok(o.raw())
+            }
+        }
+    }
 }
 
 /// Structure that converts a Rust Map into a JS object
