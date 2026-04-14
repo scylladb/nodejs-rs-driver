@@ -55,8 +55,7 @@ _CATEGORY_ALIASES = {"globals": "global"}
 
 
 def _resolve_jsdoc_dir(config, env):
-    """Return the resolved Path to the JSDoc HTML output directory.
-    """
+    """Return the resolved Path to the JSDoc HTML output directory."""
     rel = config.jsdoc_html_dir or "../../public/docs"
     return Path(env.srcdir, rel).resolve()
 
