@@ -20,12 +20,6 @@ You can install required packages with the following command:
 npm install
 ```
 
-You also need to install [NAPI-RS cli](https://napi.rs/docs/introduction/getting-started#install-cli):
-
-```bash
-npm install -g @napi-rs/cli
-```
-
 ### Building
 
 For build process use this command:
