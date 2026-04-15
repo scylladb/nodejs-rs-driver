@@ -29,7 +29,7 @@ Supported category names:
 
 Configuration in ``conf.py``::
 
-    jsdoc_html_dir = "../../public/docs"   # relative to conf.py
+    jsdoc_html_dir = "../../public/docs"   # relative to the Sphinx source dir
 """
 
 import posixpath
