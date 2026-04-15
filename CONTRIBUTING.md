@@ -4,18 +4,20 @@ Thank you for your interest in contributing to our driver!
 
 ## Local installation and build process
 
+### System dependencies
+
+The Rust build requires OpenSSL development headers and `pkg-config`. Install them before building:
+
+- **Ubuntu/Debian:** `sudo apt install libssl-dev pkg-config`
+- **Fedora/RHEL:** `sudo dnf install openssl-devel pkgconf`
+- **Arch:** `sudo pacman -S openssl pkgconf`
+
 ### Install dependencies
 
 You can install required packages with the following command:
 
 ```bash
 npm install
-```
-
-You also need to install [NAPI-RS cli](https://napi.rs/docs/introduction/getting-started#install-cli):
-
-```bash
-npm install -g @napi-rs/cli
 ```
 
 ### Building
