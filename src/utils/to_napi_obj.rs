@@ -11,16 +11,16 @@
 /// Calling this macro in a following way:
 /// ```rust
 /// define_rust_to_js_convertible_object!(
-///     Example {
-///         some_field, someField: bool,
-///         other_field, otherField: i32
-///     }
+/// pub struct Example {
+///     some_field, someField: bool,
+///     other_field, otherField: i32,
+/// }
 /// );
 /// ```
 ///
 /// Will create the following struct:
 /// ```rust
-/// struct Example {
+/// pub struct Example {
 ///     some_field: bool,
 ///     other_field: i32,
 /// }
@@ -31,7 +31,9 @@
 /// {someField: false, otherField: 42}
 /// ```
 macro_rules! define_rust_to_js_convertible_object {
-    ($struct_name: ident{$($field_name:ident, $js_name:ident: $field_type:ty),*,}) => {
+    (pub struct $struct_name: ident{
+        $($field_name:ident, $js_name:ident: $field_type:ty),*,
+    }) => {
         pub struct $struct_name {
             $(
                 pub $field_name: $field_type,
@@ -46,6 +48,7 @@ macro_rules! define_rust_to_js_convertible_object {
                 env: ::napi::sys::napi_env,
                 val: Self,
             ) -> ::napi::Result<napi::sys::napi_value> {
+                use ::napi::{JsValue, bindgen_prelude::JsObjectValue};
                 let env = ::napi::Env::from_raw(env);
                 let mut o = ::napi::bindgen_prelude::Object::new(&env)?;
                 $(o.set_named_property(stringify!($js_name), val.$field_name)?;)*

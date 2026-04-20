@@ -18,7 +18,7 @@ pub(crate) struct PreparedStatementWrapper {
 // retry?, policies.retry.RetryPolicy;
 // routingKey?, Buffer | Buffer[];
 define_js_to_rust_convertible_object!(
-struct QueryOptionsObj{
+pub struct QueryOptionsObj{
     auto_page, autoPage: bool,
     capture_stack_trace, captureStackTrace: bool,
     consistency, consistency: u16,

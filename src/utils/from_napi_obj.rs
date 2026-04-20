@@ -14,7 +14,7 @@
 /// Calling this macro in a following way:
 /// ```rust
 /// define_js_to_rust_convertible_object!(
-/// struct Example {
+/// pub struct Example {
 ///     some_field, someField: bool,
 ///     other_field, otherField: i32
 /// }
@@ -23,7 +23,7 @@
 ///
 /// Will create the following struct:
 /// ```rust
-/// struct Example {
+/// pub struct Example {
 ///     some_field: Option<bool>,
 ///     other_field: Option<i32>,
 /// }
@@ -43,13 +43,13 @@
 /// ```rust
 /// define_js_to_rust_convertible_object!(
 /// #[derive(PartialEq, Eq)]
-/// struct SslOptions {
+/// pub struct SslOptions {
 /// ...
 /// }
 /// ```
 /// This can be useful, as the Debug, PartialEq, Eq are added by default.
 macro_rules! define_js_to_rust_convertible_object {
-    (#[derive($($derive:ident),*)]struct $struct_name: ident{$($field_name:ident, $js_name:ident: $field_type:ty),*,}) => {
+    (#[derive($($derive:ident),*)]pub struct $struct_name: ident{$($field_name:ident, $js_name:ident: $field_type:ty),*,}) => {
         #[derive($($derive),*)]
         pub struct $struct_name {
             $(
@@ -75,12 +75,12 @@ macro_rules! define_js_to_rust_convertible_object {
         }
 
     };
-    (struct $struct_name: ident{$($field_name:ident, $js_name:ident: $field_type:ty),*,}) =>{
+    (pub struct $struct_name: ident{$($field_name:ident, $js_name:ident: $field_type:ty),*,}) =>{
         // The PartialEq and Eq are used only for testing purposes
         // If at some point those traits become a problem, you can manually implement them.
         define_js_to_rust_convertible_object!(
             #[derive(Debug, PartialEq, Eq)]
-            struct $struct_name {
+            pub struct $struct_name {
                 $($field_name, $js_name: $field_type),*,
             }
         );
