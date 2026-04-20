@@ -48,7 +48,7 @@ pygments_style = "sphinx"
 
 # -- Options for jsdoc_content extension ----------------------------
 
-# Path to JSDoc HTML output (relative to this conf.py)
+# Path to JSDoc HTML output (relative to the Sphinx source dir)
 jsdoc_html_dir = "../../public/docs"
 
 # GitHub repository for source links (e.g. "Source: client.js, line 44")

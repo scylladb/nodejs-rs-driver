@@ -29,7 +29,7 @@ Supported category names:
 
 Configuration in ``conf.py``::
 
-    jsdoc_html_dir = "../../public/docs"   # relative to conf.py
+    jsdoc_html_dir = "../../public/docs"   # relative to the Sphinx source dir
 """
 
 import posixpath
@@ -57,7 +57,7 @@ _CATEGORY_ALIASES = {"globals": "global"}
 def _resolve_jsdoc_dir(config, env):
     """Return the resolved Path to the JSDoc HTML output directory."""
     rel = config.jsdoc_html_dir or "../../public/docs"
-    return Path(env.app.confdir, rel).resolve()
+    return Path(env.srcdir, rel).resolve()
 
 
 def _parse_nav_index(jsdoc_dir):
