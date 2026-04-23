@@ -914,9 +914,7 @@ describe("Client @SERVER_API", function () {
                 );
             },
         );
-        // No support for named parameters
-        // TODO: Fix this test
-        /* vit("2.0", "should allow named parameters", function (done) {
+        vit("2.0", "should allow named parameters", function (done) {
             const client = newInstance();
             const id1 = types.Uuid.random();
             const id2 = types.Uuid.random();
@@ -928,6 +926,7 @@ describe("Client @SERVER_API", function () {
                         table1,
                     ),
                     params: {
+                        // eslint-disable-next-line camelcase
                         text_SAMPLE: "named params",
                         paramID: id1,
                         time: types.TimeUuid.now(),
@@ -990,7 +989,7 @@ describe("Client @SERVER_API", function () {
                     );
                 },
             );
-        }); */
+        });
 
         vit(
             "2.0",

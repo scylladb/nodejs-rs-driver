@@ -162,13 +162,13 @@ impl SessionWrapper {
         .await
     }
 
-    /// Prepares a statement through rust driver for a given session
-    /// Return expected types for the prepared statement
-    #[napi(ts_return_type = "Promise<Array<ComplexType>>")]
+    /// Prepares a statement through rust driver for a given session.
+    /// Returns (expected type, variable name) pairs for the prepared statement.
+    #[napi(ts_return_type = "Promise<Array<[ComplexType, string]>>")]
     pub async fn prepare_statement(
         &self,
         statement: String,
-    ) -> JsResult<Vec<ComplexType<'static>>> {
+    ) -> JsResult<Vec<(ComplexType<'static>, String)>> {
         with_custom_error_async(async || {
             let statement: Statement = statement.into();
             let w = PreparedStatementWrapper {
@@ -177,7 +177,8 @@ impl SessionWrapper {
                     .add_prepared_statement(&statement) // TODO: change for add_prepared_statement_to_owned after it is made public
                     .await?,
             };
-            ConvertedResult::Ok(w.get_expected_types())
+            let types = w.get_expected_types();
+            ConvertedResult::Ok(types)
         })
         .await
     }

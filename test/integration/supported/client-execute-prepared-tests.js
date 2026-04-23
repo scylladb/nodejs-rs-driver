@@ -540,10 +540,7 @@ describe("Client @SERVER_API", function () {
                 done,
             );
         });
-
-        // No support for named parameters
-        // TODO: fix this test
-        /* describe("with named parameters", function () {
+        describe("with named parameters", function () {
             vit("2.0", "should allow an array of parameters", function (done) {
                 const query = util.format(
                     "SELECT * FROM %s WHERE id1 = :id1",
@@ -626,7 +623,7 @@ describe("Client @SERVER_API", function () {
                     );
                 },
             );
-        }); */
+        });
 
         it("should encode and decode maps using Map polyfills", function (done) {
             const client = newInstance({

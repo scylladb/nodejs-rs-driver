@@ -35,8 +35,8 @@ pub fn tests_named_map_struct() -> Coord {
 /// - `1` -> `{ kind: 1 }` (Green)
 /// - `3` -> `{ kind: 3, r: 128, g: 0, b: 255 }` (Custom)
 #[napi]
-pub fn tests_named_map_enum(case: i32) -> Color {
-    match case {
+pub fn tests_named_map_enum(case_id: i32) -> Color {
+    match case_id {
         0 => Color::Red,
         1 => Color::Green,
         3 => Color::Custom {
