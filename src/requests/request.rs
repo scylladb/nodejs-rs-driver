@@ -51,12 +51,17 @@ impl QueryOptionsWrapper {
 }
 
 impl PreparedStatementWrapper {
-    /// Get array of expected types for this prepared statement.
-    pub fn get_expected_types(&self) -> Vec<ComplexType<'static>> {
+    /// Get array of (expected type, variable name) pairs for this prepared statement.
+    pub fn get_expected_types(&self) -> Vec<(ComplexType<'static>, String)> {
         self.prepared
             .get_variable_col_specs()
             .iter()
-            .map(|e| ComplexType::new_owned(e.typ().clone()))
+            .map(|e| {
+                (
+                    ComplexType::new_owned(e.typ().clone()),
+                    e.name().to_string(),
+                )
+            })
             .collect()
     }
 }
