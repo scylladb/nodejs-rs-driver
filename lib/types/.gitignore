@@ -1,0 +1,11 @@
+# TypeScript build output (emitted in-place from .ts files)
+uuid.js
+uuid.d.ts
+big-decimal.js
+big-decimal.d.ts
+local-time.js
+local-time.d.ts
+tuple.js
+tuple.d.ts
+version-number.js
+version-number.d.ts

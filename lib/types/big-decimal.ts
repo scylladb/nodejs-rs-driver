@@ -1,6 +1,5 @@
-"use strict";
-const Integer = require("./integer");
-const utils = require("../utils");
+import Integer = require("./integer");
+import utils = require("../utils");
 
 /** @module types */
 
@@ -12,6 +11,15 @@ const utils = require("../utils");
  */
 class BigDecimal {
     /**
+     * @private
+     */
+    _intVal: Integer;
+    /**
+     * @private
+     */
+    _scale: number;
+
+    /**
      * Constructs an immutable arbitrary-precision signed decimal number.
      * A `BigDecimal` consists of an [arbitrary precision integer]{@link module:types~Integer}
      * *unscaled value* and a 32-bit integer *scale*. If zero
@@ -19,40 +27,23 @@ class BigDecimal {
      * decimal point. If negative, the unscaled value of the number is
      * multiplied by ten to the power of the negation of the scale. The
      * value of the number represented by the `BigDecimal` is
-     * therefore <tt>(unscaledValue &times; 10<sup>-scale</sup>)</tt>.
-     *  * A `BigDecimal` consists of an arbitrary precision integer
-     * *unscaled value* and a 32-bit integer *scale*. If zero
-     * or positive, the scale is the number of digits to the right of the
-     * decimal point. If negative, the unscaled value of the number is
-     * multiplied by ten to the power of the negation of the scale. The
-     * value of the number represented by the `BigDecimal` is
-     * therefore (unscaledValue × 10^(-scale)).
+     * therefore (unscaledValue x 10^(-scale)).
      *
-     * @param {Integer|Number} unscaledValue The integer part of the decimal.
-     * @param {Number} scale The scale of the decimal.
+     * @param unscaledValue The integer part of the decimal.
+     * @param scale The scale of the decimal.
      */
-    constructor(unscaledValue, scale) {
+    constructor(unscaledValue: Integer | number, scale: number) {
         if (typeof unscaledValue === "number") {
             unscaledValue = Integer.fromNumber(unscaledValue);
         }
-        /**
-         * @type {Integer}
-         * @private
-         */
         this._intVal = unscaledValue;
-        /**
-         * @type {Number}
-         * @private
-         */
         this._scale = scale;
     }
 
     /**
      * Returns the BigDecimal representation of a buffer composed of the scale (int32BE) and the unsigned value (varint BE)
-     * @param {Buffer} buf
-     * @returns {BigDecimal}
      */
-    static fromBuffer(buf) {
+    static fromBuffer(buf: Buffer): BigDecimal {
         const scale = buf.readInt32BE(0);
         const unscaledValue = Integer.fromBuffer(buf.slice(4));
         return new BigDecimal(unscaledValue, scale);
@@ -60,10 +51,8 @@ class BigDecimal {
 
     /**
      * Returns a buffer representation composed of the scale as a BE int 32 and the unsigned value as a BE varint
-     * @param {BigDecimal} value
-     * @returns {Buffer}
      */
-    static toBuffer(value) {
+    static toBuffer(value: BigDecimal): Buffer {
         const unscaledValueBuffer = Integer.toBuffer(value._intVal);
         const scaleBuffer = utils.allocBufferUnsafe(4);
         scaleBuffer.writeInt32BE(value._scale, 0);
@@ -75,10 +64,8 @@ class BigDecimal {
 
     /**
      * Returns a BigDecimal representation of the string
-     * @param {String} value
-     * @returns {BigDecimal}
      */
-    static fromString(value) {
+    static fromString(value: string): BigDecimal {
         if (!value) {
             throw new TypeError("Invalid null or undefined value");
         }
@@ -94,10 +81,8 @@ class BigDecimal {
 
     /**
      * Returns a BigDecimal representation of the Number
-     * @param {Number} value
-     * @returns {BigDecimal}
      */
-    static fromNumber(value) {
+    static fromNumber(value: number): BigDecimal {
         if (isNaN(value)) {
             return new BigDecimal(Integer.ZERO, 0);
         }
@@ -111,32 +96,26 @@ class BigDecimal {
 
     /**
      * Returns true if the value of the BigDecimal instance and other are the same
-     * @param {BigDecimal} other
-     * @returns {Boolean}
      */
-    equals(other) {
+    equals(other: BigDecimal): boolean {
         return other instanceof BigDecimal && this.compare(other) === 0;
     }
 
-    inspect() {
+    inspect(): string {
         return this.constructor.name + ": " + this.toString();
     }
 
-    /**
-     * @param {BigDecimal} other
-     * @returns {boolean}
-     */
-    notEquals(other) {
+    notEquals(other: BigDecimal): boolean {
         return !this.equals(other);
     }
 
     /**
      * Compares this BigDecimal with the given one.
-     * @param {BigDecimal} other Integer to compare against.
-     * @return {number} 0 if they are the same, 1 if the this is greater, and -1
+     * @param other Integer to compare against.
+     * @return 0 if they are the same, 1 if the this is greater, and -1
      *     if the given one is greater.
      */
-    compare(other) {
+    compare(other: BigDecimal): number {
         const diff = this.subtract(other);
         if (diff.isNegative()) {
             return -1;
@@ -149,10 +128,10 @@ class BigDecimal {
 
     /**
      * Returns the difference of this and the given BigDecimal.
-     * @param {BigDecimal} other The BigDecimal to subtract from this.
-     * @return {!BigDecimal} The BigDecimal result.
+     * @param other The BigDecimal to subtract from this.
+     * @return The BigDecimal result.
      */
-    subtract(other) {
+    subtract(other: BigDecimal): BigDecimal {
         const first = this;
         if (first._scale === other._scale) {
             return new BigDecimal(
@@ -181,11 +160,11 @@ class BigDecimal {
     }
 
     /**
-     * Returns the sum of this and the given <code>BigDecimal</code>.
-     * @param {BigDecimal} other The BigDecimal to sum to this.
-     * @return {!BigDecimal} The BigDecimal result.
+     * Returns the sum of this and the given BigDecimal.
+     * @param other The BigDecimal to sum to this.
+     * @return The BigDecimal result.
      */
-    add(other) {
+    add(other: BigDecimal): BigDecimal {
         const first = this;
         if (first._scale === other._scale) {
             return new BigDecimal(
@@ -215,28 +194,25 @@ class BigDecimal {
 
     /**
      * Returns true if the current instance is greater than the other
-     * @param {BigDecimal} other
-     * @returns {boolean}
      */
-    greaterThan(other) {
+    greaterThan(other: BigDecimal): boolean {
         return this.compare(other) === 1;
     }
 
-    /** @return {boolean} Whether this value is negative. */
-    isNegative() {
+    /** Whether this value is negative. */
+    isNegative(): boolean {
         return this._intVal.isNegative();
     }
 
-    /** @return {boolean} Whether this value is zero. */
-    isZero() {
+    /** Whether this value is zero. */
+    isZero(): boolean {
         return this._intVal.isZero();
     }
 
     /**
-     * Returns the string representation of this <code>BigDecimal</code>
-     * @returns {string}
+     * Returns the string representation of this BigDecimal
      */
-    toString() {
+    toString(): string {
         let intString = this._intVal.toString();
         if (this._scale === 0) {
             return intString;
@@ -263,9 +239,8 @@ class BigDecimal {
 
     /**
      * Returns a Number representation of this `BigDecimal`.
-     * @returns {Number}
      */
-    toNumber() {
+    toNumber(): number {
         return parseFloat(this.toString());
     }
 
@@ -273,9 +248,9 @@ class BigDecimal {
      * Returns the string representation.
      * Method used by the native JSON.stringify() to serialize this instance.
      */
-    toJSON() {
+    toJSON(): string {
         return this.toString();
     }
 }
 
-module.exports = BigDecimal;
+export = BigDecimal;

@@ -1,0 +1,18 @@
+{
+    "compilerOptions": {
+        /* Highest version supported by lowest acceptable Node.js version */
+        "target": "es2022",
+        "module": "node18",
+        "moduleResolution": "nodenext",
+        "strict": true,
+        /* This is necessary during transition period to allow TS to import JS files.
+           TODO: Remove this once all JS files are converted to TS. */
+        "noImplicitAny": false,
+        "esModuleInterop": true,
+        /* Necessary for retrieving driver version from package.json */
+        "resolveJsonModule": true,
+        /* Useful for using TS code from JS files */
+        "declaration": true,
+    },
+    "include": ["lib/**/*.ts"]
+}

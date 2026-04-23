@@ -1,5 +1,3 @@
-"use strict";
-
 const _versionPattern =
     /(\d+)\.(\d+)(?:\.(\d+))?(?:\.(\d+)?)?(?:[-~]([\w+]*(?:-\w[.\w]*)*))?(?:\+([.\w]+))?/;
 
@@ -14,17 +12,30 @@ const _versionPattern =
  * As of initial implementation versions are only compared against those with at most patch versions
  * more refined comparisons are not needed.
  *
- * @property {Number} major The major version, X of X.Y.Z.
- * @property {Number} minor The minor version, Y of X.Y.Z.
- * @property {Number} patch The patch version, Z of X.Y.Z.
- * @property {Number} dsePatch The dsePatch version, A of X.Y.Z.A or undefined if not present.
- * @property {String[]} preReleases Prerelease indicators if present, i.e. SNAPSHOT of X.Y.Z-SNAPSHOT.
- * @property {String} build Build string if present, i.e. build1 of X.Y.Z+build1.
- *
  * @ignore
  */
 class VersionNumber {
-    constructor(major, minor, patch, dsePatch, preReleases, build) {
+    /** The major version, X of X.Y.Z. */
+    major: number;
+    /** The minor version, Y of X.Y.Z. */
+    minor: number;
+    /** The patch version, Z of X.Y.Z. */
+    patch: number | undefined;
+    /** The dsePatch version, A of X.Y.Z.A or undefined if not present. */
+    dsePatch: number | undefined;
+    /** Prerelease indicators if present, i.e. SNAPSHOT of X.Y.Z-SNAPSHOT. */
+    preReleases: string[] | undefined;
+    /** Build string if present, i.e. build1 of X.Y.Z+build1. */
+    build: string | undefined;
+
+    constructor(
+        major: number,
+        minor: number,
+        patch?: number,
+        dsePatch?: number,
+        preReleases?: string[],
+        build?: string,
+    ) {
         this.major = major;
         this.minor = minor;
         this.patch = patch;
@@ -34,9 +45,9 @@ class VersionNumber {
     }
 
     /**
-     * @return {String} String representation of this version.
+     * @return String representation of this version.
      */
-    toString() {
+    toString(): string {
         let str = this.major + "." + this.minor;
         if (this.patch !== undefined) {
             str += "." + this.patch;
@@ -45,7 +56,7 @@ class VersionNumber {
             str += "." + this.dsePatch;
         }
         if (this.preReleases !== undefined) {
-            this.preReleases.forEach((preRelease) => {
+            this.preReleases.forEach((preRelease: string) => {
                 str += "-" + preRelease;
             });
         }
@@ -57,10 +68,10 @@ class VersionNumber {
 
     /**
      * Compares this version with the provided version.
-     * @param {VersionNumber} other
-     * @return {Number} -1 if less than other, 0 if equal, 1 if greater than.
+     * @param other
+     * @return -1 if less than other, 0 if equal, 1 if greater than.
      */
-    compare(other) {
+    compare(other: VersionNumber): number {
         if (this.major < other.major) {
             return -1;
         } else if (this.major > other.major) {
@@ -106,7 +117,7 @@ class VersionNumber {
         return 0;
     }
 
-    static parse(version) {
+    static parse(version: string): VersionNumber | null {
         if (!version) {
             return null;
         }
@@ -132,4 +143,4 @@ class VersionNumber {
     }
 }
 
-module.exports = VersionNumber;
+export = VersionNumber;

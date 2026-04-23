@@ -1,5 +1,3 @@
-"use strict";
-
 /** @module types */
 
 /**
@@ -7,22 +5,19 @@
  *
  * Tuples are sequences, just like Arrays. The only difference is that tuples are read only.
  *
- * As tuples can be used as Map keys, the {{@link module:types~Tuple#toString toString}} method calls toString for each element,
+ * As tuples can be used as Map keys, the {@link module:types~Tuple#toString toString} method calls toString for each element,
  * trying to get a unique string key.
  */
 class Tuple {
     /**
      * Elements of the tuple.
-     * @type {Array}
-     * @private
      */
-    #elements;
+    #elements: any[];
 
     /**
      * Creates a new instance of Tuple.
-     * @param  {...any} args
      */
-    constructor(...args) {
+    constructor(...args: any[]) {
         this.#elements = args;
 
         if (this.elements.length === 0) {
@@ -33,44 +28,40 @@ class Tuple {
     /**
      * Returns elements of the tuple.
      * @readonly
-     * @type Array
      */
-    get elements() {
+    get elements(): any[] {
         return this.#elements;
     }
 
-    set elements(_) {
+    set elements(_: any[]) {
         throw new SyntaxError("Tuple elements are read-only");
     }
 
     /**
      * Returns the number of the elements.
      * @readonly
-     * @type Number
      */
-    get length() {
+    get length(): number {
         return this.#elements.length;
     }
 
-    set length(_) {
+    set length(_: number) {
         throw new SyntaxError("Tuple length is read-only");
     }
 
     /**
      * Creates a new instance of Tuple from an Array.
-     * @param {Array} elements
-     * @returns {Tuple}
      */
-    static fromArray(elements) {
+    static fromArray(elements: any[]): Tuple {
         // Use the elements of an Array as function parameters.
         return new Tuple(...elements);
     }
 
     /**
      * Returns value located at the given index.
-     * @param {Number} index Element index
+     * @param index Element index
      */
-    get(index) {
+    get(index: number): any {
         return this.#elements[index || 0];
     }
 
@@ -78,31 +69,27 @@ class Tuple {
      * Returns a string representation of the sequence, surrounded by parenthesis, ie: (1, 2).
      *
      * The returned value attempts to be a unique string representation of its values.
-     *
-     * @returns {string}
      */
-    toString() {
-        return `(${this.elements.reduce((prev, x, i) => {
+    toString(): string {
+        return `(${this.elements.reduce((prev: string, x: any, i: number) => {
             return prev + (i > 0 ? "," : "") + x.toString();
         }, "")})`;
     }
 
     /**
      * Returns an Array representation of the sequence.
-     * @returns {Array}
      */
-    toJSON() {
+    toJSON(): any[] {
         return this.elements;
     }
 
     /**
      * Gets the elements as an Array.
-     * @returns {Array}
      */
-    values() {
+    values(): any[] {
         // Clone the elements
         return this.elements.slice(0);
     }
 }
 
-module.exports = Tuple;
+export = Tuple;
