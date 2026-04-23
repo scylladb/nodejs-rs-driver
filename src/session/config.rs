@@ -37,7 +37,7 @@ pub enum TlsVersion {
 define_js_to_rust_convertible_object!(
 // We manually implement Debug to avoid accidentally leaking private key and passphrase in logs
 #[derive(PartialEq, Eq)]
-struct SslOptions {
+pub struct SslOptions {
     ca, ca: Vec<String>,
     cert, cert: String,
     sigalgs, sigalgs: String,
@@ -55,7 +55,7 @@ struct SslOptions {
 
 #[rustfmt::skip] // fmt splits each field definition into multiple lines
 define_js_to_rust_convertible_object!(
-struct LoadBalancingConfig {
+pub struct LoadBalancingConfig {
     prefer_datacenter, preferDatacenter: String,
     prefer_rack, preferRack: String,
     token_aware, tokenAware: bool,
@@ -75,13 +75,13 @@ pub enum RetryPolicyKind {
 // For now, we support only fixed address translator.
 // Once we decide to support more, we can come up with more generic configuration.
 define_js_to_rust_convertible_object!(
-struct FixedAddressTranslatorConfig {
+pub struct FixedAddressTranslatorConfig {
     // HashMap cannot be retrieved directly.
     address_mapping, addressMapping: Vec<(SocketAddrWrapper, SocketAddrWrapper)>,
 });
 
 define_js_to_rust_convertible_object!(
-struct SessionOptions {
+pub struct SessionOptions {
     connect_points, connectPoints: Vec<String>,
     keyspace, keyspace: String,
     application_name, applicationName: String,
