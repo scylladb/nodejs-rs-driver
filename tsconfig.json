@@ -13,7 +13,8 @@
         "noEmit": true,
         "esModuleInterop": true,
         /* Necessary for retrieving driver version from package.json */
-        "resolveJsonModule": true
+        "resolveJsonModule": true,
+        "types": ["node"]
     },
     "include": ["lib/**/*.js", "lib/**/*.ts"]
 }
