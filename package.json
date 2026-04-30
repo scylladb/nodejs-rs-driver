@@ -56,7 +56,7 @@
     "unit": "./node_modules/.bin/mocha test/unit -t 5000 --recursive",
     "unit-not-supported": "./node_modules/.bin/mocha test/unit-not-supported -t 5000 --recursive",
     "examples": "node ./examples/runner.js",
-    "integration": "./node_modules/.bin/mocha test/integration/supported --recursive --exit",
+    "integration": "./node_modules/.bin/mocha test/integration/supported --recursive",
     "prettier": "npx prettier \"{lib,examples,test}/**/*.js\" --write",
     "full-clippy": "cargo clippy --all-targets --all-features -- -D warnings",
     "pre-push": "npm run prettier && cargo fmt && npm run full-clippy && napi build --platform && npm run eslint-fix",
