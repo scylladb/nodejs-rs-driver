@@ -369,16 +369,16 @@ def _convert_details_blocks(html, github_source_url=None):
 
 def _strip_noise(html, github_source_url=None):
     """Clean up JSDoc HTML noise."""
-    # JSDoc 4.0.4 mis-parses ES2022 ``#private`` methods and emits an
-    # extra ``:<a href=""></a>`` after every type token in a generic
-    # (e.g. ``Array:<a></a>.<number:<a></a>>``). Strip the pair.
+    # JSDoc 4.0.4 emits an empty ``<a>`` after each type name in
+    # ``Array.<number>``-style annotations (e.g.
+    # ``Array:<a href="..."></a>.<number:<a href="..."></a>>``).
+    # Strip the stray ``:`` together with the empty anchor.
     html = re.sub(
         r':<a\s+href="[^"]*"[^>]*>\s*</a>',
         '',
         html,
     )
-    # Render generics TypeScript-style (``Array<number>``) instead of
-    # JSDoc-style (``Array.<number>``).
+    # Render ``Array.<number>`` (JSDoc) as ``Array<number>`` (TypeScript).
     html = html.replace('.&lt;', '&lt;')
     html = _convert_details_blocks(html, github_source_url=github_source_url)
     # Add Sphinx table classes so JSDoc tables match theme styling.
