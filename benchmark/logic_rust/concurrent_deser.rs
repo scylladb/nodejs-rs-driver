@@ -8,12 +8,11 @@ use crate::common::DESER_INSERT_QUERY;
 
 mod common;
 
-const CONCURRENCY: usize = 100;
-
 async fn insert_data(
     session: Arc<Session>,
     start_index: usize,
     n: i32,
+    concurrency: usize,
     insert_query: &PreparedStatement,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut index = start_index;
@@ -22,7 +21,7 @@ async fn insert_data(
         session
             .execute_unpaged(insert_query, common::get_deser_data())
             .await?;
-        index += CONCURRENCY;
+        index += concurrency;
     }
 
     Ok(())
@@ -32,6 +31,7 @@ async fn select_data(
     session: Arc<Session>,
     start_index: usize,
     n: i32,
+    concurrency: usize,
     select_query: &PreparedStatement,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut index = start_index;
@@ -44,7 +44,7 @@ async fn select_data(
             .rows::<Row>()?
             .collect::<Vec<_>>();
         assert_eq!(r.len() as i32, n);
-        index += CONCURRENCY;
+        index += concurrency;
     }
 
     Ok(())
@@ -52,7 +52,9 @@ async fn select_data(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let n: i32 = common::get_cnt();
+    // REMEMBER: update benchmark config.yml when changing the constant value.
+    let n: i32 = common::get_cnt_with_default(2_048);
+    let concurrency = common::get_concurrency(100);
 
     let session = common::init_deser_table().await?;
 
@@ -61,11 +63,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut handles = vec![];
     let session = Arc::new(session);
 
-    for i in 0..CONCURRENCY {
+    for i in 0..concurrency {
         let session_clone = Arc::clone(&session);
         let insert_query_clone = insert_query.clone();
         handles.push(tokio::spawn(async move {
-            insert_data(session_clone, i, n, &insert_query_clone)
+            insert_data(session_clone, i, n, concurrency, &insert_query_clone)
                 .await
                 .unwrap();
         }));
@@ -81,11 +83,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut handles = vec![];
 
-    for i in 0..CONCURRENCY {
+    for i in 0..concurrency {
         let session_clone = Arc::clone(&session);
         let select_query_clone = select_query.clone();
         handles.push(tokio::spawn(async move {
-            select_data(session_clone, i, n, &select_query_clone)
+            select_data(session_clone, i, n, concurrency, &select_query_clone)
                 .await
                 .unwrap();
         }));

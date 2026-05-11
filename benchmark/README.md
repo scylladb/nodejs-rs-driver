@@ -63,6 +63,8 @@ Result will be saved to `out.svg`. You can read more in the benchmarker document
 
 ## Legacy python script
 
+This script is no longer updated, so it may be broken.
+
 A file that runs all benchmarks: `runner.py`
 
 The script compares benchmark results for our driver, [Cassandra driver](https://github.com/apache/cassandra-nodejs-driver) and [Rust driver](https://github.com/scylladb/scylla-rust-driver). Parameters for the benchmarks can be modified inside it. The result is a `graph.png` file that presents a graph of time on a logarithmic scale. The graphs are uploaded to the provided discord webhook.
@@ -83,6 +85,10 @@ Each benchmark recreates the table before execution to ensure consistent and iso
 
 Each of the JS benchmarks has an equivalent in Rust. For JS benchmarks, `driver` parameter determines which driver is tested. It can be `scylladb-driver-alpha` or `cassandra-driver`.
 
+For every benchmark you can use default values for either number of queries of concurrency level (supported benchmarks only).
+To use default values in JS benchmarks, provide `default` instead of numerical value for the parameter.
+To use default values in Rust code, do not provide given environment value.
+
 Before running the benchmarks in Rust, remember to build them with flags `--bin -r`.
 
 Concurrent benchmarks in JS first create an array of queries, which are then executed by calling the `executeConcurrent` function.
@@ -90,18 +96,18 @@ Rust benchmarks do not create an array to execute the queries. Queries are gener
 
 - **concurrent insert**
 
-This benchmark uses `executeConcurrent` endpoint to insert `n` rows containing `uuid` and `int` into the database. Afterwards, it checks that the number of rows inserted is correct.
+This benchmark uses `executeConcurrent` endpoint to insert `n` rows containing `uuid` and `int` into the database. Afterwards, it checks that the number of rows inserted is correct. This benchmark can be parametrized by concurrency level.
 
 JS:
 
 ```bash
-node concurrent_insert.js <driver> <Number of queries>
+node benchmark.js concurrent_insert <driver> <Number of queries> <Concurrency level>
 ```
 
 Rust:
 
 ```bash
-CNT=<Number of queries> cargo run --bin concurrent_insert_benchmark -r
+CNT=<Number of queries> CONCURRENCY=<Concurrency level> cargo run --bin concurrent_insert_benchmark -r
 ```
 
 - **insert**
@@ -111,7 +117,7 @@ This benchmark executes `n` `client.execute` queries, that insert a single row c
 JS:
 
 ```bash
-node insert.js <driver> <Number of queries>
+node benchmark.js insert <driver> <Number of queries>
 ```
 
 Rust:
@@ -122,18 +128,20 @@ CNT=<Number of queries> cargo run --bin insert_benchmark -r
 
 - **concurrent_select**
 
-This benchmark first inserts `10` rows containing `uuid` and `int`. Afterwards it uses `executeConcurrent` endpoint to select all of the inserted rows from the database `n` times.
+This benchmark first inserts `10` rows containing `uuid` and `int`.
+Afterwards it uses `executeConcurrent` endpoint to select all of the inserted rows from the database `n` times.
+This benchmark can be parametrized by concurrency level.
 
 JS:
 
 ```bash
-node concurrent_select.js <driver> <Number of queries>
+node benchmark.js concurrent_select <driver> <Number of queries> <Concurrency level>
 ```
 
 Rust:
 
 ```bash
-CNT=<Number of queries> cargo run --bin concurrent_select_benchmark -r
+CNT=<Number of queries> CONCURRENCY=<Concurrency level> cargo run --bin concurrent_select_benchmark -r
 ```
 
 - **select**
@@ -143,7 +151,7 @@ This benchmark first inserts 10 rows containing `uuid` and `int`. Afterwards it 
 JS:
 
 ```bash
-node select.js <driver> <Number of queries>
+node benchmark.js select <driver> <Number of queries>
 ```
 
 Rust:
@@ -154,55 +162,70 @@ CNT=<Number of queries> cargo run --bin select_benchmark -r
 
 - **concurrent deserialization**
 
-This benchmark uses `executeConcurrent` endpoint to insert `n` rows containing `uuid`, `int`, `timeuuid`, `inet`, `date`, `time` into the database.  Afterwards it uses `executeConcurrent` endpoint to select all (`n`) of the inserted rows from the database `n` times.
+This benchmark uses `executeConcurrent` endpoint to insert `n` rows containing
+`uuid`, `int`, `timeuuid`, `inet`, `date`, `time` into the database.  
+Afterwards it uses `executeConcurrent` endpoint to select all (`n`) of the inserted rows from the database `n` times.
+This benchmark can be parametrized by concurrency level.
 
-JS: 
+JS:
+
+```bash
+node benchmark.js concurrent_deser <driver> <Number of queries> <Concurrency level>
 ```
-node concurrent_deser.js <driver> <Number of queries>
-```
+
 Rust:
-```
-CNT=<Number of queries> cargo run --bin concurrent_deser_benchmark -r
+
+```bash
+CNT=<Number of queries> CONCURRENCY=<Concurrency level> cargo run --bin concurrent_deser_benchmark -r
 ```
 
 - **deserialization**
 
 This benchmark executes `n` `client.execute` queries, that insert a single row containing `uuid`, `int`, `timeuuid`, `inet`, `date`, `time` waiting for the result of the previous query before executing the next one. Afterwards it executes `n` `client.execute` queries, that select all (`n`) of the inserted rows, waiting for the result of the previous query before executing the next one.
 
-JS: 
+JS:
+
+```bash
+node benchmark.js deser <driver> <Number of queries>
 ```
-node deser.js <driver> <Number of queries>
-```
+
 Rust:
-```
+
+```bash
 CNT=<Number of queries> cargo run --bin deser_benchmark -r
 ```
 
-
-
 - **concurrent serialization**
 
-This benchmark uses `executeConcurrent` endpoint to insert `n*n` rows containing `uuid`, `int`, `timeuuid`, `inet`, `date`, `time` into the database.
+This benchmark uses `executeConcurrent` endpoint to insert `n*n` rows containing
+`uuid`, `int`, `timeuuid`, `inet`, `date`, `time` into the database.
+This benchmark can be parametrized by concurrency level.
 
-JS: 
+JS:
+
+```bash
+node benchmark.js concurrent_ser <driver> <Number of queries> <Concurrency level>
 ```
-node concurrent_ser.js <driver> <Number of queries>
-```
+
 Rust:
-```
-CNT=<Number of queries> cargo run --bin concurrent_ser_benchmark -r
+
+```bash
+CNT=<Number of queries> CONCURRENCY=<Concurrency level> cargo run --bin concurrent_ser_benchmark -r
 ```
 
 - **serialization**
 
-This benchmark executes `n*n` `client.execute` queries, that insert a single row containing `uuid`, `int`, `timeuuid`, `inet`, `date`, `time` waiting for the result of the previous query before executing the next one. 
+This benchmark executes `n*n` `client.execute` queries, that insert a single row containing `uuid`, `int`, `timeuuid`, `inet`, `date`, `time` waiting for the result of the previous query before executing the next one.
 
-JS: 
+JS:
+
+```bash
+node benchmark.js ser <driver> <Number of queries>
 ```
-node ser.js <driver> <Number of queries>
-```
+
 Rust:
-```
+
+```bash
 CNT=<Number of queries> cargo run --bin ser_benchmark -r
 ```
 
@@ -213,7 +236,7 @@ This benchmark uses `client.batch` endpoint to insert `n` rows containing `uuid`
 JS:
 
 ```bash
-node batch.js <driver> <Number of queries>
+node benchmark.js batch <driver> <Number of queries>
 ```
 
 Rust:

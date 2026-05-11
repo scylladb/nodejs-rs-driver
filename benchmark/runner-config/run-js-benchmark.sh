@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Wrapper on the command for benchmark runner
-# Usage: run-js-benchmark.sh <benchmark-js> <driver> <N>
+# Usage: run-js-benchmark.sh <benchmark-name> <driver> <N>
 set -euo pipefail
 
 BENCHMARK="$1"
@@ -10,4 +10,4 @@ N="$3"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BENCHMARK_DIR="$SCRIPT_DIR/.."
 
-node "$BENCHMARK_DIR/logic/$BENCHMARK" "$DRIVER" "$N"
+node "$BENCHMARK_DIR/logic/benchmark.js" "$DRIVER" "$BENCHMARK" "$N" "default"

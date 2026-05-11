@@ -8,12 +8,11 @@ use crate::common::SIMPLE_INSERT_QUERY;
 
 mod common;
 
-const CONCURRENCY: usize = 100;
-
 async fn insert_data(
     session: Arc<Session>,
     start_index: usize,
     n: i32,
+    concurrency: usize,
     insert_query: &PreparedStatement,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut index = start_index;
@@ -21,7 +20,7 @@ async fn insert_data(
     while index < n as usize {
         let id = Uuid::new_v4();
         session.execute_unpaged(insert_query, (id, 100)).await?;
-        index += CONCURRENCY;
+        index += concurrency;
     }
 
     Ok(())
@@ -29,7 +28,9 @@ async fn insert_data(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let n: i32 = common::get_cnt();
+    // REMEMBER: update benchmark config.yml when changing the constant value.
+    let n: i32 = common::get_cnt_with_default(4_000_000);
+    let concurrency = common::get_concurrency(100);
 
     let session = common::init_simple_table().await?;
 
@@ -38,11 +39,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut handles = vec![];
     let session = Arc::new(session);
 
-    for i in 0..CONCURRENCY {
+    for i in 0..concurrency {
         let session_clone = Arc::clone(&session);
         let insert_query_clone = insert_query.clone();
         handles.push(tokio::spawn(async move {
-            insert_data(session_clone, i, n, &insert_query_clone)
+            insert_data(session_clone, i, n, concurrency, &insert_query_clone)
                 .await
                 .unwrap();
         }));

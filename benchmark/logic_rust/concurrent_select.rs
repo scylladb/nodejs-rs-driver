@@ -9,12 +9,11 @@ use crate::common::SIMPLE_INSERT_QUERY;
 
 mod common;
 
-const CONCURRENCY: usize = 100;
-
 async fn select_data(
     session: Arc<Session>,
     start_index: usize,
     n: i32,
+    concurrency: usize,
     select_query: &PreparedStatement,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut index = start_index;
@@ -27,7 +26,7 @@ async fn select_data(
             .rows::<Row>()?
             .collect::<Vec<_>>();
         assert_eq!(r.len() as i32, 10);
-        index += CONCURRENCY;
+        index += concurrency;
     }
 
     Ok(())
@@ -35,7 +34,9 @@ async fn select_data(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let n: i32 = common::get_cnt();
+    // REMEMBER: update benchmark config.yml when changing the constant value.
+    let n: i32 = common::get_cnt_with_default(400_000);
+    let concurrency = common::get_concurrency(100);
 
     let session = common::init_simple_table().await?;
 
@@ -50,11 +51,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut handles = vec![];
     let session = Arc::new(session);
 
-    for i in 0..CONCURRENCY {
+    for i in 0..concurrency {
         let session_clone = Arc::clone(&session);
         let select_query_clone = select_query.clone();
         handles.push(tokio::spawn(async move {
-            select_data(session_clone, i, n, &select_query_clone)
+            select_data(session_clone, i, n, concurrency, &select_query_clone)
                 .await
                 .unwrap();
         }));
