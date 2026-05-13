@@ -1,0 +1,56 @@
+"use strict";
+
+const { parentPort, workerData } = require("worker_threads");
+const path = require("path");
+
+const Client = require(path.resolve(__dirname, "../../../../lib/client"));
+
+async function run() {
+    const client = new Client({
+        contactPoints: workerData.contactPoints,
+        localDataCenter: workerData.localDataCenter,
+        keyspace: workerData.keyspace,
+    });
+
+    await client.connect();
+
+    const results = [];
+
+    // Insert rows attributed to this worker.
+    for (let i = 0; i < workerData.rowCount; i++) {
+        await client.execute(
+            "INSERT INTO " +
+                workerData.table +
+                " (id, worker_id, seq, value) VALUES (uuid(), ?, ?, ?)",
+            [
+                workerData.workerIndex,
+                i,
+                "w" + workerData.workerIndex + "_row" + i,
+            ],
+            { prepare: true },
+        );
+    }
+
+    // Read back all rows inserted by this worker.
+    const rs = await client.execute(
+        "SELECT * FROM " + workerData.table + " WHERE worker_id = ?",
+        [workerData.workerIndex],
+        { prepare: true },
+    );
+    results.push(
+        ...rs.rows.map((r) => ({
+            workerId: r["worker_id"],
+            seq: r["seq"],
+            value: r["value"],
+        })),
+    );
+    await client.shutdown();
+
+    return { rows: results };
+}
+
+run()
+    .then((data) => parentPort.postMessage({ ok: true, ...data }))
+    .catch((e) =>
+        parentPort.postMessage({ ok: false, error: e.message, stack: e.stack }),
+    );
