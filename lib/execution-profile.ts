@@ -80,62 +80,39 @@ class ExecutionProfile {
  * @ignore
  */
 class ProfileManager {
-    _profiles: ExecutionProfile[];
-    _defaultConfiguredRetryPolicy: RetryPolicy | undefined;
-    _defaultProfile!: ExecutionProfile;
+    #profiles: ExecutionProfile[];
+    #defaultConfiguredRetryPolicy: RetryPolicy | undefined;
+    #defaultProfile: ExecutionProfile;
     /** A array of unique load balancing policies */
-    _loadBalancingPolicies: LoadBalancingPolicy[];
+    #loadBalancingPolicies: LoadBalancingPolicy[];
     /** A dictionary of name keys and profile values */
-    _profilesMap: Record<string, ExecutionProfile>;
-    /** A dictionary of name keys and custom payload dictionaries as values */
-    _customPayloadCache: Record<string, never>;
+    #profilesMap: Record<string, ExecutionProfile>;
 
     constructor(options: ClientOptions) {
-        this._profiles = options.profiles || [];
-        this._defaultConfiguredRetryPolicy = undefined;
-        this._setDefault(options);
-        this._loadBalancingPolicies = [];
-        this._profilesMap = {};
-        this._customPayloadCache = {};
-        this._profiles.forEach((p) => {
-            this._profilesMap[p.name] = p;
+        this.#profiles = options.profiles || [];
+        this.#defaultConfiguredRetryPolicy = undefined;
+        this.#defaultProfile = this.#setAndGetDefault(options);
+        this.#loadBalancingPolicies = [];
+        this.#profilesMap = {};
+        this.#profiles.forEach((p) => {
+            this.#profilesMap[p.name] = p;
             // Set required properties
             p.loadBalancing =
-                p.loadBalancing || this._defaultProfile.loadBalancing;
+                p.loadBalancing || this.#defaultProfile.loadBalancing;
             // Using array indexOf is not very efficient (O(n)) but the amount of profiles should be limited
             // and a handful of load-balancing policies (no hashcode for load-Balancing policies)
-            if (this._loadBalancingPolicies.indexOf(p.loadBalancing!) === -1) {
-                this._loadBalancingPolicies.push(p.loadBalancing!);
+            if (this.#loadBalancingPolicies.indexOf(p.loadBalancing!) === -1) {
+                this.#loadBalancingPolicies.push(p.loadBalancing!);
             }
         });
     }
 
     async init(client: Client, hosts: HostMap): Promise<void> {
-        for (const lbp of this._loadBalancingPolicies) {
+        for (const lbp of this.#loadBalancingPolicies) {
             await promiseUtils.fromCallback((callback: EmptyCallback) =>
                 lbp.init(client, hosts, callback),
             );
         }
-    }
-
-    /**
-     * Uses the load-balancing policies to get the relative distance to the host and return the closest one.
-     */
-    getDistance(host: Host & { setDistance(d: types.distance): void }): types.distance {
-        let distance: types.distance = types.distance.ignored;
-        // this is performance critical: we can't use any other language features than for-loop :(
-        for (let i = 0; i < this._loadBalancingPolicies.length; i++) {
-            const d = this._loadBalancingPolicies[i].getDistance(host);
-            if (d < distance) {
-                distance = d;
-                if (distance === types.distance.local) {
-                    break;
-                }
-            }
-        }
-
-        host.setDistance(distance);
-        return distance;
     }
 
     /**
@@ -146,47 +123,49 @@ class ProfileManager {
         if (name instanceof ExecutionProfile) {
             return name;
         }
-        return this._profilesMap[name || "default"];
+        return this.#profilesMap[name || "default"];
     }
 
     getDefault(): ExecutionProfile {
-        return this._defaultProfile;
+        return this.#defaultProfile;
     }
 
     getDefaultLoadBalancing(): LoadBalancingPolicy | undefined {
-        return this._defaultProfile.loadBalancing;
+        return this.#defaultProfile.loadBalancing;
     }
 
-    private _setDefault(options: ClientOptions): void {
-        this._defaultProfile = this._profiles.filter(function (p) {
+    #setAndGetDefault(options: ClientOptions): ExecutionProfile {
+        let defaultProfile = this.#profiles.filter(function (p) {
             return p.name === "default";
         })[0];
-        if (!this._defaultProfile) {
-            this._profiles.push(
-                (this._defaultProfile = new ExecutionProfile("default")),
+        if (!defaultProfile) {
+            this.#profiles.push(
+                (defaultProfile = new ExecutionProfile("default")),
             );
         }
 
         // Store the default configured retry policy
-        this._defaultConfiguredRetryPolicy = this._defaultProfile.retry;
+        this.#defaultConfiguredRetryPolicy = defaultProfile.retry;
 
         // Set the required properties
-        this._defaultProfile.loadBalancing =
-            this._defaultProfile.loadBalancing ||
+        defaultProfile.loadBalancing =
+            defaultProfile.loadBalancing ||
             options.policies?.loadBalancing;
-        this._defaultProfile.retry =
-            this._defaultProfile.retry || options.policies?.retry;
+        defaultProfile.retry =
+            defaultProfile.retry || options.policies?.retry;
+
+        return defaultProfile;
     }
 
     /**
      * Gets all the execution profiles currently defined.
      */
     getAll(): ExecutionProfile[] {
-        return this._profiles;
+        return this.#profiles;
     }
 
     getDefaultConfiguredRetryPolicy(): RetryPolicy | undefined {
-        return this._defaultConfiguredRetryPolicy;
+        return this.#defaultConfiguredRetryPolicy;
     }
 }
 
