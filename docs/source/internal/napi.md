@@ -86,6 +86,67 @@ We need custom errors since the errors returned by the Rust driver contain addit
 We then need to use JSResult over regular Result since we cannot implement the ToNapiValue trait on a regular Result.
 This complicates the code slightly but is the solution we found with the lowest verbosity.
 
+## Typing
+
+When you pass values between JS and Rust it's nice to have it typed in some way, to improve both readability and correctness of the code.
+When using napi-classes or node-built in type representations (integers, bigInt, arrays, results*, strings, buffers), in regular sync function,
+Napi-rs will generate type annotations correctly in the `index.d.ts` file upon compilation of the code.
+
+\* result type is not "visible" across, since napi-rs does not annotate what the function can throw, but is properly handled as a passthrough type.
+
+However, when using either (To/From)NapiValue, one of the helper macros or casync functions, you will need to do a bit more work to properly annotate the types.
+Generally there are two things you need to do, in order to properly annotate those uses. What you need to do depends on the case.
+
+- [`custom-types.d.ts`](../../../src/custom-types.d.ts): This file defines custom types. This means when you define new type, that you accept as argument or return from rust function,
+    and it is **not** napi-class, you have define its JS(TS) type there.
+    This file will then tell the JS/TS parser what does the magic type annotated in Rust function ex. `PagingResultWithExecutor` means.
+
+    So in the Rust code you just return `PagingResultWithExecutor`:
+
+    ```rs
+    // Simple version
+    pub async fn query_single_page_encoded(
+        &self,
+        ...
+    ) -> Result<PagingResultWithExecutor> {
+
+
+    // Full version with manual type override (see next point)
+    #[napi(ts_return_type = "Promise<PagingResultWithExecutor>")]
+    pub async fn query_single_page_encoded(
+        &self,
+        ...
+    ) -> JsResult<PagingResultWithExecutor> {
+    ```
+
+    Napi-rs then annotates the TS definition of this function as returning `PagingResultWithExecutor`:
+
+    ```ts
+    export declare class SessionWrapper {
+        ...
+        querySinglePage(...): Promise<PagingResultWithExecutor>
+    }
+    ```
+
+    The custom definition in the `custom-types.d.ts`:
+
+    ```ts
+    export type PagingResultWithExecutor = [PagingStateWrapper | null, QueryResultWrapper, QueryExecutor]
+    ```
+
+    provides the meaning for this type. This is something you need to add manually to `custom-types.d.ts` file
+    for every new type you add. This file will then be prepended to `index.d.ts` (used by JS/TS engine when parsing types in VScode) at the rust compilation time.
+
+    Note: this could be possibly automated with `pub trait TypeName` napi-rs trait.
+- Manual type overrides: When the napi-rs cannot properly deduce the JS name, you need to manually override the type in the endpoint that utilize it.
+
+    <!-- **When does it happen?** For now it only seems to apply to generic types:
+
+    No, i didn't go down a rabbit hole, when digging into this thing...
+    
+    https://github.com/1Password/typeshare
+     -->
+
 ## The napi problem
 
 The napi-rs library is not perfect. We have already [found and fixed](https://github.com/napi-rs/napi-rs/issues?q=author%3Aadespawn) multiple bugs in the library.
