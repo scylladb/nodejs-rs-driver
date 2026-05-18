@@ -143,7 +143,7 @@ impl SessionWrapper {
     /// -- each value must be tuple of its ComplexType and the value itself.
     /// If the provided types will not be correct, this query will fail.
     #[napi(ts_return_type = "Promise<QueryResultWrapper>")]
-    pub async fn query_unpaged_encoded(
+    pub async fn query_unpaged(
         &self,
         query: String,
         params: Vec<EncodedValuesWrapper>,
@@ -194,7 +194,7 @@ impl SessionWrapper {
     /// Currently `execute_unpaged` from rust driver is used, so no paging is done
     /// and there is no support for any query options
     #[napi(ts_return_type = "Promise<QueryResultWrapper>")]
-    pub async fn execute_prepared_unpaged_encoded(
+    pub async fn execute_prepared_unpaged(
         &self,
         query: String,
         params: Vec<EncodedValuesWrapper>,
@@ -211,7 +211,7 @@ impl SessionWrapper {
     ///
     /// Returns a wrapper of the result provided by the rust driver
     #[napi(ts_return_type = "Promise<QueryResultWrapper>")]
-    pub async fn batch_encoded(
+    pub async fn batch(
         &self,
         batch: &BatchWrapper,
         params: Vec<Vec<EncodedValuesWrapper>>,
@@ -229,7 +229,7 @@ impl SessionWrapper {
     /// For the following pages you need to provide page state
     /// received from the previous page
     #[napi(ts_return_type = "Promise<PagingResultWithExecutor>")]
-    pub async fn query_single_page_encoded(
+    pub async fn query_single_page(
         &self,
         query: String,
         params: Vec<EncodedValuesWrapper>,
@@ -258,7 +258,7 @@ impl SessionWrapper {
     /// For the following pages you need to provide page state
     /// received from the previous page
     #[napi(ts_return_type = "Promise<PagingResultWithExecutor>")]
-    pub async fn execute_single_page_encoded(
+    pub async fn execute_single_page(
         &self,
         query: String,
         params: Vec<EncodedValuesWrapper>,

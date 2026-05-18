@@ -253,6 +253,35 @@ describe("executeConcurrent()", function () {
     });
 
     describe("with different queries and parameters", () => {
+        it("should execute queries with undefined params", () => {
+            const id1 = Uuid.random();
+            const id2 = Uuid.random();
+            const id3 = Uuid.random();
+            const queryAndParameters = [
+                {
+                    query: `INSERT INTO table2 (id, value) VALUES (${id1}, 'no-params')`,
+                    params: undefined,
+                },
+                {
+                    query: `INSERT INTO table2 (id, value) VALUES (${id2}, 'no-params')`,
+                    params: null,
+                },
+                {
+                    query: `INSERT INTO table2 (id, value) VALUES (${id3}, 'no-params')`,
+                },
+            ];
+
+            return executeConcurrent(client, queryAndParameters).then(
+                (result) => {
+                    assert.strictEqual(
+                        result.totalExecuted,
+                        queryAndParameters.length,
+                    );
+                    assert.strictEqual(result.errors.length, 0);
+                },
+            );
+        });
+
         it("should execute the different queries", () => {
             const id = Uuid.random();
             const queryAndParameters = [
