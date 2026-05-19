@@ -139,13 +139,18 @@ Generally there are two things you need to do, in order to properly annotate tho
 
     Note: this could be possibly automated with `pub trait TypeName` napi-rs trait.
 - Manual type overrides: When the napi-rs cannot properly deduce the JS name, you need to manually override the type in the endpoint that utilize it.
+    By default, when you have a type `T` in Rust, and you were to have rust function return value of that type, it will be annotated in TS as `T`.
+    Similarly, if you have a generic type: `G<T>` it will be annotated as `G<T>` in TS.
 
-    <!-- **When does it happen?** For now it only seems to apply to generic types:
+    Here comes the problem: We have a type `JsResult<T>`, which should be opaque (the same way regular `Result<T>` is opaque) - meaning it should be annotated as
+    `T` in TS (instead of the default `JsResult<T>`). Unfortunately you cannot handle it automatically.
 
-    No, i didn't go down a rabbit hole, when digging into this thing...
-    
-    https://github.com/1Password/typeshare
-     -->
+    To properly annotate such functions you need to use napi-rs `ts_return_type` for every function that returns such type.
+    When using this tag, you need to specify the full type like this: `#[napi(ts_return_type = "Promise<PagingResult>")]`
+    (meaning you need to remember about Promise part for async functions).
+
+    It's annoying, but allows to properly annotate the functions.
+    You can see me question about this feature on the [napi-rs server](https://discord.com/channels/874290842444111882/874290843262021705/1505966134615085088).
 
 ## The napi problem
 
