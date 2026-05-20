@@ -93,12 +93,12 @@ jobs:
           node-version: 24
       - name: Install dependencies
         run: npm i
-      - name: Build TypeScript
-        run: npm run build:ts
       - name: Download artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           merge-multiple: true
+      - name: Build TypeScript
+        run: npm run build:ts
       - name: Setup 3-node Scylla cluster
         run: |
           sudo sh -c "echo 2097152 >> /proc/sys/fs/aio-max-nr"
@@ -136,26 +136,30 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm i
-      - name: Build TypeScript
-        run: npm run build:ts
       # This creates the directories for subpackage for specific platforms
       - name: create npm dirs
         run: npm run create-npm-dirs
+      # Download includes both the platform specific binaries, and generic index files
       - name: Download all artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: artifacts
           merge-multiple: true
+      # napi artifacts copies binaries both to specific platform directories and the main directory
+      # We want to release the binaries only in the platform specific directories
+      # Additionally we need index files for compiling TS code
+      - name: Copy index files
+        run: cp ./artifacts/index.js ./artifacts/index.d.ts .
+      - name: Build TypeScript
+        run: npm run build:ts
       # Copies the downloaded artifacts to proper places in the npm package directories
       - name: Move artifacts
         run: npm run artifacts
       # Not necessary for the release, but useful for debugging in case some binaries are missing
       - name: List packages
         run: ls -R ./npm
-      - name: Copy index files
-        run: cp ./artifacts/index.js ./artifacts/index.d.ts .
-      # napi artifacts copies binaries both to specific platform directories and the main directory
-      # We want to release the binaries only in the platform specific directories
+      # Platform specific binaries will be released only in the sub-packages. 
+      # We do not want them in the main package, where the napi-rs has placed them.
       - name: Clean up binaries 
         run: rm *.node
       - name: Publish
