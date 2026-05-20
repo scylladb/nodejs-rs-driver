@@ -47,12 +47,12 @@ The driver supports the following:
 - Password authentication
 - Configurable load balancing policies
 - Error handling, based on the Rust driver
+- SSL support
 
 Features that are planned for the driver to become production ready:
 
 - Configurable retry policies
 - Faster performance, compared to DataStax Node.js driver
-- SSL support
 - Migration guide from the DataStax driver
 
 For other planned features see our [Milestones](https://github.com/scylladb/nodejs-rs-driver/milestones)
