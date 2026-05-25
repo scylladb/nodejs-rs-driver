@@ -1,0 +1,62 @@
+"use strict";
+
+const { parentPort, workerData } = require("worker_threads");
+const path = require("path");
+
+const Client = require(path.resolve(__dirname, "../../../../lib/client"));
+
+async function run() {
+    const client = new Client({
+        contactPoints: workerData.contactPoints,
+        localDataCenter: workerData.localDataCenter,
+        keyspace: workerData.keyspace,
+    });
+
+    await client.connect();
+
+    // Fire all inserts concurrently to maximise concurrency chaos
+    const insertPromises = [];
+    for (let i = 0; i < workerData.queryCount; i++) {
+        insertPromises.push(
+            client.execute(
+                "INSERT INTO " +
+                    workerData.table +
+                    " (worker_id, seq, value) VALUES (?, ?, ?)",
+                [
+                    workerData.workerIndex,
+                    i,
+                    "w" + workerData.workerIndex + "_q" + i,
+                ],
+                { prepare: true },
+            ),
+        );
+    }
+    await Promise.all(insertPromises);
+
+    const readPromises = [];
+    for (let i = 0; i < workerData.queryCount; i++) {
+        readPromises.push(
+            client.execute(
+                "SELECT * FROM " + workerData.table + " WHERE worker_id = ?",
+                [workerData.workerIndex],
+                { prepare: true },
+            ),
+        );
+    }
+    const readResults = await Promise.all(readPromises);
+
+    const readCounts = readResults.map((rs) => rs.rows.length);
+
+    await client.shutdown();
+
+    return {
+        insertCount: insertPromises.length,
+        readCounts,
+    };
+}
+
+run()
+    .then((data) => parentPort.postMessage({ ok: true, ...data }))
+    .catch((e) =>
+        parentPort.postMessage({ ok: false, error: e.message, stack: e.stack }),
+    );
