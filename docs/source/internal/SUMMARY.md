@@ -21,7 +21,7 @@ This driver was initially developed by DSx and was transferred to Apache during 
 For this reason some places may use the name referring to DSx. Any remaining public documentation should refer to this driver as
 `cassandra-driver`, with possible annotation like: `formerly known as DataStax Node.js Driver` (see main [README.md](../../../README.md)).
 
-this driver, new driver, scylladb-driver, scylladb-driver-alpha. Official: ScyllaDB Node.js-RS Driver / scylladb-driver-alpha / nodejs-rs-driver
+this driver, new driver, scylladb-driver, scylladb-driver-alpha. Official: ScyllaDB Node.js RS Driver / scylladb-driver-alpha / nodejs-rs-driver
 (standalone name / package name / repository name). Confusing? No worries, this repo probably breaks this convention quite a lot.
 
 ## Sections

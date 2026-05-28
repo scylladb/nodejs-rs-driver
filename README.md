@@ -1,4 +1,4 @@
-# ScyllaDB Node.js-RS Driver
+# ScyllaDB Node.js RS Driver
 
 ![test workflow](https://github.com/scylladb-zpp-2024-javascript-driver/scylladb-javascript-driver/actions/workflows/integration-tests.yml/badge.svg?branch=main)
 ![quality workflow](https://github.com/scylladb-zpp-2024-javascript-driver/scylladb-javascript-driver/actions/workflows/check-docs.yml/badge.svg?branch=main)
