@@ -11,3 +11,5 @@ version-number.js
 version-number.d.ts
 column-info.js
 column-info.d.ts
+cql-utils.js
+cql-utils.d.ts
