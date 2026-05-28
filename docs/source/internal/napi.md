@@ -2,14 +2,14 @@
 
 ## Distinction
 
-Node-API and napi-rs are two different things. When encountering just "napi" in the documentation (or PRs/issues),
+Node-API and napi-rs are two different things. When encountering just "napi" **in the documentation** (or PRs/issues),
 what is meant in most cases is Node-API (although there may be some exceptions, especially in old docs).
-However, when you encounter napi in the code (mostly Rust code), this refers to napi-rs.
+However, when you encounter napi **in the code** (mostly Rust code, the napi crate), this refers to napi-rs.
 
 In napi-rs there are different kinds of interfaces. Some of the interfaces napi-rs exposes are just 1-to-1 mappings from Node-API (mostly `napi::sys`).
 Then there are low-cost abstractions over Node-API, like `(To/From)NapiValue` traits and `napi::Env`.
-Then there are high-cost interfaces. Some of those add overhead that we would need to handle on our own (like **sync** functions: functions with the `#[napi]` macro).
-Others add high-cost overhead that we can avoid by using lower-abstraction-level approaches to achieve sometimes very significant performance improvements.
+Then there are high-cost interfaces. Some of those add overhead that we would anyway need to introduce (like **sync** functions: functions with the `#[napi]` macro).
+Others add significant overhead that we can avoid by using lower-abstraction-level approaches to achieve sometimes very significant performance improvements.
 This often comes at the cost of some limitations, however those limitations rarely pose a problem for our use cases.
 
 ## Wrappers
@@ -89,12 +89,12 @@ This complicates the code slightly but is the solution we found with the lowest 
 ## Typing
 
 When you pass values between JS and Rust it's nice to have it typed in some way, to improve both readability and correctness of the code.
-When using napi-classes or node-built in type representations (integers, bigInt, arrays, results*, strings, buffers), in regular sync function,
+When using napi-classes or node-built in type representations (integers, bigInt, arrays, `Result`*, strings, buffers), in regular sync function,
 Napi-rs will generate type annotations correctly in the `index.d.ts` file upon compilation of the code.
 
 \* result type is not "visible" across, since napi-rs does not annotate what the function can throw, but is properly handled as a passthrough type.
 
-However, when using either (To/From)NapiValue, one of the helper macros or casync functions, you will need to do a bit more work to properly annotate the types.
+However, when using either custom (To/From)NapiValue implementation, one of the helper macros or casync functions, you will need to do a bit more work to properly annotate the types.
 Generally there are two things you need to do, in order to properly annotate those uses. What you need to do depends on the case.
 
 - [`custom-types.d.ts`](../../../src/custom-types.d.ts): This file defines custom types. This means when you define new type, that you accept as argument or return from rust function,
@@ -105,6 +105,7 @@ Generally there are two things you need to do, in order to properly annotate tho
 
     ```rs
     // Simple version
+    #[napi]
     pub async fn query_single_page_encoded(
         &self,
         ...
