@@ -9,3 +9,5 @@ tuple.js
 tuple.d.ts
 version-number.js
 version-number.d.ts
+column-info.js
+column-info.d.ts
