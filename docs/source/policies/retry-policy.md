@@ -1,19 +1,29 @@
-# Retry policies
+# Retry Policies
 
-Currently the driver supports only built-in policies. This includes the following policies:
+The driver currently supports only built-in retry policies.
 
-<!-- TODO: This is a very brief documentation, but this is what the rust driver provides...
-https://github.com/scylladb/scylla-rust-driver/tree/main/docs/source/retry-policy.
-There appears to be an issue to address this fact:
-https://github.com/scylladb/scylla-rust-driver/issues/1285
-We should update this documentation, when the rust driver updates it's docs.
- -->
+## Default Retry Policy
 
-- Default retry policy (used if no other policy is specified):
+Used automatically when no other policy is specified.
 
-    It retries when there is a high chance that it might help.
-    This policy is based on the one in [DataStax Java Driver](https://docs.datastax.com/en/developer/java-driver/4.11/manual/core/retries/index.html). The behavior is the same.
+The default policy retries a request when there is a reasonable chance that retrying will succeed.
+Its behavior is based on the
+[DataStax Java Driver default retry policy](https://docs.datastax.com/en/developer/java-driver/4.11/manual/core/retries/index.html).
 
-- Falthrough retry policy:
+## Fallthrough Retry Policy
 
-    Never retries, returns errors straight to the user. Useful for debugging
+Never retries. Returns errors directly to the caller.
+
+Useful for debugging, as it surfaces every error immediately without any automatic retry attempt.
+
+```javascript
+const { FallthroughRetryPolicy } = require("scylladb-driver-alpha")
+  .policies.retry;
+
+const client = new cassandra.Client({
+  contactPoints: ["127.0.0.1:9042"],
+  policies: {
+    retry: new FallthroughRetryPolicy(),
+  },
+});
+```

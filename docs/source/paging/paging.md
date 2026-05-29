@@ -1,35 +1,29 @@
-<!-- This document is heavily based on the DSx driver documentation:
-https://docs.datastax.com/en/developer/nodejs-driver/4.8/features/paging/index.html
-and rust driver documentation:
-https://rust-driver.docs.scylladb.com/stable/statements/paged.html -->
+# Fetching Large Result Sets
 
-# Fetching large result sets
+When dealing with a large number of rows, the driver breaks the result into *pages*,
+only requesting a limited number of rows at a time (`5000` is the default `fetchSize`).
+Use one of the paging mechanisms below to retrieve results beyond a single page.
+Paging is enabled by default.
 
-When dealing with a large number of rows, the driver breaks the result into _pages_, only requesting a limited number of
-rows each time (`5000` being the default `fetchSize`). To retrieve the rows beyond this default size, use one of the
-following paging mechanisms. Paging is enabled by default and you can disable paging by setting `QueryOptions.paged` to false.
+> **Warning:** Issuing unpaged SELECTs may have severe performance consequences:
+>
+> - The cluster may experience high load.
+> - Queries may time out.
+> - The driver may consume large amounts of memory.
+> - Latency will likely spike.
+>
+> **Always page your SELECTs.**
 
-:::{warning}
-Issuing unpaged SELECTs
-may have dramatic performance consequences! **BEWARE!**\
-If the result set is big (or, e.g., there are a lot of tombstones), those atrocities can happen:
+## Automatic Paging
 
-- cluster may experience high load,
-- queries may time out,
-- the driver may devour a lot of RAM,
-- latency will likely spike.
+### Async Iterators
 
-Stay safe. Page your SELECTs.
-:::
+The driver supports asynchronous iteration of a `ResultSet` using the built-in
+[Async Iterator](https://github.com/tc39/proposal-async-iteration),
+fetching subsequent pages automatically as the previous one is consumed.
 
-## Automatic paging
-
-### Async iterators
-
-The driver supports asynchronous iteration of the `ResultSet` using the built-in [Async Iterator][async-it], fetching
-the following result pages after the previous one has been yielded.
-
-Large result sets can be iterated using the [`for await ... of`][for-of-await] statement:
+Use the [`for await...of`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/for-await...of)
+statement to iterate over large result sets:
 
 ```javascript
 const result = await client.execute(query, params, { prepare: true });
@@ -39,136 +33,118 @@ for await (const row of result) {
 }
 ```
 
-Under the hood, the driver will get all the rows of the query result using multiple requests. Initially,
-when calling `execute()` it will retrieve the first page of results according to the fetch size (defaults to `5000`).
-If there are additional rows, those will be retrieved once the async iterator yielded the rows from the previous page.
+The driver initially fetches the first page when `execute()` is called (up to `fetchSize` rows).
+If there are additional rows, the driver fetches the next page automatically as the async iterator
+yields rows from the previous page.
 
-If needed, you can use `isPaged()` method of `ResultSet` instance to determine whether there are more pages of results
-than initially fetched.
+Use the `isPaged()` method on a `ResultSet` instance to check whether more pages exist.
 
-:::{warning}
-Note that using either the async or sync iterators will not affect the internal state of the `ResultSet` instance.
-The following methods are mutually exclusive, so you should use only one per ResultSet instance:
+> **Warning:** The sync and async iterators and the `rows` property are **mutually exclusive**.
+> Use only one of the following per `ResultSet` instance:
+>
+> - `result.rows` — contains only the rows of the first page.
+> - Sync iterator — yields all rows in the current page.
+> - Async iterator — yields all rows across all pages.
 
-- rows property, which contains the row instances of the first page of results,
-- sync iterator, which will yield all the rows in the current page,
-- async iterator, which will yield all the rows in the result regardless of the number of pages.
-:::
+### Each Row Callback
 
-### Each row callback
+Use `eachRow()` to process each row as it arrives.
+It operates in two modes, controlled by `QueryOptions.autoPage`:
 
-You can also iterate through pages by setting a per-page callback.
-`eachRow()` works in two modes, depending on the `QueryOptions.autoPage` configuration:
+- **Automatic paging** (default): fetches all pages until all rows are processed.
+- **Manual paging**: fetches one page at a time; call `result.nextPage()` to fetch the next page.
 
-- automatic paging: keeps fetching pages until all rows are processed (this is the default mode),
-- manual paging: fetches one page at a time. This mode gives you access to result sets of intermediate pages.
-  To fetch the next page, you need to call `result.nextPage()`.
+`eachRow()` invokes:
 
-`eachRow()` calls:
-
-- `rowCallback(rowIndex, row)` for each row as soon as it is received,
+- `rowCallback(rowIndex, row)` for each row as soon as it is received.
 - `callback(err, result)`:
-  - when `autoPage` is set to true: after all pages are fetched and `rowCallback` was called for each row,
-  - when `autoPage` is set to false: after the current page is fetched and `rowCallback` was called for each row,
-  - when an error occurs.
+  - When `autoPage` is `true`: after all pages are fetched and all rows processed.
+  - When `autoPage` is `false`: after each page is fetched.
+  - On error.
 
 ```javascript
 client.eachRow(
   query,
   parameters,
-  { prepare: true, autoPage },
-  (rowIndex, row) => {
+  { prepare: true, autoPage: true },
+  function (rowIndex, row) {
     // process row
   },
-  (err, result) => {
+  function (err, result) {
     if (err) {
       // handle error
       return;
     }
     if (result.nextPage) {
-      // Handle intermediate page result set. This branch will be taken only when autoPage is disabled.
-      // When autoPage is enabled you will not have access to those result sets.
+      // Manual paging only: fetch the next page.
       result.nextPage();
     } else {
-      // Handle last page result.
+      // All pages consumed.
     }
   }
 );
 ```
 
-### Row streams
+### Row Streams
 
-If you want to handle a large result set as a [`Stream`][stream] of rows, you can use `stream()` method of the
-`Client` instance. The `stream()` method automatically fetches the following pages, yielding the rows as they come
-through the network and retrieving the following page only after the previous rows were read (throttling).
+Use `client.stream()` to handle a large result set as a
+[Stream](https://nodejs.org/api/stream.html) of rows.
+The driver automatically fetches following pages, yielding rows as they arrive
+and retrieving the next page only after the previous rows are read (throttling).
 
 ```javascript
 client.stream(query, parameters, options)
-  .on('readable', function () {
-    // readable is emitted as soon as a row is received and parsed
+  .on("readable", function () {
     let row;
-    while (row = this.read()) {
+    while ((row = this.read())) {
       // process row
     }
   })
-  .on('end', function () {
-    // emitted when all rows have been retrieved and read
+  .on("end", function () {
+    // all rows have been retrieved
   });
 ```
 
-## Manual paging
+## Manual Paging
 
-Sometimes it is convenient to save the paging state in order to restore it later. For example, consider a stateless
-web service that displays a list of results with a link to the next page. When the user clicks that link, we want to
-run the exact same query, except that the iteration should start where we stopped on the previous page.
+To save paging state and resume later (for example, for stateless web pagination),
+the driver exposes a `pageState` that represents the position in the result set
+when the last page was fetched.
 
-To do so, the driver exposes a `pagingState` object that represents where we were in the result set when the last page
-was fetched:
+Fetch the first page and save the state:
 
 ```javascript
 const options = { prepare: true, fetchSize: 1000 };
 const result = await client.execute(query, parameters, options);
 
-// Property 'rows' will contain only the amount of items of the first page (max 1000 in this case)
-const rows = result.rows;
-
-// Store the page state
+const rows = result.rows; // first page (up to 1000 rows)
 let pageState = result.pageState;
 ```
 
-In the next request, use the `pageState` to fetch the following rows.
+Use the saved `pageState` to continue from where you left off:
 
 ```javascript
-// Use the pageState in the queryOptions to continue where you left it.
 const options = { pageState, prepare: true, fetchSize: 1000 };
 const result = await client.execute(query, parameters, options);
 
-// Following rows up to fetch size (1000)
-const rows = result.rows;
-
-// Store the next paging state.
+const rows = result.rows; // next page
 pageState = result.pageState;
 ```
 
-Saving the paging state works well when you only let the user move from one page to the next. But it doesn't allow
-arbitrary jumps (like "go directly to page 10"), because you can't fetch a page unless you have the paging state of the
-previous one. Such a feature would require offset queries, which are not natively supported by ScyllaDB and Apache Cassandra.
+> **Note:** Manual paging works well for sequential navigation (next page / previous page),
+> but does not support arbitrary jumps (e.g., "go directly to page 10"),
+> because each page's `pageState` depends on the previous page.
 
-**Note**: The page state token can be manipulated to retrieve other results within the same column family, so it is not
-safe to expose it to the users in plain text.
+> **Warning:** The page state token can be manipulated to retrieve other results within the same
+> column family. Do **not** expose raw `pageState` tokens to end users.
 
-## Best practices
+## Best Practices
 
-| Query result fetching   | Unpaged                                                                                                                 | Paged manually                                                                                       | Paged automatically                                                                               |
-|-------------------------|-------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------|
-| Exposed Client API      | `execute` with `QueryOptions.paged = false`                                                                             | `execute` with `QueryOptions.pageState`                                                              | Async iterators, each row callbacks, streams                                                      |
-| Working                 | get all results in a single CQL frame, into a single result set                                                         | get one page of results in a single CQL frame, into a single result set                              | upon high-level iteration, fetch consecutive CQL frames and transparently iterate over their rows |
-| Cluster load            | potentially **HIGH** for large results, beware!                                                                         | normal                                                                                               | normal                                                                                            |
-| Driver overhead         | low - simple frame fetch                                                                                                | low - simple frame fetch                                                                             | low - simple frame fetch                                                                          |
-| Driver memory footprint | potentially **BIG** - all results have to be stored at once!                                                            | small - only one page stored at a time                                                               | small - at most constant number of pages stored at a time                                         |
-| Latency                 | potentially **BIG** - all results have to be generated at once!                                                         | considerable on page boundary - new page needs to be fetched                                         | considerable on page boundary - new page needs to be fetched                                      |
-| Suitable operations     | - in general: operations with empty result set (non-SELECTs)</br> - as possible optimisation: SELECTs with LIMIT clause | - for advanced users who prefer more control over paging                                             | - in general: all SELECTs                                                                         |
-
-[stream]: https://nodejs.org/api/stream.html
-[async-it]: https://github.com/tc39/proposal-async-iteration
-[for-of-await]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/for-await...of
+| Approach | Unpaged | Manual paging | Automatic paging |
+|----------|---------|---------------|-----------------|
+| Client API | `execute` (`paged: false`) | `execute` with `pageState` | Async iterators, `eachRow`, `stream` |
+| Working | All results in a single CQL frame | One page per CQL frame | Multiple frames, transparent iteration |
+| Cluster load | Potentially **HIGH** for large results | Normal | Normal |
+| Memory footprint | Potentially **LARGE** — all results at once | Small — one page at a time | Small — constant number of pages |
+| Latency | Potentially **HIGH** — all results at once | Noticeable on page boundaries | Noticeable on page boundaries |
+| Suitable for | Non-SELECTs; SELECTs with LIMIT (few rows) | Advanced use cases requiring page control | All SELECTs in general |
