@@ -85,7 +85,7 @@ You can use `AllowListPolicy` instead.
 #### legacy DefaultLoadBalancingPolicy
 
 The `DefaultLoadBalancingPolicy` as present in the `cassandra-driver` is no longer supported.
-It was replaced with a [new implementation](../policies/load-balancing.md). There are no plans for
+It was replaced with a [new implementation](./load_balancing.md). There are no plans for
 re-creating its functionality.
 
 To achieve similar behavior, you can update your code in the following way:
@@ -137,7 +137,7 @@ for the legacy default policy.
 #### legacy RetryPolicy
 
 The `RetryPolicy` as present in the `cassandra-driver` is no longer supported.
-It was replaced with a [new implementation](../policies/retry-policy.md). There are no plans for
+It was replaced with a [new implementation](./retry_policies.md). There are no plans for
 re-implementing its functionality. You do not have to update your code to migrate to the new policy.
 
 #### IdempotenceAwareRetryPolicy
