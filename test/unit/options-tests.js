@@ -1,8 +1,9 @@
 "use strict";
 
+const assert = require("assert");
 const net = require("node:net");
 const rust = require("../../index");
-const { setRustOptions } = require("../../lib/client-options");
+const { extend, setRustOptions } = require("../../lib/client-options");
 const {
     MappingAddressTranslator,
 } = require("../../lib/policies/address-resolution");
@@ -56,11 +57,45 @@ describe("Client options", function () {
                 retry: new RetryPolicy(),
                 addressResolution: new MappingAddressTranslator(resolutionMap),
             },
+            socketOptions: {
+                connectTimeout: 3000,
+                tcpNoDelay: false,
+                keepAlive: true,
+                keepAliveDelay: 5000,
+            },
+            pooling: {
+                heartBeatInterval: 15000,
+            },
+            protocolOptions: {
+                maxSchemaAgreementWaitSeconds: 20,
+                port: 9043,
+            },
+            refreshSchemaDelay: 500,
         };
         rust.testsCheckClientOption(setRustOptions(options), 1);
     });
     it("should correctly convert empty client options", function () {
         let options = {};
         rust.testsCheckClientOption(setRustOptions(options), 2);
+    });
+
+    it("should disable rust keepalive when heartBeatInterval is 0", function () {
+        let options = {
+            pooling: {
+                heartBeatInterval: 0,
+            },
+        };
+        rust.testsCheckClientOption(setRustOptions(options), 3);
+    });
+
+    it("should not append the default port to contact points with explicit ports", function () {
+        const options = extend({
+            contactPoints: ["172.17.0.2:9042"],
+        });
+
+        const rustOptions = setRustOptions(options);
+
+        assert.strictEqual(rustOptions.defaultPort, undefined);
+        assert.deepStrictEqual(rustOptions.connectPoints, ["172.17.0.2:9042"]);
     });
 });
