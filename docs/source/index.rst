@@ -16,6 +16,16 @@ Although optimized for ScyllaDB, the driver is also compatible with `Apache Cass
    :maxdepth: 2
    :hidden:
 
+   getting-started/getting-started.md
+   statements/statements.md
+   paging/paging.md
+   batch/batch.md
+   load-balancing/load-balancing.md
+   data-types/data-types.md
+   auth/auth.md
+   migration-guide/migration-guide.md
+   retry-policy/retry-policy.md
+   shutdown/shutdown.md
    api/index
    statements/index
    paging/paging
@@ -23,54 +33,23 @@ Although optimized for ScyllaDB, the driver is also compatible with `Apache Cass
    shutdown/shutdown
    migration-guide/migration-guide
 
-Getting Started
-===============
-
-Installation
-------------
-
-.. code-block:: bash
-
-   npm install scylladb-driver-alpha
-
-Currently only Linux x86_64 architecture is supported, with planned support for other architectures in the future.
-
-Examples
---------
-
-You can find example usages of the driver in the `examples directory <https://github.com/scylladb/nodejs-rs-driver/tree/main/examples>`_.
-
-Features
+Contents
 ========
 
-The driver supports the following:
-
-- Simple, Prepared, and Batch statements
-- Asynchronous IO, parallel execution, request pipelining
-- Token-aware routing
-- Shard-aware and Tablet-aware routing (specific to ScyllaDB)
-- CQL binary protocol version 4
-- Works with any cluster size
-- Both promise and callback-based API
-- Row streaming and pipes
-- Built-in TypeScript support
-- Password authentication
-- SSL support
-- Error handling, based on the Rust driver
-
-Roadmap
--------
-
-Features planned for the driver to become production ready:
-
-- Configurable load balancing and retry policies
-- Faster performance, compared to DataStax Node.js driver
-- Migration guide from the DataStax driver
-
-For other planned features, see the `Milestones <https://github.com/scylladb/nodejs-rs-driver/milestones>`_.
-
-Reference
-=========
-
+* :doc:`Getting Started <getting-started/getting-started>` - Installing the driver and executing your first queries
+* :doc:`Executing Statements <statements/statements>` - Prepared vs unprepared, single vs batch, paged vs unpaged queries
+* :doc:`Paging <paging/paging>` - Fetching large result sets efficiently
+* :doc:`Batch Statements <batch/batch>` - Atomic multi-statement execution
+* :doc:`Load Balancing <load-balancing/load-balancing>` - Configuring routing policies
+* :doc:`Data Types <data-types/data-types>` - CQL type mappings and type hints
+* :doc:`Authentication <auth/auth>` - Connecting with credentials and SSL
+* :doc:`Migration Guide <migration-guide/migration-guide>` - Migrating from the DataStax Node.js driver
+* :doc:`Retry Policies <retry-policy/retry-policy>` - Configuring retry behavior
+* :doc:`Shutdown <shutdown/shutdown>` - Connection lifecycle
 * :doc:`API Reference <api/index>`
-* `CQL binary protocol specification version 4 <https://github.com/apache/cassandra/blob/trunk/doc/native_protocol_v4.spec>`_
+
+Other documentation
+===================
+
+* `Examples <https://github.com/scylladb/nodejs-rs-driver/tree/main/examples>`_
+* `ScyllaDB documentation <https://docs.scylladb.com/stable/>`_
