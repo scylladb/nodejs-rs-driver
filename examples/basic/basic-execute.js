@@ -5,18 +5,18 @@ const { getClientArgs } = require("../util");
 const client = new cassandra.Client(getClientArgs());
 
 /**
- * Example using Promise.
- * See basic-execute-flow.js for an example using callback-based execution.
+ * Example using async/await syntax.
  */
-client
-    .connect()
-    .then(function () {
-        return client.execute("SELECT * FROM system.local");
-    })
-    .then(function (result) {
-        const row = result.rows[0];
-        console.log("Obtained row: ", row);
-    });
+async function example() {
+    await client.connect();
+    const result = await client.execute("SELECT * FROM system.local");
+    const row = result.rows[0];
+    console.log("Obtained row: ", row);
+}
+
+example().catch((err) => {
+    console.error("There was an error", err);
+});
 
 // Exit on unhandledRejection
 process.on("unhandledRejection", (reason) => {
