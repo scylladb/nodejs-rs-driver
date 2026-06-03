@@ -4,7 +4,7 @@ import Encoder = require("../encoder");
 /** Options grouping for column information.
  * This option grouping is present to make this interface backward compatible. */
 export interface ColumnInfoOptions {
-    /** This flag is only used in schema metadata. 
+    /** This flag is only used in schema metadata.
      * For prepared statement bind markers and query result
      * types those fields will always be set to `false` (even if the DB column
      * corresponding to given marker / result type is frozen).  */
@@ -72,9 +72,7 @@ export class ColumnInfo {
     /** Only present for vector custom types */
     customTypeName?: string;
 
-    constructor(
-        code: CqlType,
-    ) {
+    constructor(code: CqlType) {
         this.code = code;
         this.info = null;
     }
@@ -123,7 +121,10 @@ export function convertComplexType(type: ComplexType): ColumnInfo {
             case CqlType.Vector:
                 data = new ColumnInfo(CqlType.Custom);
                 data.customTypeName = "vector";
-                data.info = [convertComplexType(type.subtype1), type.dimensions];
+                data.info = [
+                    convertComplexType(type.subtype1),
+                    type.dimensions,
+                ];
                 break;
             case CqlType.UserDefinedType:
                 data.info = {

@@ -37,15 +37,15 @@ function bigintToLong(from: bigint): Long {
 /**
  * Ensure the value is one of the accepted numeric types, and convert them to BigInt.
  */
-function arbitraryValueToBigInt(value: string | number | Long | bigint): bigint {
+function arbitraryValueToBigInt(
+    value: string | number | Long | bigint,
+): bigint {
     if (typeof value === "bigint") return value;
     if (typeof value === "string" || typeof value == "number")
         return BigInt(value);
     if (value instanceof Long) return value.toBigInt();
 
-    throw new TypeError(
-        "Not a valid BigInt value, obtained " + inspect(value),
-    );
+    throw new TypeError("Not a valid BigInt value, obtained " + inspect(value));
 }
 
 const minInt32 = -0x80000000;
@@ -60,7 +60,9 @@ const maxInt32 = 0x7fffffff;
  */
 function ensure32SignedInteger(number: number, name: string): void {
     if (!Number.isInteger(number)) {
-        throw new TypeError(`${name} was expected to be 32bit integer, but it's not a full integer (${number})`);
+        throw new TypeError(
+            `${name} was expected to be 32bit integer, but it's not a full integer (${number})`,
+        );
     }
     if (number < minInt32) {
         throw new TypeError(
@@ -102,7 +104,11 @@ class PreparedInfo {
     statement: string;
     boundParamNames: string[];
 
-    constructor(types: unknown[], statement: string, boundParamNames: string[]) {
+    constructor(
+        types: unknown[],
+        statement: string,
+        boundParamNames: string[],
+    ) {
         this.types = types;
         this.statement = statement;
         this.boundParamNames = boundParamNames;
@@ -113,7 +119,10 @@ class PreparedInfo {
  * Returns true when params is a named (object) parameter set rather than an array.
  * @throws {ArgumentError} In case params are of unexpected type
  */
-function isNamedParameters(params: unknown[] | object | null | undefined, execOptions: ExecutionOptions): boolean {
+function isNamedParameters(
+    params: unknown[] | object | null | undefined,
+    execOptions: ExecutionOptions,
+): boolean {
     if (params === null || params === undefined || Array.isArray(params)) {
         return false;
     }
@@ -131,4 +140,12 @@ function isNamedParameters(params: unknown[] | object | null | undefined, execOp
     return true;
 }
 
-export { throwNotSupported, bigintToLong, arbitraryValueToBigInt, isNamedParameters, ensure32SignedInteger, ensure64SignedInteger, PreparedInfo };
+export {
+    throwNotSupported,
+    bigintToLong,
+    arbitraryValueToBigInt,
+    isNamedParameters,
+    ensure32SignedInteger,
+    ensure64SignedInteger,
+    PreparedInfo,
+};
