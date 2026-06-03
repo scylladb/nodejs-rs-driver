@@ -12,7 +12,7 @@ client
     .then(function () {
         const query =
             "CREATE KEYSPACE IF NOT EXISTS examples WITH replication =" +
-            "{'class': 'SimpleStrategy', 'replication_factor': '1' }";
+            "{'class': 'NetworkTopologyStrategy', 'replication_factor': '1' }";
         return client.execute(query);
     })
     .then(function () {
