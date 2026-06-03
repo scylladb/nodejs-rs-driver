@@ -32,3 +32,4 @@ this driver, new driver, scylladb-driver, scylladb-driver-alpha. Official: Scyll
 - [Logging](./logging.md)
 - [Napi](./napi.md)
 - [Miscellaneous](./miscellaneous.md)
+- [On types](./on-types.md)
