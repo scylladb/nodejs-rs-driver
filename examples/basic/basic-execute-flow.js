@@ -16,7 +16,7 @@ async function example() {
     await client.connect();
 
     await client.execute(
-        "CREATE KEYSPACE IF NOT EXISTS examples WITH replication = {'class': 'SimpleStrategy', 'replication_factor': '3' }",
+        "CREATE KEYSPACE IF NOT EXISTS examples WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor': '3' }",
     );
 
     await client.execute(

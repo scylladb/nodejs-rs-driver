@@ -34,7 +34,7 @@ client
     .then(function () {
         const queries = [
             `CREATE KEYSPACE IF NOT EXISTS examples
-       WITH replication = {'class': 'SimpleStrategy', 'replication_factor': '1' }`,
+       WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor': '1' }`,
             "USE examples",
             `CREATE TABLE IF NOT EXISTS videos (videoid uuid, userid uuid, name varchar, description varchar, location text,
       location_type int, preview_thumbnails map<text,text>, tags set<varchar>, added_date timestamp,

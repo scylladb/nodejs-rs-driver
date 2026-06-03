@@ -13,7 +13,7 @@ const client = new cassandra.Client(getClientArgs());
 async function example() {
     await client.connect();
     await client.execute(`CREATE KEYSPACE IF NOT EXISTS examples
-                        WITH replication = {'class': 'SimpleStrategy', 'replication_factor': '1' }`);
+                        WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor': '1' }`);
     await client.execute(`USE examples`);
     await client.execute(
         `CREATE TABLE IF NOT EXISTS tbl_sample_kv (id uuid, value text, PRIMARY KEY (id))`,
