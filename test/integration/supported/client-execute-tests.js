@@ -1973,9 +1973,7 @@ describe("Client @SERVER_API", function () {
                     );
                 },
             );
-            // No support for used types
-            // TODO: Fix this test
-            /* vit(
+            vit(
                 "2.2",
                 "should allow insert of all non - ECMAScript types as json",
                 function (done) {
@@ -1989,7 +1987,7 @@ describe("Client @SERVER_API", function () {
                         ip: types.InetAddress.fromString("12.10.126.11"),
                         tup: new types.Tuple(1, 300),
                         d: new types.LocalDate(2015, 6, 1),
-                        t: new types.LocalTime.fromMilliseconds(10160088, 123),
+                        t: types.LocalTime.fromMilliseconds(10160088, 123),
                     };
                     utils.series(
                         [
@@ -2059,7 +2057,7 @@ describe("Client @SERVER_API", function () {
                         done,
                     );
                 },
-            ); */
+            );
         });
         describe("with no callback specified", function () {
             vit(
@@ -2170,7 +2168,7 @@ describe("Client @SERVER_API", function () {
         numericTests(keyspace, false);
         pagingTests(keyspace, false);
 
-        // No support for keyspace
+        // No support for local table
         // TODO: Fix this test
         /* it("should not use keyspace if set on options for lower protocol versions", function () {
             const client = setupInfo.client;
