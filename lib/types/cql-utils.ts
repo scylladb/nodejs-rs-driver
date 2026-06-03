@@ -72,9 +72,14 @@ export class ColumnInfo {
     /** Only present for vector custom types */
     customTypeName?: string;
 
-    constructor(code: CqlType) {
+    constructor(
+        code: CqlType,
+        info: ColumnInfo["info"] = null,
+        customTypeName?: string,
+    ) {
         this.code = code;
-        this.info = null;
+        this.info = info;
+        this.customTypeName = customTypeName;
     }
 }
 
@@ -106,28 +111,26 @@ export function encodeParams(
  */
 export function convertComplexType(type: ComplexType): ColumnInfo {
     try {
-        let data = new ColumnInfo(type.baseType.valueOf());
         switch (type.baseType) {
             case CqlType.List:
             case CqlType.Set:
-                data.info = convertComplexType(type.subtype1);
-                break;
+                return new ColumnInfo(
+                    type.baseType.valueOf(),
+                    convertComplexType(type.subtype1),
+                );
             case CqlType.Map:
-                data.info = [
+                return new ColumnInfo(type.baseType.valueOf(), [
                     convertComplexType(type.subtype1),
                     convertComplexType(type.subtype2),
-                ];
-                break;
+                ]);
             case CqlType.Vector:
-                data = new ColumnInfo(CqlType.Custom);
-                data.customTypeName = "vector";
-                data.info = [
-                    convertComplexType(type.subtype1),
-                    type.dimensions,
-                ];
-                break;
+                return new ColumnInfo(
+                    CqlType.Custom,
+                    [convertComplexType(type.subtype1), type.dimensions],
+                    "vector",
+                );
             case CqlType.UserDefinedType:
-                data.info = {
+                return new ColumnInfo(type.baseType.valueOf(), {
                     name: type.name,
                     fields: type.udt_types.map(
                         (typ: ComplexType, index: number) => ({
@@ -135,17 +138,17 @@ export function convertComplexType(type: ComplexType): ColumnInfo {
                             name: type.udt_name[index],
                         }),
                     ),
-                };
-                break;
+                });
             case CqlType.Tuple:
-                data.info = type.subtypes.map((typ: ComplexType) =>
-                    convertComplexType(typ),
+                return new ColumnInfo(
+                    type.baseType.valueOf(),
+                    type.subtypes.map((typ: ComplexType) =>
+                        convertComplexType(typ),
+                    ),
                 );
-                break;
             default:
-                break;
+                return new ColumnInfo(type.baseType.valueOf());
         }
-        return data;
     } catch (e) {
         // In this function we do not call other functions, so any error that we may catch here,
         // is due to unexpected structure of ComplexType received from rust driver.
