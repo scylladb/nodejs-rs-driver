@@ -41,7 +41,7 @@ author = "ScyllaDB Project Contributors"
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
-exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**/_partials", ".venv"]
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**/_partials", ".venv", "SUMMARY.md", "internal/**"]
 
 # The name of the Pygments (syntax highlighting) style to use.
 pygments_style = "sphinx"
@@ -77,6 +77,7 @@ notfound_urls_prefix = ''
 
 # -- Options for myst parser ----------------------------------------
 myst_enable_extensions = ["colon_fence"]
+myst_heading_anchors = 4
 
 # -- Options for redirect extension
 # Read a YAML dictionary of redirections and generate an HTML file for each

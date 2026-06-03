@@ -17,6 +17,11 @@ Although optimized for ScyllaDB, the driver is also compatible with `Apache Cass
    :hidden:
 
    api/index
+   statements/index
+   paging/paging
+   policies/index
+   shutdown/shutdown
+   migration-guide/migration-guide
 
 Getting Started
 ===============
