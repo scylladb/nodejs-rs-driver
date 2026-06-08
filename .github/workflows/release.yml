@@ -189,3 +189,26 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+  verify-published-package:
+    needs:
+      - publish
+    name: Verify published package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 24
+      - uses: ./.github/common/example
+        with:
+          build-command: |
+            cd examples
+            VERSION=$(node -p "require('../package.json').version")
+            npm pkg set "dependencies.scylladb-driver-alpha=$VERSION"
+            (for i in 1 2 3 4 5; do
+              npm install && exit 0
+              echo "Attempt $i failed, retrying in 15s (waiting for npm propagation)..."
+              sleep 15
+            done
+            echo "Giving up. Couldn't download newly released package."
+            exit 1)
