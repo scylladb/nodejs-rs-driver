@@ -4,7 +4,9 @@ const {
     bigintToLong,
     ensure32SignedInteger,
     ensure64SignedInteger,
+    isNamedParameters,
 } = require("../../lib/new-utils");
+const { ArgumentError } = require("../../lib/errors");
 const Long = require("long");
 
 const values = [
@@ -148,5 +150,37 @@ describe("ensure64SignedInteger", function () {
             TypeError,
             /customName was expected to be 64bit integer/,
         );
+    });
+});
+
+describe("isNamedParameters", function () {
+    const preparedOptions = { isPrepared: () => true };
+
+    it("should return false for non-object params", function () {
+        [null, undefined, [], [1, 2, 3]].forEach((params) => {
+            assert.strictEqual(
+                isNamedParameters(params, preparedOptions),
+                false,
+            );
+        });
+    });
+
+    it("should return true for object params with a prepared statement", function () {
+        [{}, { key: "value" }].forEach((params) => {
+            assert.strictEqual(
+                isNamedParameters(params, preparedOptions),
+                true,
+            );
+        });
+    });
+
+    it("should throw ArgumentError for unsupported types", function () {
+        [2, ""].forEach((params) => {
+            assert.throws(
+                () => isNamedParameters(params, preparedOptions),
+                ArgumentError,
+                /Parameters must be either an array, or named object, found/,
+            );
+        });
     });
 });
