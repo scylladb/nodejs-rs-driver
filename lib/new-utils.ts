@@ -109,22 +109,26 @@ class PreparedInfo {
     }
 }
 
+/**
+ * Returns true when params is a named (object) parameter set rather than an array.
+ * @throws {ArgumentError} In case params are of unexpected type
+ */
 function isNamedParameters(params: unknown[] | object | null | undefined, execOptions: ExecutionOptions): boolean {
-    if (params && !Array.isArray(params)) {
-        if (!(typeof params == "object")) {
-            throw new ArgumentError(
-                `Parameters must be either an array, or named object, found: ${typeof params}`,
-            );
-        }
-        if (!execOptions.isPrepared()) {
-            // This is only a temporary limitation (see #99).
-            throw new ArgumentError(
-                "Named parameters for simple statements are not supported, use prepare flag",
-            );
-        }
-        return true;
+    if (params === null || params === undefined || Array.isArray(params)) {
+        return false;
     }
-    return false;
+    if (!(typeof params == "object")) {
+        throw new ArgumentError(
+            `Parameters must be either an array, or named object, found: ${typeof params}`,
+        );
+    }
+    if (!execOptions.isPrepared()) {
+        // This is only a temporary limitation (see #99).
+        throw new ArgumentError(
+            "Named parameters for simple statements are not supported, use prepare flag",
+        );
+    }
+    return true;
 }
 
 export { throwNotSupported, bigintToLong, arbitraryValueToBigInt, isNamedParameters, ensure32SignedInteger, ensure64SignedInteger, PreparedInfo };
