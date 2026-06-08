@@ -1,9 +1,16 @@
 import globals from "globals";
 import pluginJs from "@eslint/js";
+import { includeIgnoreFile } from "@eslint/compat";
+import path from "path";
+import { fileURLToPath } from "url";
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /** @type {import('eslint').Linter.Config[]} */
 export default [
+  // Ignore JS files emitted in-place by tsc (listed in per-directory .gitignore files)
+  includeIgnoreFile(path.join(__dirname, "lib", ".gitignore")),
+  includeIgnoreFile(path.join(__dirname, "lib", "types", ".gitignore")),
   pluginJs.configs.recommended,
   {
     languageOptions: {

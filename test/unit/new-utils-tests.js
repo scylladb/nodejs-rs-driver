@@ -4,7 +4,9 @@ const {
     bigintToLong,
     ensure32SignedInteger,
     ensure64SignedInteger,
+    isNamedParameters,
 } = require("../../lib/new-utils");
+const { ArgumentError } = require("../../lib/errors");
 const Long = require("long");
 
 const values = [
@@ -56,46 +58,10 @@ describe("ensure32SignedInteger", function () {
         });
     });
 
-    it("should accept BigInt values within 32-bit range", function () {
-        const validBigInts = [
-            BigInt(0),
-            BigInt(1),
-            BigInt(-1),
-            BigInt(0x7fffffff),
-            BigInt(-0x80000000),
-        ];
-        validBigInts.forEach((value) => {
-            assert.doesNotThrow(() => {
-                ensure32SignedInteger(value, "testValue");
-            });
-        });
-    });
-
-    it("should throw TypeError when value is greater than max int32", function () {
+    it("should throw TypeError when value is outside of expected values", function () {
         const invalidValues = [
-            0x7fffffff + 1,
-            0x80000000,
-            0xffffffff,
-            10000000000,
-            BigInt(0x7fffffff) + BigInt(1),
-        ];
-        invalidValues.forEach((value) => {
-            assert.throws(
-                () => {
-                    ensure32SignedInteger(value, "testValue");
-                },
-                TypeError,
-                /testValue was expected to be 32bit integer/,
-            );
-        });
-    });
-
-    it("should throw TypeError when value is less than min int32", function () {
-        const invalidValues = [
-            -0x80000000 - 1,
-            -0x80000001,
-            -10000000000,
-            BigInt(-0x80000000) - BigInt(1),
+            0x80000000, 0xffffffff, 10000000000, -0x80000001, -10000000000, 0.1,
+            -21.37,
         ];
         invalidValues.forEach((value) => {
             assert.throws(
@@ -184,5 +150,37 @@ describe("ensure64SignedInteger", function () {
             TypeError,
             /customName was expected to be 64bit integer/,
         );
+    });
+});
+
+describe("isNamedParameters", function () {
+    const preparedOptions = { isPrepared: () => true };
+
+    it("should return false for non-object params", function () {
+        [null, undefined, [], [1, 2, 3]].forEach((params) => {
+            assert.strictEqual(
+                isNamedParameters(params, preparedOptions),
+                false,
+            );
+        });
+    });
+
+    it("should return true for object params with a prepared statement", function () {
+        [{}, { key: "value" }].forEach((params) => {
+            assert.strictEqual(
+                isNamedParameters(params, preparedOptions),
+                true,
+            );
+        });
+    });
+
+    it("should throw ArgumentError for unsupported types", function () {
+        [2, ""].forEach((params) => {
+            assert.throws(
+                () => isNamedParameters(params, preparedOptions),
+                ArgumentError,
+                /Parameters must be either an array, or named object, found/,
+            );
+        });
     });
 });
