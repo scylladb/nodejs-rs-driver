@@ -1,9 +1,12 @@
+use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{OnceLock, RwLock};
 
 use napi::bindgen_prelude::FnArgs;
 use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
+use std::fmt::Write;
 use tracing::Level;
+use tracing::field::{Field, Visit};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::{Layer, Registry};
 
@@ -85,6 +88,32 @@ pub(crate) fn parse_js_level_to_rust(level: &str) -> Option<Level> {
     }
 }
 
+struct MessageVisitor {
+    log_message: String,
+}
+
+impl MessageVisitor {
+    fn new() -> Self {
+        Self {
+            log_message: String::new(),
+        }
+    }
+}
+
+// Collects all fields and values in a single log event into a single String, similarly to CPP RS driver
+impl Visit for MessageVisitor {
+    fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
+        if !self.log_message.is_empty() {
+            write!(self.log_message, ", ").unwrap();
+        }
+        // We filter out for message field to reduce the noise in the logging output
+        if field.name() != "message" {
+            write!(self.log_message, "{field}: ").unwrap();
+        }
+        write!(self.log_message, "{value:?}").unwrap();
+    }
+}
+
 /// A single global `Layer` that, on each event, iterates every registered
 /// per-client callback and forwards the event data to those whose
 /// `min_level` is permissive enough.
@@ -117,7 +146,9 @@ impl<S: tracing::Subscriber> Layer<S> for JsForwardingLayer {
         // At least one callback wants this event — extract the fields.
         let level_str = rust_level_to_js(event_level);
         let target = meta.target();
-        let message = String::new();
+
+        let mut visitor = MessageVisitor::new();
+        event.record(&mut visitor);
 
         for cb in callbacks.iter() {
             if *event_level <= cb.min_level {
@@ -126,7 +157,7 @@ impl<S: tracing::Subscriber> Layer<S> for JsForwardingLayer {
                         data: (
                             level_str.to_owned(),
                             target.to_owned(),
-                            message.to_owned(),
+                            visitor.log_message.clone(),
                             // This maps to JS furtherInfo field, that was sometimes used in the DSx driver,
                             // but is not used here, as we are trying to match the CPP and C# wrappers behavior in logging.
                             "".to_owned(),
