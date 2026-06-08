@@ -6,6 +6,11 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish to npm (uncheck to test the process without publishing)"
+        type: boolean
+        default: true
 
 permissions:
   id-token: write
@@ -183,6 +188,7 @@ jobs:
         env: 
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish
+        if: github.event_name == 'release' || inputs.publish
         run: |
           npm config set provenance true
           npm publish --provenance --access public
@@ -190,6 +196,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
   verify-published-package:
+    if: github.event_name == 'release' || inputs.publish
     needs:
       - publish
     name: Verify published package
