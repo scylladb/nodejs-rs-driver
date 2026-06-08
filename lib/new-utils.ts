@@ -58,7 +58,10 @@ const maxInt32 = 0x7fffffff;
  * @param name used in the thrown error
  * @throws {TypeError}
  */
-function ensure32SignedInteger(number: number | bigint, name: string): void {
+function ensure32SignedInteger(number: number, name: string): void {
+    if (!Number.isInteger(number)) {
+        throw new TypeError(`${name} was expected to be 32bit integer, but it's not a full integer (${number})`);
+    }
     if (number < minInt32) {
         throw new TypeError(
             `${name} was expected to be 32bit integer, but it's smaller than allowed (${number} < ${minInt32})`,
@@ -106,9 +109,6 @@ class PreparedInfo {
     }
 }
 
-/**
- * Returns true when params is a named (object) parameter set rather than an array.
- */
 function isNamedParameters(params: unknown[] | object | null | undefined, execOptions: ExecutionOptions): boolean {
     if (params && !Array.isArray(params)) {
         if (!(typeof params == "object")) {
