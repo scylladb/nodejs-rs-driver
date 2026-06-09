@@ -36,7 +36,7 @@ The following options remain unchanged:
 The following option implementation has changed significantly,
 but the meaning of those option remains unchanged:
 
-- `id`: Now accepts both uuid and string types. When uuid is provided, it will be passed to the database in standard string representation.
+- `id`: Continues to require a `Uuid` instance. Passing a string will throw a `TypeError`.
 
 The following options' default values have changes:
 
