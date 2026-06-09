@@ -17,34 +17,27 @@ Although optimized for ScyllaDB, the driver is also compatible with `Apache Cass
    :hidden:
 
    getting-started/getting-started.md
-   statements/statements.md
+   statements/index
    paging/paging.md
-   batch/batch.md
-   load-balancing/load-balancing.md
+   policies/load-balancing.md
+   policies/retry-policy.md
    data-types/data-types.md
    auth/auth.md
    migration-guide/migration-guide.md
-   retry-policy/retry-policy.md
    shutdown/shutdown.md
    api/index
-   statements/index
-   paging/paging
-   policies/index
-   shutdown/shutdown
-   migration-guide/migration-guide
 
 Contents
 ========
 
 * :doc:`Getting Started <getting-started/getting-started>` - Installing the driver and executing your first queries
-* :doc:`Executing Statements <statements/statements>` - Prepared vs unprepared, single vs batch, paged vs unpaged queries
+* :doc:`Executing Statements <statements/index>` - Prepared vs unprepared, single vs batch, paged vs unpaged queries
 * :doc:`Paging <paging/paging>` - Fetching large result sets efficiently
-* :doc:`Batch Statements <batch/batch>` - Atomic multi-statement execution
-* :doc:`Load Balancing <load-balancing/load-balancing>` - Configuring routing policies
+* :doc:`Load Balancing <policies/load-balancing>` - Configuring routing policies
+* :doc:`Retry Policies <policies/retry-policy>` - Configuring retry behavior
 * :doc:`Data Types <data-types/data-types>` - CQL type mappings and type hints
 * :doc:`Authentication <auth/auth>` - Connecting with credentials and SSL
 * :doc:`Migration Guide <migration-guide/migration-guide>` - Migrating from the DataStax Node.js driver
-* :doc:`Retry Policies <retry-policy/retry-policy>` - Configuring retry behavior
 * :doc:`Shutdown <shutdown/shutdown>` - Connection lifecycle
 * :doc:`API Reference <api/index>`
 

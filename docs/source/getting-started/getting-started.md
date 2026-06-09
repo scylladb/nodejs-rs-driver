@@ -117,9 +117,9 @@ run().catch(console.error);
 
 ## Next Steps
 
-- [Executing Statements](../statements/statements.md) — prepared vs unprepared, paged vs unpaged
+- [Executing Statements](../statements/prepared.md) — prepared vs unprepared, paged vs unpaged
 - [Paging](../paging/paging.md) — fetching large result sets efficiently
-- [Batch Statements](../batch/batch.md) — atomic multi-statement execution
-- [Load Balancing](../load-balancing/load-balancing.md) — configuring routing policies
+- [Batch Statements](../statements/index.md) — atomic multi-statement execution
+- [Load Balancing](../policies/load-balancing.md) — configuring routing policies
 - [Data Types](../data-types/data-types.md) — CQL type mappings and type hints
 - [Authentication](../auth/auth.md) — connecting with credentials
