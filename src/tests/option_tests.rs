@@ -84,6 +84,25 @@ pub fn tests_check_client_option(options: SessionOptions, test_case: i32) {
                 }
             )
         }
+        3 => {
+            assert_eq!(
+                options,
+                SessionOptions {
+                    connect_points: Some(vec!["192.168.0.1".to_owned()]),
+                    keyspace: None,
+                    application_name: None,
+                    application_version: None,
+                    client_id: Some("21377312-6969-4200-abcd-01234567890a".to_owned()),
+                    credentials_username: Some("Unique username v2".to_owned()),
+                    credentials_password: Some("Unique password v2".to_owned()),
+                    cache_size: None,
+                    ssl_options: None,
+                    load_balancing_config: None,
+                    retry_policy: None,
+                    address_translator_config: None
+                }
+            )
+        }
         _ => {}
     }
 }
