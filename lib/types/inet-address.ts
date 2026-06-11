@@ -1,7 +1,4 @@
-// @ts-nocheck
-"use strict";
-
-const utils = require("../utils");
+import utils = require("../utils");
 
 /** @module types */
 
@@ -9,25 +6,17 @@ const utils = require("../utils");
  * Represents an IP address.
  */
 class InetAddress {
-    /**
-     * @type {Buffer}
-     */
-    #buffer;
-    /**
-     * @type {Number}
-     */
-    #length;
-    /**
-     * @type {Number}
-     */
-    #version;
+    #buffer: Buffer;
+    #length: number;
+    #version: number;
+
     /**
      * Creates an instance of InetAddress.
      *
-     * @param {Buffer} buffer The buffer containing the IPv4 or IPv6 address.
-     * @throws {Error} If the buffer is not a valid IPv4 or IPv6 address.
+     * @param buffer The buffer containing the IPv4 or IPv6 address.
+     * @throws If the buffer is not a valid IPv4 or IPv6 address.
      */
-    constructor(buffer) {
+    constructor(buffer: Buffer) {
         if (
             !(buffer instanceof Buffer) ||
             (buffer.length !== 4 && buffer.length !== 16)
@@ -43,39 +32,36 @@ class InetAddress {
     /**
      * Returns the length of the underlying buffer
      * @readonly
-     * @type {Number}
      */
-    get length() {
+    get length(): number {
         return this.#length;
     }
 
-    set length(_) {
+    set length(_: number) {
         throw new SyntaxError("InetAddress length is read-only");
     }
 
     /**
      * Returns the Ip version (4 or 6)
      * @readonly
-     * @type {Number}
      */
-    get version() {
+    get version(): number {
         return this.#version;
     }
 
-    set version(_) {
+    set version(_: number) {
         throw new SyntaxError("InetAddress version is read-only");
     }
 
     /**
      * Immutable buffer that represents the IP address
      * @readonly
-     * @type {Array}
      */
-    get buffer() {
+    get buffer(): Buffer {
         return this.#buffer;
     }
 
-    set buffer(_) {
+    set buffer(_: Buffer) {
         throw new SyntaxError("InetAddress buffer is read-only");
     }
 
@@ -85,11 +71,10 @@ class InetAddress {
      * This function accepts both IPv4 and IPv6 addresses, which may include
      * an embedded IPv4 address.
      *
-     * @param {string} value
-     * @returns {InetAddress}
+     * @param value
      * @throws {TypeError} - If the input string is not a valid IPv4 or IPv6 address.
      */
-    static fromString(value) {
+    static fromString(value: string): InetAddress {
         if (!value) {
             return new InetAddress(utils.allocBufferFromArray([0, 0, 0, 0]));
         }
@@ -98,7 +83,7 @@ class InetAddress {
         const ipv6Pattern = /^[\da-f:.]+$/i;
         let parts;
         if (ipv4Pattern.test(value)) {
-            parts = value.split(".");
+            parts = value.split(".").map((v, _) => Number(v));
             return new InetAddress(utils.allocBufferFromArray(parts));
         }
         if (!ipv6Pattern.test(value)) {
@@ -122,7 +107,7 @@ class InetAddress {
             // subtract 1 from the potential empty filling as ip4 contains 4 bytes instead of 2 of a ipv6 section
             filling -= 1;
         }
-        function writeItem(uIntValue) {
+        function writeItem(uIntValue: string | number) {
             buffer.writeUInt8(+uIntValue, offset++);
         }
         for (let i = 0; i < parts.length; i++) {
@@ -157,10 +142,8 @@ class InetAddress {
 
     /**
      * Compares 2 addresses and returns true if the underlying bytes are the same
-     * @param {InetAddress} other
-     * @returns {Boolean}
      */
-    equals(other) {
+    equals(other: InetAddress): boolean {
         if (!(other instanceof InetAddress)) {
             return false;
         }
@@ -172,17 +155,15 @@ class InetAddress {
 
     /**
      * Returns the underlying buffer
-     * @returns {Buffer}
      */
-    getBuffer() {
+    getBuffer(): Buffer {
         return this.buffer;
     }
 
     /**
      * Provide the name of the constructor and the string representation
-     * @returns {string}
      */
-    inspect() {
+    inspect(): string {
         return `${this.constructor.name}: ${this.toString()}`;
     }
 
@@ -195,11 +176,8 @@ class InetAddress {
      * values of the eight 16-bit pieces of the address, according to rfc5952.
      * In cases where there is more than one field of only zeros, it can be shortened. For example, 2001:0db8:0:0:0:1:0:1
      * will be expressed as 2001:0db8::1:0:1.
-     *
-     * @param {String} [encoding]
-     * @returns {String}
      */
-    toString(encoding) {
+    toString(encoding?: string): string {
         if (encoding === "hex") {
             // backward compatibility: behave in the same way as the buffer
             return this.buffer.toString("hex");
@@ -209,7 +187,7 @@ class InetAddress {
         }
         let start = -1;
         const longest = { length: 0, start: -1 };
-        function checkLongest(i) {
+        function checkLongest(i: number) {
             if (start >= 0) {
                 // close the group
                 const length = i - start;
@@ -264,18 +242,15 @@ class InetAddress {
     /**
      * Returns the string representation.
      * Method used by the native JSON.stringify() to serialize this instance.
-     * @returns {String}
      */
-    toJSON() {
+    toJSON(): string {
         return this.toString();
     }
 
     /**
      * Validates for a IPv4-Mapped IPv6 according to https://tools.ietf.org/html/rfc4291#section-2.5.5
-     * @private
-     * @param {Buffer} buffer
      */
-    static #isValidIPv4Mapped(buffer) {
+    static #isValidIPv4Mapped(buffer: Buffer): boolean {
         // check the form
         // |      80 bits   | 16 |   32 bits
         // +----------------+----+-------------
@@ -290,4 +265,4 @@ class InetAddress {
     }
 }
 
-module.exports = InetAddress;
+export = InetAddress;
