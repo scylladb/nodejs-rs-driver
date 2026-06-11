@@ -198,6 +198,92 @@ pub fn setup_logging(callback: LogCallback, min_level: String) -> JsResult<i64> 
     })
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tracing::field::Field;
+
+    /// Helper to create a `Field` from a tracing event.
+    fn with_fields<F: FnMut(&Field)>(field_name: &str, mut f: F) {
+        use tracing::Callsite;
+        use tracing::field::FieldSet;
+        use tracing::metadata::Kind;
+
+        static CALLSITE: tracing::callsite::DefaultCallsite =
+            tracing::callsite::DefaultCallsite::new(&tracing::metadata::Metadata::new(
+                "test",
+                "test_target",
+                Level::INFO,
+                Some("test.rs"),
+                Some(1),
+                Some("test"),
+                FieldSet::new(
+                    &["message", "key1", "key2", "key3"],
+                    tracing::callsite::Identifier(&CALLSITE),
+                ),
+                Kind::EVENT,
+            ));
+
+        let meta = CALLSITE.metadata();
+        let field = meta.fields().field(field_name).unwrap();
+        f(&field);
+    }
+
+    #[test]
+    fn record_str_message_field() {
+        let mut v = MessageVisitor::new();
+        with_fields("message", |f| {
+            v.record_str(f, "hello world");
+        });
+        assert_eq!(v.log_message, "message: \"hello world\"");
+    }
+
+    #[test]
+    fn mixed_str_and_debug_extras() {
+        let mut v = MessageVisitor::new();
+        with_fields("key1", |f| {
+            v.record_str(f, "str_val");
+        });
+        with_fields("key2", |f| {
+            v.record_debug(f, &42);
+        });
+        assert_eq!(v.log_message, "key1: \"str_val\", key2: 42");
+    }
+
+    #[test]
+    fn three_extras_comma_separated() {
+        let mut v = MessageVisitor::new();
+        with_fields("key1", |f| {
+            v.record_str(f, "a");
+        });
+        with_fields("key2", |f| {
+            v.record_str(f, "b");
+        });
+        with_fields("key3", |f| {
+            v.record_str(f, "c");
+        });
+        assert_eq!(v.log_message, "key1: \"a\", key2: \"b\", key3: \"c\"");
+    }
+
+    #[test]
+    fn rust_level_to_js_mapping() {
+        assert_eq!(rust_level_to_js(&Level::TRACE), "trace");
+        assert_eq!(rust_level_to_js(&Level::DEBUG), "debug");
+        assert_eq!(rust_level_to_js(&Level::INFO), "info");
+        assert_eq!(rust_level_to_js(&Level::WARN), "warning");
+        assert_eq!(rust_level_to_js(&Level::ERROR), "error");
+    }
+
+    #[test]
+    fn parse_js_level_to_rust_valid() {
+        assert_eq!(parse_js_level_to_rust("trace"), Some(Level::TRACE));
+        assert_eq!(parse_js_level_to_rust("debug"), Some(Level::DEBUG));
+        assert_eq!(parse_js_level_to_rust("info"), Some(Level::INFO));
+        assert_eq!(parse_js_level_to_rust("warning"), Some(Level::WARN));
+        assert_eq!(parse_js_level_to_rust("error"), Some(Level::ERROR));
+    }
+}
+
 /// Unregister a previously-registered logging callback.
 ///
 /// After this call the callback associated with `id` will no longer receive
