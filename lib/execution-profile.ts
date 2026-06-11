@@ -46,18 +46,21 @@ class ExecutionProfile {
      * @param options Profile options, when any of the options is not specified the {@link Client} will the use
      * the ones defined in the default profile. See {@link ClientOptions} for more details.
      */
-    constructor(name: string, options?: {
-        consistency?: types.consistencies;
-        loadBalancing?: LoadBalancingPolicy;
-        readTimeout?: number;
-        retry?: RetryPolicy;
-        serialConsistency?: types.consistencies;
-    }) {
+    constructor(
+        name: string,
+        options?: {
+            consistency?: types.consistencies;
+            loadBalancing?: LoadBalancingPolicy;
+            readTimeout?: number;
+            retry?: RetryPolicy;
+            serialConsistency?: types.consistencies;
+        },
+    ) {
         // Legacy check. Old code had this check, and using TS does not prevent JS user from providing wrong type
         if (typeof name !== "string") {
             throw new TypeError("Execution profile name must be a string");
         }
-        const opts = options || {} as NonNullable<typeof options>;
+        const opts = options || ({} as NonNullable<typeof options>);
         this.name = name;
         this.consistency = opts.consistency;
         this.loadBalancing = opts.loadBalancing;
@@ -149,10 +152,8 @@ class ProfileManager {
 
         // Set the required properties
         defaultProfile.loadBalancing =
-            defaultProfile.loadBalancing ||
-            options.policies?.loadBalancing;
-        defaultProfile.retry =
-            defaultProfile.retry || options.policies?.retry;
+            defaultProfile.loadBalancing || options.policies?.loadBalancing;
+        defaultProfile.retry = defaultProfile.retry || options.policies?.retry;
 
         return defaultProfile;
     }

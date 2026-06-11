@@ -57,7 +57,7 @@
     "unit-not-supported": "./node_modules/.bin/mocha test/unit-not-supported -t 5000 --recursive",
     "examples": "node ./examples/runner.js",
     "integration": "./node_modules/.bin/mocha test/integration/supported --recursive --exit",
-    "prettier": "npx prettier \"{lib,examples,test}/**/*.js\" --write",
+    "prettier": "npx prettier \"{lib,examples,test}/**/*.{js,ts}\" --write",
     "full-clippy": "cargo clippy --all-targets --all-features -- -D warnings",
     "pre-push": "npm run prettier && cargo fmt && npm run full-clippy && napi build --platform && npm run eslint-fix",
     "js-doc": "jsdoc ./lib/* -c js-doc-config.js",
@@ -68,8 +68,8 @@
     "universal": "napi universal",
     "version": "napi version",
     "typecheck": "tsc --noEmit",
-    "eslint": "npx eslint \"lib/**/*.js\" \"examples/**/*.js\"",
-    "eslint-fix": "npx eslint \"lib/**/*.js\" \"examples/**/*.js\" --fix"
+    "eslint": "npx eslint \"lib/**/*.{js,ts}\" \"examples/**/*.js\"",
+    "eslint-fix": "npx eslint \"lib/**/*.{js,ts}\" \"examples/**/*.js\" --fix"
   },
   "engines": {
     "node": ">=20"
