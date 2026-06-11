@@ -6,6 +6,11 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish to npm (uncheck to test the process without publishing)"
+        type: boolean
+        default: true
 
 permissions:
   id-token: write
@@ -162,10 +167,55 @@ jobs:
       # We do not want them in the main package, where the napi-rs has placed them.
       - name: Clean up binaries 
         run: rm *.node
+      - name: Dry-run publish
+        # In the next step we publish multiple packages in a single command: 
+        # all platform-specific native addon packages and the main driver
+        # package. If any package fails mid-publish, we end up with a partial release.
+        # 
+        # Why do we need separate dry runs, but only a single real publish commands?
+        # 
+        # Napi-rs manages releasing sub-packages through prepublish configured command.
+        # However prepublish --dry-run flag only skips side-effects
+        # without actually validating against the npm registry. To get real
+        # validation, we call npm publish --dry-run explicitly on every sub-package.
+        # 
+        # --ignore-scripts is used prevent the prepublishOnly hook (napi prepublish)
+        # from running, since that would publish the sub-packages.
+        run: |
+          (cd npm/linux-x64-gnu && npm publish --dry-run --access public)
+          (cd npm/linux-arm64-gnu && npm publish --dry-run --access public)
+          npm publish --dry-run --access public --ignore-scripts
+        env: 
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish
+        if: github.event_name == 'release' || inputs.publish
         run: |
           npm config set provenance true
           npm publish --provenance --access public
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+  verify-published-package:
+    if: github.event_name == 'release' || inputs.publish
+    needs:
+      - publish
+    name: Verify published package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 24
+      - uses: ./.github/common/example
+        with:
+          build-command: |
+            cd examples
+            VERSION=$(node -p "require('../package.json').version")
+            npm pkg set "dependencies.scylladb-driver-alpha=$VERSION"
+            (for i in 1 2 3 4 5; do
+              npm install && exit 0
+              echo "Attempt $i failed, retrying in 15s (waiting for npm propagation)..."
+              sleep 15
+            done
+            echo "Giving up. Couldn't download newly released package."
+            exit 1)
