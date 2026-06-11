@@ -54,6 +54,15 @@ export enum distance {
   ignored,
 }
 
+export enum logLevels {
+  trace = "trace",
+  debug = "debug",
+  info = "info",
+  warning = "warning",
+  error = "error",
+  off = "off",
+}
+
 export enum responseErrorCodes {
   serverError = 0x0000,
   protocolError = 0x000a,

@@ -5,6 +5,7 @@ extern crate napi_derive;
 
 // Link other files
 pub mod errors;
+pub mod logging;
 pub mod metadata;
 pub mod options;
 pub mod paging;
