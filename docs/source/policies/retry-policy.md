@@ -1,4 +1,4 @@
-# Retry policies
+# Retry Policies
 
 Currently the driver supports only built-in policies. This includes the following policies:
 

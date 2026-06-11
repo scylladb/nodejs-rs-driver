@@ -1,4 +1,22 @@
-# Migration guide
+# Migration Guide
+
+This guide describes the differences between the ScyllaDB Node.js RS Driver
+and the Apache `cassandra-driver` (formerly the DataStax `cassandra-driver`, which was transferred to Apache),
+to help you migrate existing applications.
+
+## Shutdown behavior
+
+In the Apache `cassandra-driver`, you can explicitly close the connection to the database using `client.shutdown()`.
+The ScyllaDB Node.js RS Driver behaves differently: it is not possible to explicitly close the connection.
+The connection is closed when the `Client` object is garbage collected.
+
+When `client.shutdown()` is called in the Node.js RS Driver:
+- It prevents execution of any new statements with the given client.
+- It does **not** close the connection to the database.
+- It does **not** deallocate connection-related structures.
+- It does **not** stop queries that are currently in flight.
+
+See [Shutdown](../shutdown/shutdown.md) for more details.
 
 ## Query options
 
@@ -34,17 +52,26 @@ The following options remain unchanged:
 - `maxPrepared`
 
 The following option implementation has changed significantly,
-but the meaning of those option remains unchanged:
+but the meaning of the option remains unchanged:
 
-- `id`: Now accepts both uuid and string types. When uuid is provided, it will be passed to the database in standard string representation.
+- `id`: Now accepts both `Uuid` and string types. When a `Uuid` is provided, it will be passed to the database in its standard string representation.
 
-The following options' default values have changes:
+The following options' default values have changed:
 
 - `encoding.useBigIntAsLong`: New default - `true` (previously - `false`),
 - `encoding.useBigIntAsVarint`: New default - `true` (previously - `false`)
 
 With the update of encoding options, we encourage usage of the builtin types.
 The ability to use the driver with types is kept as a legacy option, and may be removed in the future.
+
+## Unprepared statements with bind markers
+
+When an unprepared statement contains bind markers (`?`), the driver silently
+prepares the statement before execution. This is especially important in batches: for each
+statement with a non-empty list of values, the driver sends a prepare request **sequentially**,
+and results are **not cached** between `client.batch()` calls.
+
+Avoid using unprepared batches unless all statements take no bind markers.
 
 ## Load balancing policies
 

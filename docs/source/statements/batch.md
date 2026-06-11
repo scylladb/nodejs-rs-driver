@@ -3,19 +3,20 @@ https://docs.datastax.com/en/developer/nodejs-driver/4.8/features/batch/index.ht
 and rust driver documentation:
 https://rust-driver.docs.scylladb.com/stable/statements/batch.html -->
 
-# Batch statements
+# Batch Statements
 
 It's common for applications to require atomic batching of multiple `INSERT`, `UPDATE`, or `DELETE` statements, even in
 different partitions or column families. The driver allows you to execute multiple statements atomically
 without the need to concatenate multiple queries.
 
-> ***Warning***\
+:::{note}
 Batches containing statements that target different partitions will no longer
 be correctly token- and shard-aware, which will hurt performance.
 Batches should not normally be used to boost performance in ScyllaDB.
 Batches' goal is enabling atomicity, not increased efficiency.
 If you want to execute multiple statements efficiently and you do not
 care about atomicity of the operation, we would recommend using `executeConcurrent` endpoint.
+:::
 
 The method `batch()` accepts the list of queries as first parameter.
 Each query can be either just a statement string, or `{ query, params }` object:
@@ -48,16 +49,18 @@ client.batch(queries, { prepare: true }, function (err) {
 });
 ```
 
-By preparing your queries, you will get the best performance and your JavaScript parameters correctly mapped to
-Cassandra types. The driver will prepare each query once on each host and execute the batch every time with the
+By preparing your statements, you will get the best performance and your JavaScript parameters correctly mapped to
+Cassandra types. The driver will prepare each statement once on each host and execute the batch every time with the
 different parameters provided.
 
-> ***Warning***\
-> Using unprepared statements with bind markers in batches is strongly discouraged.
-> For each unprepared statement with a non-empty list of values in the batch,
-> the driver will send a prepare request, and it will be done **sequentially**.
-> Results of preparation are not cached between `batch` calls.
-> Consider preparing the statements before putting them into the batch.
+:::{note}
+When an unprepared statement contains bind markers (`?`), the driver silently
+prepares the statement before execution. This is especially important in batches: for each
+statement with a non-empty list of values, the driver sends a prepare request **sequentially**,
+and results are **not cached** between `client.batch()` calls.
+
+Avoid using unprepared batches unless all statements take no bind markers.
+:::
 
 Note that batches are not suitable for bulk loading, there are dedicated tools for that. Batches allow you
 to group related updates in a single request, so keep the batch size small (in the order of tens).

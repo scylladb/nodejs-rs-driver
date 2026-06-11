@@ -3,31 +3,30 @@ https://docs.datastax.com/en/developer/nodejs-driver/4.8/features/paging/index.h
 and rust driver documentation:
 https://rust-driver.docs.scylladb.com/stable/statements/paged.html -->
 
-# Fetching large result sets
+# Fetching Large Result Sets
 
 When dealing with a large number of rows, the driver breaks the result into _pages_, only requesting a limited number of
 rows each time (`5000` being the default `fetchSize`). To retrieve the rows beyond this default size, use one of the
 following paging mechanisms. Paging is enabled by default and you can disable paging by setting `QueryOptions.paged` to false.
 
-:::{warning}
-Issuing unpaged SELECTs
-may have dramatic performance consequences! **BEWARE!**\
-If the result set is big (or, e.g., there are a lot of tombstones), those atrocities can happen:
+:::{caution}
+Issuing unpaged SELECTs can have significant performance consequences.
+If the result set is large (or there are many tombstones), the following problems may occur:
 
-- cluster may experience high load,
+- the cluster may experience high load,
 - queries may time out,
-- the driver may devour a lot of RAM,
-- latency will likely spike.
+- the driver may consume large amounts of RAM,
+- latency will likely increase.
 
-Stay safe. Page your SELECTs.
+Always page your SELECTs.
 :::
 
 ## Automatic paging
 
 ### Async iterators
 
-The driver supports asynchronous iteration of the `ResultSet` using the built-in [Async Iterator][async-it], fetching
-the following result pages after the previous one has been yielded.
+The driver supports asynchronous iteration of the `ResultSet` using the built-in [Async Iterator][async-it],
+fetching subsequent pages automatically as the previous one has been consumed.
 
 Large result sets can be iterated using the [`for await ... of`][for-of-await] statement:
 
@@ -41,18 +40,18 @@ for await (const row of result) {
 
 Under the hood, the driver will get all the rows of the query result using multiple requests. Initially,
 when calling `execute()` it will retrieve the first page of results according to the fetch size (defaults to `5000`).
-If there are additional rows, those will be retrieved once the async iterator yielded the rows from the previous page.
+If there are additional rows, the driver fetches the next page automatically once the async iterator
+has yielded rows from the previous page.
 
 If needed, you can use `isPaged()` method of `ResultSet` instance to determine whether there are more pages of results
 than initially fetched.
 
-:::{warning}
-Note that using either the async or sync iterators will not affect the internal state of the `ResultSet` instance.
-The following methods are mutually exclusive, so you should use only one per ResultSet instance:
+:::{note}
+The following iteration methods are mutually exclusive — use only one per `ResultSet` instance:
 
-- rows property, which contains the row instances of the first page of results,
-- sync iterator, which will yield all the rows in the current page,
-- async iterator, which will yield all the rows in the result regardless of the number of pages.
+- `rows` property: contains the row instances of the first page of results,
+- sync iterator: yields all rows in the current page,
+- async iterator: yields all rows in the result regardless of the number of pages.
 :::
 
 ### Each row callback
@@ -60,8 +59,8 @@ The following methods are mutually exclusive, so you should use only one per Res
 You can also iterate through pages by setting a per-page callback.
 `eachRow()` works in two modes, depending on the `QueryOptions.autoPage` configuration:
 
-- automatic paging: keeps fetching pages until all rows are processed (this is the default mode),
-- manual paging: fetches one page at a time. This mode gives you access to result sets of intermediate pages.
+- **Automatic paging** (default): keeps fetching subsequent pages until all rows are processed.
+- **Manual paging**: fetches one page at a time. This mode gives you access to result sets of intermediate pages.
   To fetch the next page, you need to call `result.nextPage()`.
 
 `eachRow()` calls:
@@ -159,15 +158,15 @@ safe to expose it to the users in plain text.
 
 ## Best practices
 
-| Query result fetching   | Unpaged                                                                                                                 | Paged manually                                                                                       | Paged automatically                                                                               |
-|-------------------------|-------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------|
-| Exposed Client API      | `execute` with `QueryOptions.paged = false`                                                                             | `execute` with `QueryOptions.pageState`                                                              | Async iterators, each row callbacks, streams                                                      |
-| Working                 | get all results in a single CQL frame, into a single result set                                                         | get one page of results in a single CQL frame, into a single result set                              | upon high-level iteration, fetch consecutive CQL frames and transparently iterate over their rows |
-| Cluster load            | potentially **HIGH** for large results, beware!                                                                         | normal                                                                                               | normal                                                                                            |
-| Driver overhead         | low - simple frame fetch                                                                                                | low - simple frame fetch                                                                             | low - simple frame fetch                                                                          |
-| Driver memory footprint | potentially **BIG** - all results have to be stored at once!                                                            | small - only one page stored at a time                                                               | small - at most constant number of pages stored at a time                                         |
-| Latency                 | potentially **BIG** - all results have to be generated at once!                                                         | considerable on page boundary - new page needs to be fetched                                         | considerable on page boundary - new page needs to be fetched                                      |
-| Suitable operations     | - in general: operations with empty result set (non-SELECTs)</br> - as possible optimisation: SELECTs with LIMIT clause | - for advanced users who prefer more control over paging                                             | - in general: all SELECTs                                                                         |
+| Query result fetching     | Unpaged                                                                                                                 | Paged manually                                                                                       | Paged automatically                                                                               |
+|---------------------------|-------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------|
+| Exposed Client API        | `execute` with `QueryOptions.paged = false`                                                                             | `execute` with `QueryOptions.pageState`                                                              | Async iterators, each row callbacks, streams                                                      |
+| Working                   | get all results in a single CQL frame, into a single result set                                                         | get one page of results in a single CQL frame, into a single result set                              | upon high-level iteration, fetch consecutive CQL frames and transparently iterate over their rows |
+| Cluster load              | potentially **HIGH** for large results, beware!                                                                         | normal                                                                                               | normal                                                                                            |
+| Driver overhead           | low - simple frame fetch                                                                                                | low - simple frame fetch                                                                             | low - simple frame fetch                                                                          |
+| Driver memory footprint   | potentially **BIG** - all results have to be stored at once!                                                            | small - only one page stored at a time                                                               | small - at most constant number of pages stored at a time                                         |
+| Latency                   | potentially **BIG** - all results have to be generated at once!                                                         | considerable on page boundary - new page needs to be fetched                                         | considerable on page boundary - new page needs to be fetched                                      |
+| Suitable operations       | - in general: operations with empty result set (non-SELECTs)</br> - as possible optimisation: SELECTs with LIMIT clause | - for advanced users who prefer more control over paging                                             | - in general: all SELECTs                                                                         |
 
 [stream]: https://nodejs.org/api/stream.html
 [async-it]: https://github.com/tc39/proposal-async-iteration
