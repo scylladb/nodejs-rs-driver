@@ -1,4 +1,4 @@
-# Unprepared statements
+# Unprepared Statements
 
 Whenever you want to execute statements without their prior preparation, you need to inform the driver what the inserted data is.
 There are multiple ways you can achieve that:

@@ -3,9 +3,9 @@ https://rust-driver.docs.scylladb.com/stable/statements/statements.html
 and DSx driver documentation:
 https://docs.datastax.com/en/developer/nodejs-driver/4.8/coding-rules/index.html -->
 
-# Executing CQL statements - best practices
+# Executing CQL Statements - Best Practices
 
-Driver supports all kinds of statements supported by ScyllaDB. The following tables aim to bridge between DB concepts and driver's API.
+The Node.js RS Driver supports all kinds of statements supported by ScyllaDB. The following tables aim to bridge between DB concepts and driver's API.
 They include recommendations on which API to use in what cases.
 
 ## Kinds of CQL statements (from the CQL protocol point of view)
@@ -17,26 +17,25 @@ They include recommendations on which API to use in what cases.
 
 This is **NOT** strictly related to content of the CQL statement string.
 
-> ***Interesting note***\
-> In fact, any kind of CQL statement could contain any CQL statement string.
-> Yet, some of such combinations don't make sense and will be rejected by the DB.
-> For example, SELECTs in a Batch are nonsense.
+> **Note:** Any kind of CQL statement could technically contain any CQL statement string.
+> However, not all combinations are valid — some will be rejected by the database.
+> For example, SELECT statements are not permitted inside a batch.
 
 ### [Unprepared](./unprepared.md) vs Prepared
 
-> ***GOOD TO KNOW***\
-> Each time a statement is executed by sending a statement string to the DB, it needs to be parsed. Driver does not parse CQL, therefore it sees statement strings as opaque.\
-> There is an option to *prepare* a statement, i.e. parse it once by the DB and associate it with an ID. After preparation, it's enough that the driver sends the ID
-> and the DB already knows what operation to perform - no more expensive parsing necessary! Moreover, upon preparation driver receives valuable data for load balancing,
-> enabling advanced load balancing (so better performance!) of all further executions of that prepared statement.\
-> ***Key takeaway:*** always use prepared statements that you are going to execute multiple times.
+Each time a statement is executed by sending a statement string to the DB, it needs to be parsed. The driver does not parse CQL, therefore it sees statement strings as opaque.
+There is an option to *prepare* a statement, i.e. parse it once by the DB and associate it with an ID. After preparation, it's enough that the driver sends the ID
+and the DB already knows what operation to perform — no more expensive parsing necessary. Moreover, upon preparation the driver receives valuable data for load balancing,
+enabling advanced load balancing (and better performance) of all further executions of that prepared statement.
+
+**Key takeaway:** always use prepared statements that you are going to execute multiple times.
 
 You can decide whether a given query will be prepared by setting the `QueryOptions.prepare` option. By default, queries are unprepared.
-You do not need to manually handle statement preparation. If you enable the `prepare` option, the driver handles the rest: it either uses its cache of prepared statements
-if the statement is present, or prepares the query before execution.
+You do not need to manually handle statement preparation. If you enable the `prepare` option, the driver handles the rest: it either uses
+its cache of prepared statements if the statement is present, or prepares the query before execution and keeps the prepared statement in its cache from now on.
 The driver keeps a cache of the last `ClientOptions.maxPrepared` statements. This cache ensures you can take full advantage of prepared statements.
 
-:::{warning}
+:::{caution}
 **Ensure sufficient cache size.** If you execute more than `ClientOptions.maxPrepared` different statements, you will experience cache flickering, defeating the purpose of prepared
 statements and significantly decreasing driver performance.
 :::
@@ -63,14 +62,14 @@ In case of unprepared statements, this metadata is missing and thus verification
 While it's possible to [manually provide metadata](./unprepared.md), this allows some silent bugs to sneak into user applications in case the provided metadata is invalid.
 
 <!-- Well. While the rust driver still silently prepares with the goal of ensuring type safety. We just totally ignore the verification part. -->
-:::{warning}
-When the unprepared statement contains bind markers, the driver silently prepares the statement before execution.
-That behaviour is especially important in batches:
-For each simple statement with a non-empty list of values in the batch,
-the driver will send a prepare request, and it will be done **sequentially**!
-Results of preparation are not cached between `client.batch` calls.
+:::{note}
+When an unprepared statement contains bind markers (`?`), the driver silently
+prepares the statement before execution. This is especially important in batches:
+for each statement with a non-empty list of values in the batch,
+the driver will send a prepare request, and it will be done **sequentially**.
+Results of preparation are not cached between `client.batch()` calls.
 
-Takeaway from the above: Do NOT use unprepared batches, unless all statements take no bind markers.
+Avoid using unprepared batches unless all statements take no bind markers.
 :::
 
 ### Single vs [Batch](./batch.md)
@@ -91,11 +90,8 @@ means that your batch is no longer atomic.
 
 ### [Paged](../paging/paging.md) vs Unpaged queries
 
-> ***GOOD TO KNOW***\
-> SELECT statements return a result set, possibly a large one. Therefore, paging is available to fetch it in chunks, relieving load on the cluster and lowering latency.\
-> ***Key takeaways:***\
-> For SELECTs you had better **avoid unpaged queries**.\
-> For non-SELECTs, it's preferred to have unpaged queries.
+SELECT statements return a result set, possibly a large one. Paging is available to fetch it in chunks, relieving load on the cluster and lowering latency.
+For SELECTs, avoid unpaged queries. For non-SELECTs, unpaged queries are preferred.
 
 | Query result fetching | Unpaged                                                                                                                 | Paged                                                                                                                                                          |
 |-----------------------|-------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -116,4 +112,4 @@ For more detailed comparison and more best practices, see doc page about [paging
 | INSERT, UPDATE                                 | Prepared statement if repeated, unprepared statement if once, batch if multiple statements are to be executed atomically                                             | No. While you can still use paging, it is irrelevant, because the result set of such operation is empty                                  |
 | CREATE/DROP {KEYSPACE, TABLE, TYPE, INDEX,...} | Unprepared statement, batch if multiple statements are to be executed atomically                                                                                     | No. While you can still use paging, it is irrelevant, because the result set of such operation is empty                                  |
 
-### Queries are fully asynchronous - you can run as many of them in parallel as you wish
+Executing statements is fully asynchronous, so they can be run in parallel without limitation.

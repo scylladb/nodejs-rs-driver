@@ -1,4 +1,4 @@
-# Load balancing
+# Load Balancing
 
 We recommend to configure load balancing options using only `DefaultLoadBalancingPolicy`.
 While some of the other built-in policies that were present in the DataStax driver,
@@ -9,8 +9,8 @@ existing policies, see [migration guide](../migration-guide/migration-guide.md#l
 
 ## Configuring a DefaultLoadBalancingPolicy
 
-`DefaultLoadBalancingPolicy` can be configured only at its creation.
-The following fields can be configured:
+`DefaultLoadBalancingPolicy` is configured only at creation time.
+You can set all or a subset of these options:
 
 - `preferDatacenter` (default: `null` - no preference)
 - `preferRack` (default: `null` - no preference)
@@ -20,8 +20,6 @@ The following fields can be configured:
 - `allowList` (default: `null` - all hosts are accepted)
 
 You can assume `undefined` is equivalent to `null` for the purpose of all configurations.
-
-You can set all, or only some of those options:
 
 ```js
 const DefaultLoadBalancingPolicy = require("scylladb-driver-alpha").policies.loadBalancing.DefaultLoadBalancingPolicy;
@@ -59,12 +57,13 @@ in the preferred datacenter, and then the other replicas in the datacenter
 (followed by remote replicas). After replicas, the other nodes will be ordered
 similarly, too (local rack nodes, local datacenter nodes, remote nodes).
 
-When datacenter failover is disabled (`permitDcFailover` is set to
-false), the default policy will only include local nodes in load balancing
-plans. Remote nodes will be excluded, even if they are alive and available to
-serve requests.
+When `permitDcFailover` is `false` (the default), only local nodes are included
+in load balancing plans. Remote nodes are excluded even if they are available.
 
-### Datacenter Failover
+When `permitDcFailover` is `true`, the policy will prefer alive remote replicas
+if local nodes are unavailable and consistency constraints permit.
+
+#### Datacenter Failover
 
 In the event of a datacenter outage or network failure, the nodes in that
 datacenter may become unavailable, and clients may no longer be able to access
@@ -77,7 +76,7 @@ Datacenter failover can be enabled in `DefaultLoadBalancingPolicy` by
 prefer to return alive remote replicas if datacenter failover is permitted and
 possible due to consistency constraints.
 
-### Token awareness
+### Token Awareness
 
 Token awareness refers to a mechanism by which the driver is aware of the token
 range assigned to each node in the cluster. Tokens are assigned to nodes to
@@ -97,12 +96,12 @@ to that node first, assuming it is alive and responsive.
 Token awareness can significantly improve the performance and scalability of
 applications built on Scylla. By using token awareness, users can ensure that
 data is accessed locally as much as possible, reducing network overhead and
-improving throughput.
+improving throughput and latency.
 
 Please note that for token awareness to be applied, a statement must be
 prepared before being executed.
 
-### Replica shuffling
+### Replica Shuffling
 
 Setting `enableShufflingReplicas` to `false` (default: `true`) does something
 slightly different than its name suggests. It will cause all randomness-based
@@ -119,7 +118,6 @@ return replicas in the same order. We discourage its use in production setting.
 You may want to limit the driver ability to connect to certain nodes.
 It can be achieved by providing an allow list - list of hosts in
 `ip:port` format, that can be used, when connecting to the database.
-When this option is provided, any of the hosts that is not on the allow
-list will be ignored when connecting to the database.
+When this option is provided, any host not on the list is ignored, i.e., the driver does not open any connections to it.
 When this option is empty (set to `null`), all hosts (unless filtered by other load balancing options)
 can be used when connecting to the database.
