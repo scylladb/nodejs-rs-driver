@@ -10,10 +10,10 @@ sys.path.insert(0, os.path.abspath("../_extensions"))
 # -- General configuration ------------------------------------------
 
 # Build documentation for the following tags and branches
-TAGS = []
+TAGS = ["v0.5.1"]
 BRANCHES = ["main"]
-LATEST_VERSION = "main"
-UNSTABLE_VERSIONS = []
+LATEST_VERSION = "v0.5.1"
+UNSTABLE_VERSIONS = ["main"]
 DEPRECATED_VERSIONS = []
 
 # Add any Sphinx extension module names here, as strings.
