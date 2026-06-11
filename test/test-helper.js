@@ -696,6 +696,8 @@ const helper = {
             localDataCenter: "dc1",
             // retry all queries multiple times (for improved test resiliency).
             policies: { retry: new RetryPolicy() },
+            // Default to 'warning' in tests to reduce noise.
+            logLevel: types.logLevels.warning,
         };
     })(),
     /**
