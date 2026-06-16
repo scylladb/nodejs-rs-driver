@@ -22,7 +22,51 @@ export function defaultOptions(): ClientOptions;
 
 export type ValueCallback<T> = (err: Error, val: T) => void;
 export type EmptyCallback = (err: Error) => void;
-export type ArrayOrObject = any[] | { [key: string]: any };
+
+/**
+ * A single value that can be bound to a CQL query parameter.
+ *
+ * This covers every JavaScript value the driver's encoder accepts, including
+ * the native primitives, `Buffer` (a pre-encoded `blob`), the driver's own
+ * representation classes (see the {@link types} module) and the nested
+ * collection forms used for CQL `list`, `set`, `map`, `tuple`, `udt` and
+ * `vector` columns. While some duck-typing may be accepted by the driver, refrain from using it.
+ *
+ * Special values:
+ * - `null` encodes a CQL `NULL`.
+ * - {@link types.unset} encode an unset value (the latter is
+ *   structurally an object and is matched by the object branch below).
+ * - `undefined` represents either one of the above values, based on `encoding.useUndefinedAsUnset` options
+ */
+export type CqlValue =
+  | null
+  | undefined
+  | boolean
+  | number
+  | bigint
+  | string
+  | Buffer
+  | Date
+  | Long
+  | types.Integer
+  | types.BigDecimal
+  | types.Uuid
+  | types.InetAddress
+  | types.LocalDate
+  | types.LocalTime
+  | types.Duration
+  | types.Tuple
+  | types.Vector
+  | CqlValue[]
+  | Map<CqlValue, CqlValue>
+  | Set<CqlValue>
+  | { [key: string]: CqlValue };
+
+/**
+ * Query parameters bound to a statement, either as a positional array of
+ * values or as an object keyed by named bind markers.
+ */
+export type ArrayOrObject = CqlValue[] | { [key: string]: CqlValue };
 
 export class Client extends events.EventEmitter {
   hosts: HostMap;
