@@ -1,39 +1,50 @@
-// @ts-nocheck
 "use strict";
 
-const events = require("events");
-const util = require("util");
-const {
+import events = require("events");
+import util = require("util");
+import {
     throwNotSupported,
     isNamedParameters,
     PreparedInfo,
-} = require("./new-utils.js");
+} from "./new-utils";
 
-const assert = require("assert");
-const utils = require("./utils.js");
-const errors = require("./errors.js");
-const types = require("./types");
-const ResultStream = require("./types/result-stream.js");
-const { ProfileManager } = require("./execution-profile");
-const clientOptions = require("./client-options");
-const ClientState = require("./metadata/client-state");
-const description = require("../package.json").description;
-const { version } = require("../package.json");
-const {
-    ExecutionOptions,
-    DefaultExecutionOptions,
-} = require("./execution-options.js");
-const promiseUtils = require("./promise-utils");
-const rust = require("../index");
-const ResultSet = require("./types/result-set.js");
-const { encodeParams, convertComplexType } = require("./types/cql-utils");
-const { PreparedCache } = require("./cache.js");
-const Encoder = require("./encoder.js");
-const { HostMap } = require("./host.js");
+import assert = require("assert");
+import utils = require("./utils");
+import errors = require("./errors");
+import types = require("./types");
+import ResultStream = require("./types/result-stream");
+import executionProfile = require("./execution-profile");
+import clientOptions = require("./client-options");
+import ClientState = require("./metadata/client-state");
+import packageInfo = require("../package.json");
+import { ExecutionOptions, DefaultExecutionOptions } from "./execution-options";
+import promiseUtils = require("./promise-utils");
+import rust = require("../index");
+import ResultSet = require("./types/result-set");
+import { encodeParams, convertComplexType } from "./types/cql-utils";
+import { PreparedCache } from "./cache";
+import Encoder = require("./encoder");
+import { HostMap } from "./host";
 
-// Imports for the purpose of type hints in JS docs.
-// eslint-disable-next-line no-unused-vars
-const { QueryOptions } = require("./query-options.js");
+// Imports for the purpose of type hints.
+import type { QueryOptions } from "./query-options";
+import type {
+    ArrayOrObject,
+    Host,
+    metadata as metadataModule,
+    metrics as metricsModule,
+} from "../";
+
+const { ProfileManager } = executionProfile;
+const description = packageInfo.description;
+const { version } = packageInfo;
+
+/**
+ * Callback used by execution methods.
+ * @param err Error occurred in the execution of the query.
+ * @param result Result of the execution of the query.
+ */
+type ResultCallback = (err?: Error | null, result?: ResultSet) => void;
 
 /**
  * FinalizationRegistry that ensures the Rust logging callback is unregistered
@@ -73,19 +84,37 @@ const loggingFinalizationRegistry = new FinalizationRegistry((loggingId) => {
  */
 class Client extends events.EventEmitter {
     /**
-     * @type {rust.SessionWrapper}
      * @package
      */
-    rustClient;
-    #encoder;
-    #loggingId;
+    rustClient!: rust.SessionWrapper;
+    #encoder: Encoder;
+    #loggingId: number | undefined;
+
+    options: clientOptions.ClientOptions;
+    rustOptions: ReturnType<typeof clientOptions.setRustOptions>;
+    readonly profileManager!: InstanceType<typeof ProfileManager>;
+    connected: boolean;
+    connecting?: boolean;
+    isShuttingDown: boolean;
+    /**
+     * Gets the schema and cluster metadata information.
+     * TODO: This field is currently not supported
+     */
+    metadata: metadataModule.Metadata | undefined;
+    /**
+     * The [ClientMetrics]{@link module:metrics~ClientMetrics} instance used to expose measurements of its internal
+     * behavior and of the server as seen from the driver side.
+     *
+     * By default, a [DefaultMetrics]{@link module:metrics~DefaultMetrics} instance is used.
+     */
+    metrics: metricsModule.ClientMetrics;
+
     /**
      * Creates a new instance of {@link Client}.
-     * @param {clientOptions.ClientOptions} options The options for this instance.
+     * @param options The options for this instance.
      */
-    constructor(options) {
+    constructor(options: clientOptions.ClientOptions) {
         super();
-        /** @type {clientOptions.ClientOptions} */
         this.options = clientOptions.extend(
             { logEmitter: this.emit.bind(this), id: types.Uuid.random() },
             options,
@@ -100,20 +129,8 @@ class Client extends events.EventEmitter {
         this.setMaxListeners(0);
         this.connected = false;
         this.isShuttingDown = false;
-        /**
-         * Gets the schema and cluster metadata information.
-         * TODO: This field is currently not supported
-         * @type {Metadata | undefined}
-         */
         this.metadata = undefined;
 
-        /**
-         * The [ClientMetrics]{@link module:metrics~ClientMetrics} instance used to expose measurements of its internal
-         * behavior and of the server as seen from the driver side.
-         *
-         * By default, a [DefaultMetrics]{@link module:metrics~DefaultMetrics} instance is used.
-         * @type {ClientMetrics}
-         */
         this.metrics = this.options.metrics;
 
         // TODO: This field is currently hardcoded. Should be implemented properly
@@ -143,9 +160,8 @@ class Client extends events.EventEmitter {
 
     /**
      * Gets the name of the active keyspace.
-     * @type {string | undefined}
      */
-    get keyspace() {
+    get keyspace(): string | undefined {
         return this.rustClient.getKeyspace() || undefined;
     }
 
@@ -155,9 +171,8 @@ class Client extends events.EventEmitter {
 
     /**
      * Gets an associative array of cluster hosts.
-     * @type {HostMap}
      */
-    get hosts() {
+    get hosts(): HostMap {
         // For now we retrieve all the hosts per each access to this field.
         // This may be inefficient when user works directly with this field multiple times,
         // but with this approach we shift the responsibility of ensuring validity of the data to Rust driver
@@ -167,17 +182,16 @@ class Client extends events.EventEmitter {
     set hosts(_) {
         throw new SyntaxError("Client hosts is read-only");
     }
+
     /**
      * Manually create final execution options, applying client and default setting.
      *
      * Creating those options requires a native call, but they can be reused
      * without any additional native calls, which improves performance
      * for queries with the same QueryOptions.
-     * @param {QueryOptions | ExecutionOptions} [options]
-     * @returns {ExecutionOptions}
      * @package
      */
-    createOptions(options) {
+    createOptions(options?: QueryOptions | ExecutionOptions): ExecutionOptions {
         if (options instanceof ExecutionOptions) {
             options.wrapOptionsIfNotWrappedYet();
             return options;
@@ -189,10 +203,8 @@ class Client extends events.EventEmitter {
 
     /**
      * Manually prepare query into prepared statement.
-     * @param {string} statement
-     * @returns {Promise<PreparedInfo>}
      */
-    async prepareStatement(statement) {
+    async prepareStatement(statement: string): Promise<PreparedInfo> {
         let expectedTypes = await this.rustClient.prepareStatement(statement);
         let types = expectedTypes.map((t) => convertComplexType(t[0]));
         let boundParamNames = expectedTypes.map((t) => t[1].toLowerCase());
@@ -206,12 +218,12 @@ class Client extends events.EventEmitter {
      * When the {@link Client} is already connected, it resolves immediately.
      *
      * It returns a `Promise` when a `callback` is not provided.
-     * @param {function} [callback] The optional callback that is invoked when the pool is connected or it failed to
+     * @param callback The optional callback that is invoked when the pool is connected or it failed to
      * connect.
      * @example <caption>Usage example</caption>
      * await client.connect();
      */
-    connect(callback) {
+    connect(callback?: Function): Promise<void> | void {
         if (this.connected && callback) {
             // Avoid creating Promise to immediately resolve them
             return callback();
@@ -223,7 +235,7 @@ class Client extends events.EventEmitter {
     /**
      * Async-only version of {@link Client#connect()}.
      */
-    async #connect() {
+    async #connect(): Promise<void> {
         if (this.connected) {
             return;
         }
@@ -231,7 +243,7 @@ class Client extends events.EventEmitter {
         if (this.isShuttingDown) {
             // it is being shutdown, don't allow further calls to connect()
             throw new errors.NoHostAvailableError(
-                null,
+                {},
                 "Connecting after shutdown is not supported",
             );
         }
@@ -309,11 +321,11 @@ class Client extends events.EventEmitter {
      *
      * It returns a `Promise` when a `callback` is not provided.
      *
-     * @param {string} query The query to execute.
-     * @param {Array<any> | Object} [params] Array of parameter values or an associative array (object) containing parameter names
+     * @param query The query to execute.
+     * @param params Array of parameter values or an associative array (object) containing parameter names
      * as keys and its value.
-     * @param {QueryOptions} [options] The query options for the execution.
-     * @param {ResultCallback} [callback] Executes callback(err, result) when execution completed. When not defined, the
+     * @param options The query options for the execution.
+     * @param callback Executes callback(err, result) when execution completed. When not defined, the
      * method will return a promise.
      * @example <caption>Promise-based API, using async/await</caption>
      * const query = 'SELECT name, email FROM users WHERE id = ?';
@@ -329,7 +341,12 @@ class Client extends events.EventEmitter {
      * });
      * @see {@link ExecutionProfile} to reuse a set of options across different query executions.
      */
-    execute(query, params, options, callback) {
+    execute(
+        query: string,
+        params?: ArrayOrObject | ResultCallback,
+        options?: QueryOptions | ResultCallback,
+        callback?: ResultCallback,
+    ): Promise<ResultSet> | void {
         // This method acts as a wrapper for the async method #execute(), replaced by #rustyExecute()
 
         if (!callback) {
@@ -344,11 +361,18 @@ class Client extends events.EventEmitter {
         }
 
         try {
-            const execOptions = this.createOptions(options);
+            const execOptions = this.createOptions(
+                options as QueryOptions | undefined,
+            );
             // The rusty execute will take the page state from options, but we need to indicate whether it's a paged query.
             let pageState = execOptions.isPaged() ? null : undefined;
             return promiseUtils.optionalCallback(
-                this.rustyExecute(query, params || [], execOptions, pageState),
+                this.rustyExecute(
+                    query,
+                    (params as ArrayOrObject | undefined) || [],
+                    execOptions,
+                    pageState,
+                ),
                 callback,
             );
         } catch (err) {
@@ -373,15 +397,16 @@ class Client extends events.EventEmitter {
      * Wrapper for executing queries by rust driver.
      * When called with a pageState argument (including null), executes a single-page query.
      * When called without pageState, executes an unpaged query.
-     * @param {string | PreparedInfo} query
-     * @param {Array<any> | Object} params
-     * @param {ExecutionOptions} execOptions
-     * @param {rust.PagingStateWrapper|Buffer|null} [pageState] When provided (including null), enables paged execution.
+     * @param pageState When provided (including null), enables paged execution.
      * When unprovided (undefined), executes an unpaged query.
-     * @returns {Promise<ResultSet>}
      * @package
      */
-    async rustyExecute(query, params, execOptions, pageState) {
+    async rustyExecute(
+        query: string | PreparedInfo,
+        params: Array<any> | object,
+        execOptions: ExecutionOptions,
+        pageState?: rust.PagingStateWrapper | Buffer | null,
+    ): Promise<ResultSet> {
         // Why not just take execOptions.isPaged()?
         // When executing through eachRow, users may not set the isPaged query option properly
         // (they may set it to false - this is not checked in any place when going through eachRow API at the moment).
@@ -401,10 +426,7 @@ class Client extends events.EventEmitter {
 
         let rustOptions = execOptions.getRustOptions();
 
-        /**
-         * @type {rust.PagingResultWithExecutor}
-         */
-        let resultTuple;
+        let resultTuple: rust.PagingResultWithExecutor;
 
         if (execOptions.isPrepared()) {
             resultTuple = await this.#rustyExecutePrepared(
@@ -434,32 +456,26 @@ class Client extends events.EventEmitter {
             // If resultPageState then executor must be defined according to type definition.
             assert(executor instanceof rust.QueryExecutor);
 
-            resultSet.rawNextPageAsync =
-                /** @type {function(Buffer): Promise<rust.PagingResult>} */ async (
-                    pageState,
-                ) => {
-                    return await executor.fetchNextPage(
-                        this.rustClient,
-                        rust.PagingStateWrapper.fromBuffer(pageState),
-                    );
-                };
+            resultSet.rawNextPageAsync = async (
+                pageState: Buffer,
+            ): Promise<rust.PagingResult> => {
+                return await executor.fetchNextPage(
+                    this.rustClient,
+                    rust.PagingStateWrapper.fromBuffer(pageState),
+                );
+            };
         }
         return resultSet;
     }
 
-    /**
-     * @param {string | PreparedInfo} query
-     * @param {Array<any> | Object} params
-     * @param {rust.QueryOptionsWrapper} rustOptions
-     * @param {boolean} paged
-     * @param {rust.PagingStateWrapper} [pageState]
-     * @returns {Promise<rust.PagingResultWithExecutor>}
-     */
-    async #rustyExecutePrepared(query, params, rustOptions, paged, pageState) {
-        /**
-         * @type {PreparedInfo}
-         */
-        let prepared;
+    async #rustyExecutePrepared(
+        query: string | PreparedInfo,
+        params: Array<any> | object,
+        rustOptions: rust.QueryOptionsWrapper,
+        paged: boolean,
+        pageState?: rust.PagingStateWrapper,
+    ): Promise<rust.PagingResultWithExecutor> {
+        let prepared: PreparedInfo;
         // If the statement is already prepared, skip the preparation process
         // Otherwise call Rust part to prepare a statement
 
@@ -476,10 +492,7 @@ class Client extends events.EventEmitter {
                 );
         }
 
-        /**
-         * @type {Array<any>}
-         */
-        let unifiedParams;
+        let unifiedParams: Array<any>;
         if (Array.isArray(params)) {
             unifiedParams = params;
         } else {
@@ -512,24 +525,14 @@ class Client extends events.EventEmitter {
         ];
     }
 
-    /**
-     *
-     * @param {string | PreparedInfo} query
-     * @param {Array<any> | Object} params
-     * @param {ExecutionOptions} execOptions
-     * @param {rust.QueryOptionsWrapper} rustOptions
-     * @param {boolean} paged
-     * @param {rust.PagingStateWrapper} [pageState]
-     * @returns {Promise<rust.PagingResultWithExecutor>}
-     */
     async #rustyExecuteUnprepared(
-        query,
-        params,
-        execOptions,
-        rustOptions,
-        paged,
-        pageState,
-    ) {
+        query: string | PreparedInfo,
+        params: Array<any> | object,
+        execOptions: ExecutionOptions,
+        rustOptions: rust.QueryOptionsWrapper,
+        paged: boolean,
+        pageState?: rust.PagingStateWrapper,
+    ): Promise<rust.PagingResultWithExecutor> {
         // We do not accept already prepared statements for unprepared queries
         if (typeof query !== "string") {
             throw new Error("Expected to obtain a string query");
@@ -571,13 +574,13 @@ class Client extends events.EventEmitter {
      *
      * The query can be prepared (recommended) or not depending on the [prepare]{@linkcode QueryOptions} flag.
      *
-     * @param {string} query The query to execute
-     * @param {Array<any>|Object} [params] Array of parameter values or an associative array (object) containing parameter names
+     * @param query The query to execute
+     * @param params Array of parameter values or an associative array (object) containing parameter names
      * as keys and its value.
-     * @param {QueryOptions} [options] The query options.
-     * @param {function} rowCallback Executes `rowCallback(n, row)` per each row received, where n is the row
+     * @param options The query options.
+     * @param rowCallback Executes `rowCallback(n, row)` per each row received, where n is the row
      * index and row is the current Row.
-     * @param {function} [callback] Executes `callback(err, result)` after all rows have been received.
+     * @param callback Executes `callback(err, result)` after all rows have been received.
      *
      * When dealing with paged results, [ResultSet#nextPage()]{@link module:types~ResultSet#nextPage} method can be used
      * to retrieve the following page. In that case, `rowCallback()` will be again called for each row and
@@ -592,11 +595,14 @@ class Client extends events.EventEmitter {
      * client.eachRow(query, params, rowCallback, callback);
      * client.eachRow(query, params, options, rowCallback, callback);
      */
-    eachRow(query, params, options, rowCallback, callback) {
-        /**
-         * @type {Function}
-         */
-        let cleanCallback;
+    eachRow(
+        query: string,
+        params?: ArrayOrObject | Function,
+        options?: QueryOptions | Function,
+        rowCallback?: Function,
+        callback?: Function,
+    ) {
+        let cleanCallback: Function;
         if (!callback && rowCallback && typeof options === "function") {
             cleanCallback = utils.validateFn(rowCallback, "rowCallback");
             rowCallback = options;
@@ -610,10 +616,7 @@ class Client extends events.EventEmitter {
 
         params = typeof params !== "function" ? params : undefined;
 
-        /**
-         * @type {ExecutionOptions}
-         */
-        let execOptions;
+        let execOptions: ExecutionOptions;
         try {
             execOptions = DefaultExecutionOptions.create(options, this);
         } catch (e) {
@@ -621,16 +624,13 @@ class Client extends events.EventEmitter {
         }
 
         let rowLength = 0;
-        /**
-         * @type {rust.PagingStateWrapper|null|undefined}
-         */
-        let pagingState = null;
+        let pagingState: rust.PagingStateWrapper | null | undefined = null;
 
         const nextPage = () => {
             promiseUtils.toCallback(
                 this.rustyExecute(
                     query,
-                    params || [],
+                    (params as ArrayOrObject | undefined) || [],
                     execOptions,
                     pagingState,
                 ),
@@ -638,11 +638,7 @@ class Client extends events.EventEmitter {
             );
         };
 
-        /**
-         * @param {Error} err
-         * @param {ResultSet} result
-         */
-        function pageCallback(err, result) {
+        function pageCallback(err: Error, result: ResultSet) {
             if (err) {
                 return cleanCallback(err);
             }
@@ -653,7 +649,7 @@ class Client extends events.EventEmitter {
 
             if (result.rows) {
                 result.rows.forEach((value, index) => {
-                    rowCallback(index, value);
+                    rowCallback!(index, value);
                 });
             }
 
@@ -675,7 +671,12 @@ class Client extends events.EventEmitter {
         }
 
         promiseUtils.toCallback(
-            this.rustyExecute(query, params || [], execOptions, pagingState),
+            this.rustyExecute(
+                query,
+                (params as ArrayOrObject | undefined) || [],
+                execOptions,
+                pagingState,
+            ),
             pageCallback,
         );
     }
@@ -690,24 +691,24 @@ class Client extends events.EventEmitter {
      * The query can be prepared (recommended) or not depending on {@link QueryOptions}.prepare flag. Retries on multiple
      * hosts if needed.
      *
-     * @param {string} query The query to prepare and execute.
-     * @param {Array<any>|Object} [params] Array of parameter values or an associative array (object) containing parameter names
+     * @param query The query to prepare and execute.
+     * @param params Array of parameter values or an associative array (object) containing parameter names
      * as keys and its value
-     * @param {QueryOptions} [options] The query options.
-     * @param {function} [callback] executes callback(err) after all rows have been received or if there is an error
-     * @returns {ResultStream}
+     * @param options The query options.
+     * @param callback executes callback(err) after all rows have been received or if there is an error
      */
-    stream(query, params, options, callback) {
+    stream(
+        query: string,
+        params?: ArrayOrObject,
+        options?: QueryOptions,
+        callback?: Function,
+    ): ResultStream {
         let cleanCallback = callback || utils.noop;
         // NOTE: the nodejs stream maintains yet another internal buffer
         // we rely on the default stream implementation to keep memory
         // usage reasonable.
         const resultStream = new ResultStream({ objectMode: 1 });
-        /**
-         * @param {any} err
-         * @param {{nextPage: function}} result
-         */
-        function onFinish(err, result) {
+        function onFinish(err: any, result: { nextPage: Function }) {
             if (err) {
                 resultStream.emit("error", err);
             }
@@ -733,13 +734,10 @@ class Client extends events.EventEmitter {
             query,
             params,
             options,
-            function rowCallback(/** @type {any} */ n, /** @type {any} */ row) {
+            function rowCallback(n: any, row: any) {
                 resultStream.add(row);
             },
-            function eachRowFinished(
-                /** @type {any} */ err,
-                /** @type {{nextPage: function}} */ result,
-            ) {
+            function eachRowFinished(err: any, result: { nextPage: Function }) {
                 if (sync) {
                     // Prevent sync callback
                     return setImmediate(function eachRowFinishedImmediate() {
@@ -758,30 +756,34 @@ class Client extends events.EventEmitter {
      *
      * It returns a `Promise` when a `callback` is not provided.
      *
-     * @param {Array.<string | {query: string, params: (Array<any>|Object)?}>} queries The queries to execute as an Array of strings or as an array
+     * @param queries The queries to execute as an Array of strings or as an array
      * of object containing the query and params.
-     * @param {QueryOptions} [options] The query options.
-     * @param {ResultCallback} [callback] Executes callback(err, result) when the batch was executed
+     * @param options The query options.
+     * @param callback Executes callback(err, result) when the batch was executed
      */
-    batch(queries, options, callback) {
+    batch(
+        queries: Array<string | { query: string; params?: ArrayOrObject }>,
+        options?: QueryOptions | ResultCallback,
+        callback?: ResultCallback,
+    ): Promise<ResultSet> | void {
         if (!callback && typeof options === "function") {
             callback = options;
             options = undefined;
         }
 
         return promiseUtils.optionalCallback(
-            this.#rustyBatch(queries, options),
+            this.#rustyBatch(queries, options as QueryOptions | undefined),
             callback,
         );
     }
 
     /**
      * Async-only version of {@link Client#batch()} .
-     * @param {Array.<string | {query: string, params: (Array<any>|Object)?}>} queries
-     * @param {QueryOptions} [options]
-     * @returns {Promise<ResultSet>}
      */
-    async #rustyBatch(queries, options) {
+    async #rustyBatch(
+        queries: Array<string | { query: string; params?: ArrayOrObject }>,
+        options?: QueryOptions,
+    ): Promise<ResultSet> {
         if (!Array.isArray(queries)) {
             throw new errors.ArgumentError("Queries should be an Array");
         }
@@ -795,8 +797,8 @@ class Client extends events.EventEmitter {
         const execOptions = this.createOptions(options);
 
         let shouldBePrepared = execOptions.isPrepared();
-        let allQueries = [];
-        let parametersRows = [];
+        let allQueries: string[] = [];
+        let parametersRows: Array<any> = [];
         let hints = execOptions.getHints() || [];
         let preparedCache = new PreparedCache();
 
@@ -807,15 +809,9 @@ class Client extends events.EventEmitter {
             }
             let statement =
                 typeof element === "string" ? element : element.query;
-            /**
-             * @type {Object | Array<any>}
-             */
-            let params =
+            let params: object | Array<any> =
                 typeof element !== "string" ? element.params || [] : [];
-            /**
-             * @type {Array<any>}
-             */
-            let cleanParams;
+            let cleanParams: Array<any>;
             let types;
 
             if (!statement) {
@@ -864,17 +860,14 @@ class Client extends events.EventEmitter {
 
     /**
      * Gets the host that are replicas of a given token.
-     * @param {string} keyspace
-     * @param {Buffer} token
-     * @returns {Array<Host>}
      */
-    getReplicas(keyspace, token) {
+    getReplicas(keyspace: string, token: Buffer): Array<Host> {
         throw new Error(`TODO: Not implemented`);
         // return this.metadata.getReplicas(keyspace, token);
     }
 
     /**
-     * @returns {ClientState} A dummy [ClientState]{@linkcode module:metadata~ClientState} instance.
+     * @returns A dummy [ClientState]{@linkcode module:metadata~ClientState} instance.
      *
      * @deprecated This is not planned feature for the driver. Currently this remains in place, but returns Client state with
      * no information. This endpoint may be removed at any point.
@@ -890,16 +883,16 @@ class Client extends events.EventEmitter {
      *
      * It returns a `Promise` when a `callback` is not provided.
      *
-     * @param {Function} [callback] Optional callback to be invoked when finished closing all connections.
+     * @param callback Optional callback to be invoked when finished closing all connections.
      *
      * @deprecated Explicit connection shutdown is deprecated and may be removed in the future.
      * Drop this client to close the connection to the database.
      */
-    shutdown(callback) {
+    shutdown(callback?: Function): Promise<void> | void {
         return promiseUtils.optionalCallback(this.#shutdown(), callback);
     }
 
-    async #shutdown() {
+    async #shutdown(): Promise<void> {
         this.log(
             "warning",
             "Explicit shutdown is deprecated and may be removed in the future.\n" +
@@ -939,22 +932,6 @@ class Client extends events.EventEmitter {
             loggingFinalizationRegistry.unregister(this);
         }
     }
-
-    /**
-     * Reject callback
-     *
-     * @callback RejectCallback
-     * @param {any} reason
-     * @returns {void}
-     */
-
-    /**
-     * Resolve callback
-     *
-     * @callback ResolveCallback
-     * @param {ResultSet | PromiseLike<ResultSet>} value
-     * @returns {void}
-     */
 }
 
 /**
@@ -966,12 +943,11 @@ class Client extends events.EventEmitter {
  *
  * PageState has a priority over execOptions, as execOptions.pageState
  * will not be cleared for the following pages of the execution.
- *
- * @param {rust.PagingStateWrapper|Buffer|null|undefined} pageState
- * @param {ExecutionOptions} execOptions
- * @returns {rust.PagingStateWrapper|undefined}
  */
-function normalizePagingState(pageState, execOptions) {
+function normalizePagingState(
+    pageState: rust.PagingStateWrapper | Buffer | null | undefined,
+    execOptions: ExecutionOptions,
+): rust.PagingStateWrapper | undefined {
     let optionsPageState = execOptions.getPageState();
     switch (true) {
         // Paging is disabled, so we do not care about value of paging state
@@ -1000,11 +976,4 @@ function normalizePagingState(pageState, execOptions) {
     }
 }
 
-/**
- * Callback used by execution methods.
- * @callback ResultCallback
- * @param {Error} err Error occurred in the execution of the query.
- * @param {ResultSet} [result] Result of the execution of the query.
- */
-
-module.exports = Client;
+export = Client;

@@ -1,4 +1,6 @@
 # TypeScript build output (emitted in-place from .ts files)
+client.js
+client.d.ts
 execution-profile.js
 execution-profile.d.ts
 new-utils.js
