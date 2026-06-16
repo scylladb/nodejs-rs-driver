@@ -2,7 +2,8 @@ import types = require("./types");
 import promiseUtils = require("./promise-utils");
 import newUtils = require("./new-utils");
 import type { loadBalancing, retry } from "./policies";
-import type { Client, ClientOptions, EmptyCallback, Host, HostMap } from "../";
+import type { Client, EmptyCallback, HostMap } from "../";
+import type { ClientOptions } from "./client-options";
 
 type LoadBalancingPolicy = loadBalancing.LoadBalancingPolicy;
 type RetryPolicy = retry.RetryPolicy;

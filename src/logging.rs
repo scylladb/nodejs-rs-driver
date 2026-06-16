@@ -180,7 +180,7 @@ impl<S: tracing::Subscriber> Layer<S> for JsForwardingLayer {
 ///
 /// Returns a numeric `id` that must be passed to [`removeLogging`] when the
 /// client shuts down, so the callback can be unregistered.
-#[napi]
+#[napi(ts_return_type = "number")]
 pub fn setup_logging(callback: LogCallback, min_level: String) -> JsResult<i64> {
     with_custom_error_sync(|| {
         let level = parse_js_level_to_rust(&min_level).ok_or(ConvertedError::from(

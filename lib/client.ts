@@ -21,7 +21,11 @@ import { ExecutionOptions, DefaultExecutionOptions } from "./execution-options";
 import promiseUtils = require("./promise-utils");
 import rust = require("../index");
 import ResultSet = require("./types/result-set");
-import { encodeParams, convertComplexType } from "./types/cql-utils";
+import {
+    encodeParams,
+    convertComplexType,
+    ColumnInfo,
+} from "./types/cql-utils";
 import { PreparedCache } from "./cache";
 import Encoder = require("./encoder");
 import { HostMap } from "./host";
@@ -30,6 +34,7 @@ import { HostMap } from "./host";
 import type { QueryOptions } from "./query-options";
 import type {
     ArrayOrObject,
+    CqlValue,
     Host,
     metadata as metadataModule,
     metrics as metricsModule,
@@ -58,9 +63,11 @@ type ResultCallback = (err?: Error | null, result?: ResultSet) => void;
  * To understand more, check the JS documentation.
  * https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/FinalizationRegistry
  */
-const loggingFinalizationRegistry = new FinalizationRegistry((loggingId) => {
-    rust.removeLogging(loggingId);
-});
+const loggingFinalizationRegistry = new FinalizationRegistry(
+    (loggingId: number) => {
+        rust.removeLogging(loggingId);
+    },
+);
 
 /**
  * Represents a database client that maintains multiple connections to the cluster nodes, providing methods to
@@ -86,7 +93,7 @@ class Client extends events.EventEmitter {
     /**
      * @package
      */
-    rustClient!: rust.SessionWrapper;
+    rustClient: rust.SessionWrapper | undefined;
     #encoder: Encoder;
     #loggingId: number | undefined;
 
@@ -106,8 +113,9 @@ class Client extends events.EventEmitter {
      * behavior and of the server as seen from the driver side.
      *
      * By default, a [DefaultMetrics]{@link module:metrics~DefaultMetrics} instance is used.
+     * TODO: This field is currently not supported
      */
-    metrics: metricsModule.ClientMetrics;
+    metrics: metricsModule.ClientMetrics | undefined;
 
     /**
      * Creates a new instance of {@link Client}.
@@ -131,7 +139,7 @@ class Client extends events.EventEmitter {
         this.isShuttingDown = false;
         this.metadata = undefined;
 
-        this.metrics = this.options.metrics;
+        this.metrics = undefined;
 
         // TODO: This field is currently hardcoded. Should be implemented properly
         this.#encoder = new Encoder(0x04, this.options);
@@ -162,6 +170,7 @@ class Client extends events.EventEmitter {
      * Gets the name of the active keyspace.
      */
     get keyspace(): string | undefined {
+        if (!this.rustClient) return undefined;
         return this.rustClient.getKeyspace() || undefined;
     }
 
@@ -173,6 +182,8 @@ class Client extends events.EventEmitter {
      * Gets an associative array of cluster hosts.
      */
     get hosts(): HostMap {
+        if (!this.rustClient) return HostMap.fromRust([]);
+
         // For now we retrieve all the hosts per each access to this field.
         // This may be inefficient when user works directly with this field multiple times,
         // but with this approach we shift the responsibility of ensuring validity of the data to Rust driver
@@ -205,7 +216,8 @@ class Client extends events.EventEmitter {
      * Manually prepare query into prepared statement.
      */
     async prepareStatement(statement: string): Promise<PreparedInfo> {
-        let expectedTypes = await this.rustClient.prepareStatement(statement);
+        // This will be called only after checking that client is connected
+        let expectedTypes = await this.rustClient!.prepareStatement(statement);
         let types = expectedTypes.map((t) => convertComplexType(t[0]));
         let boundParamNames = expectedTypes.map((t) => t[1].toLowerCase());
         return new PreparedInfo(types, statement, boundParamNames);
@@ -273,7 +285,12 @@ class Client extends events.EventEmitter {
                     this.options.logLevel || types.logLevels.warning;
 
                 this.#loggingId = rust.setupLogging(
-                    (level, target, message, furtherInfo) => {
+                    (
+                        level: string,
+                        target: string,
+                        message: string,
+                        furtherInfo: string,
+                    ) => {
                         const self = weakThis.deref();
                         if (!self) {
                             // This callback is removed when logging is disabled.
@@ -403,7 +420,7 @@ class Client extends events.EventEmitter {
      */
     async rustyExecute(
         query: string | PreparedInfo,
-        params: Array<any> | object,
+        params: ArrayOrObject,
         execOptions: ExecutionOptions,
         pageState?: rust.PagingStateWrapper | Buffer | null,
     ): Promise<ResultSet> {
@@ -437,6 +454,8 @@ class Client extends events.EventEmitter {
                 pageState,
             );
         } else {
+            // This is checked in isNamedParameters. The assert here is to satisfy the TS compiler.
+            assert(Array.isArray(params));
             resultTuple = await this.#rustyExecuteUnprepared(
                 query,
                 params,
@@ -460,7 +479,7 @@ class Client extends events.EventEmitter {
                 pageState: Buffer,
             ): Promise<rust.PagingResult> => {
                 return await executor.fetchNextPage(
-                    this.rustClient,
+                    this.rustClient!,
                     rust.PagingStateWrapper.fromBuffer(pageState),
                 );
             };
@@ -470,7 +489,7 @@ class Client extends events.EventEmitter {
 
     async #rustyExecutePrepared(
         query: string | PreparedInfo,
-        params: Array<any> | object,
+        params: ArrayOrObject,
         rustOptions: rust.QueryOptionsWrapper,
         paged: boolean,
         pageState?: rust.PagingStateWrapper,
@@ -506,7 +525,7 @@ class Client extends events.EventEmitter {
         );
 
         if (paged) {
-            return this.rustClient.executeSinglePage(
+            return this.rustClient!.executeSinglePage(
                 prepared.statement,
                 encoded,
                 rustOptions,
@@ -516,7 +535,7 @@ class Client extends events.EventEmitter {
         // We add the undefined values here to make the value match PagingResultWithExecutor type
         return [
             undefined,
-            await this.rustClient.executePreparedUnpaged(
+            await this.rustClient!.executePreparedUnpaged(
                 prepared.statement,
                 encoded,
                 rustOptions,
@@ -527,7 +546,7 @@ class Client extends events.EventEmitter {
 
     async #rustyExecuteUnprepared(
         query: string | PreparedInfo,
-        params: Array<any> | object,
+        params: Array<CqlValue>,
         execOptions: ExecutionOptions,
         rustOptions: rust.QueryOptionsWrapper,
         paged: boolean,
@@ -538,15 +557,19 @@ class Client extends events.EventEmitter {
             throw new Error("Expected to obtain a string query");
         }
 
+        const hints = execOptions.getHints();
+        if (hints && hints.length != 0 && Array.isArray(hints[0])) {
+            throw TypeError("For single statements expected 1D array of hints");
+        }
+        const hints2: ColumnInfo[] | undefined = hints as
+            | ColumnInfo[]
+            | undefined;
+
         // Parse parameters according to provided hints, with type guessing
-        let encoded = encodeParams(
-            execOptions.getHints() || [],
-            params,
-            this.#encoder,
-        );
+        let encoded = encodeParams(hints2 || [], params, this.#encoder);
 
         if (paged) {
-            return this.rustClient.querySinglePage(
+            return this.rustClient!.querySinglePage(
                 query,
                 encoded,
                 rustOptions,
@@ -556,7 +579,7 @@ class Client extends events.EventEmitter {
         // We add the undefined values here to make the value match PagingResultWithExecutor type
         return [
             undefined,
-            await this.rustClient.queryUnpaged(query, encoded, rustOptions),
+            await this.rustClient!.queryUnpaged(query, encoded, rustOptions),
             undefined,
         ];
     }
@@ -608,10 +631,12 @@ class Client extends events.EventEmitter {
             rowCallback = options;
         } else {
             cleanCallback = callback || utils.noop;
-            rowCallback = utils.validateFn(
-                rowCallback || options || params,
-                "rowCallback",
+            let tempRowCallback = rowCallback || options || params;
+            assert(
+                tempRowCallback instanceof Function,
+                "Improper overload of each row. Expected row callback to be a function",
             );
+            rowCallback = utils.validateFn(tempRowCallback, "rowCallback");
         }
 
         params = typeof params !== "function" ? params : undefined;
@@ -853,8 +878,8 @@ class Client extends events.EventEmitter {
         }
 
         let rustOptions = execOptions.getRustOptions();
-        let batch = this.rustClient.createBatch(allQueries, rustOptions);
-        let wrappedResult = await this.rustClient.batch(batch, parametersRows);
+        let batch = this.rustClient!.createBatch(allQueries, rustOptions);
+        let wrappedResult = await this.rustClient!.batch(batch, parametersRows);
         return new ResultSet(wrappedResult, this.#encoder);
     }
 

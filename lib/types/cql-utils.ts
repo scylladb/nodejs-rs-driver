@@ -1,4 +1,5 @@
 import { ComplexType, CqlType } from "../../index";
+import type { CqlValue } from "../../main";
 import Encoder = require("../encoder");
 
 /** Options grouping for column information.
@@ -88,17 +89,17 @@ export class ColumnInfo {
  * @param expectedTypes List of expected types.
  * @param params
  * @param encoder
- * @returns Returns: [] for null values, [undefined] for unset values
- * and [ComplexType, any] for all other values.
+ * @returns Returns: null for null values, undefined for unset values
+ * and encoded buffers for all other values.
  * @throws ResponseError when received different amount of parameters than expected
  */
 export function encodeParams(
     expectedTypes: Array<ColumnInfo | null>,
-    params: Array<unknown>,
+    params: Array<CqlValue>,
     encoder: Encoder,
-): Array<unknown> {
+): Array<Buffer | null | undefined> {
     if (expectedTypes.length == 0 && !params) return [];
-    const res: Array<unknown> = [];
+    const res: Array<Buffer | null | undefined> = [];
     for (let i = 0; i < params.length; i++) {
         const tmp = encoder.encode(params[i], expectedTypes[i]);
         res.push(tmp);

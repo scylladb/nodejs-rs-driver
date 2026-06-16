@@ -1,9 +1,10 @@
 "use strict";
 import { ArgumentError } from "./errors";
 import { inspect } from "util";
-import type { ExecutionOptions } from "../";
 
 import Long = require("long");
+import { ColumnInfo } from "./types/cql-utils";
+import { ExecutionOptions } from "./execution-options";
 
 /**
  * Internal utility for marking not supported endpoints.
@@ -100,12 +101,12 @@ function ensure64SignedInteger(number: bigint, name: string): void {
 }
 
 class PreparedInfo {
-    types: unknown[];
+    types: ColumnInfo[];
     statement: string;
     boundParamNames: string[];
 
     constructor(
-        types: unknown[],
+        types: ColumnInfo[],
         statement: string,
         boundParamNames: string[],
     ) {
