@@ -60,7 +60,7 @@
     "prettier": "npx prettier \"{lib,examples,test}/**/*.{js,ts}\" --write",
     "full-clippy": "cargo clippy --all-targets --all-features -- -D warnings",
     "pre-push": "npm run prettier && cargo fmt && npm run full-clippy && napi build --platform && npm run eslint-fix",
-    "js-doc": "jsdoc ./lib/* -c js-doc-config.js",
+    "js-doc": "jsdoc ./lib -r -c js-doc-config.js",
     "artifacts": "napi artifacts",
     "create-npm-dirs": "napi create-npm-dirs",
     "build:debug": "napi build --platform",

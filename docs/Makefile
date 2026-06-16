@@ -43,7 +43,7 @@ clean:
 # Generate output commands
 .PHONY: jsdoc
 jsdoc:
-	cd .. && npx jsdoc ./lib -r -c js-doc-config.js
+	cd .. && npm run js-doc
 	@echo
 	@echo "JSDoc build finished. The API docs are in ../public/docs/."
 
