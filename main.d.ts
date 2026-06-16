@@ -240,6 +240,7 @@ export interface ClientOptions {
     tcpNoDelay?: boolean;
   };
   sslOptions?: SslOptions;
+  logLevel?: types.logLevels;
   id?: Uuid;
   applicationName?: string;
   applicationVersion?: string;
