@@ -19,6 +19,7 @@ Although optimized for ScyllaDB, the driver is also compatible with `Apache Cass
    getting-started/getting-started
    statements/index
    paging/paging
+   logging/logging
    policies/index
    connecting/authentication
    shutdown/shutdown

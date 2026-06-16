@@ -181,3 +181,64 @@ The `cassandra-driver` driver had some undocumented assumptions about the order 
 when using `client.hosts.keys()` - see issue [#282](https://github.com/scylladb/nodejs-rs-driver/issues/282)
 (they were checked in the driver tests). Those assumptions no longer hold true,
 the hosts returned from `client.hosts.keys()` may be in a random order, that may vary from run to run.
+
+## Logging
+
+See the [Logging](../logging/logging.md) page for the full documentation of the new logging system.
+Below are the key differences from the `cassandra-driver`.
+
+ScyllaDB Node.js RS Driver introduces a concept of configurable logging levels.
+While logging levels were already present in `cassandra-driver`, you could only filter according to those
+levels after receiving the log information. To allow for better performance, ScyllaDB Node.js RS Driver allows you to
+configure received log levels before the logs are emitted, at the client settings level.
+
+### Default log level
+
+When no `logLevel` is specified, events at `warning` level and above are captured.
+This is different from `cassandra-driver`, where all events were always emitted.
+To receive all events (including `trace` and `debug`), set `logLevel` explicitly:
+
+```javascript
+const { Client, types } = require('scylladb-driver-alpha');
+
+const client = new Client({
+    contactPoints: ['127.0.0.1'],
+    logLevel: types.logLevels.trace
+});
+```
+
+### `verbose` level removed
+
+The old `verbose` level has been **removed** and replaced by two separate
+levels — `trace` and `debug` — giving finer control over diagnostic output.
+
+See [Log levels](../logging/logging.md#log-levels) for the full list.
+
+### `target` replaces `className`
+
+The `cassandra-driver` passed a JS class name (e.g. `"Client"`,
+`"Connection"`) as the second argument of the `'log'` event. This driver
+passes a `target` string instead:
+
+- For Rust driver events it is a Rust module path
+  (e.g. `scylla::network::connection`).
+- For JS-side events it is `"Client"`.
+
+This change affects the actual value passed as the second argument of the `'log'` event.
+While the function signature is unchanged, existing code that filters or routes events based on
+the `target` value may need to be updated.
+See [Event arguments](../logging/logging.md#event-arguments) for details.
+
+### Event interface preserved
+
+The `'log'` event signature is unchanged:
+
+```js
+client.on('log', (level, target, message, furtherInfo) => { ... });
+```
+
+### Cross-client event visibility
+
+All clients share the same underlying Rust tracing subscriber. Each client
+receives log events from the entire process, including those triggered by
+other `Client` instances.
