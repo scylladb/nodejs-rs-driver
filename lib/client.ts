@@ -90,18 +90,21 @@ const loggingFinalizationRegistry = new FinalizationRegistry(
  * console.log(row['key']);
  */
 class Client extends events.EventEmitter {
-    /**
-     * @package
-     */
+    /** @package */
     rustClient: rust.SessionWrapper | undefined;
     #encoder: Encoder;
     #loggingId: number | undefined;
 
+    /** @package */
     options: clientOptions.ClientOptions;
+    /** @package */
     rustOptions: ReturnType<typeof clientOptions.setRustOptions>;
     readonly profileManager!: InstanceType<typeof ProfileManager>;
+    /** @package */
     connected: boolean;
+    /** @package */
     connecting?: boolean;
+    /** @package */
     isShuttingDown: boolean;
     /**
      * Gets the schema and cluster metadata information.
@@ -214,6 +217,7 @@ class Client extends events.EventEmitter {
 
     /**
      * Manually prepare query into prepared statement.
+     * @package
      */
     async prepareStatement(statement: string): Promise<PreparedInfo> {
         // This will be called only after checking that client is connected
