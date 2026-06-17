@@ -90,12 +90,14 @@ pub(crate) fn parse_js_level_to_rust(level: &str) -> Option<Level> {
 
 struct MessageVisitor {
     log_message: String,
+    additional_fields: String,
 }
 
 impl MessageVisitor {
     fn new() -> Self {
         Self {
             log_message: String::new(),
+            additional_fields: String::new(),
         }
     }
 }
@@ -103,14 +105,16 @@ impl MessageVisitor {
 // Collects all fields and values in a single log event into a single String, similarly to CPP RS driver
 impl Visit for MessageVisitor {
     fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
-        if !self.log_message.is_empty() {
-            write!(self.log_message, ", ").unwrap();
-        }
-        // We filter out for message field to reduce the noise in the logging output
+        // We filter out the `message` field since it's the main information; the remaining fields
+        // are collected to mimic the JS `furtherInfo` field.
         if field.name() != "message" {
-            write!(self.log_message, "{field}: ").unwrap();
+            if !self.additional_fields.is_empty() {
+                write!(self.additional_fields, ", ").unwrap();
+            }
+            write!(self.additional_fields, "{field}: {value:?}").unwrap();
+        } else {
+            write!(self.log_message, "{value:?}").unwrap();
         }
-        write!(self.log_message, "{value:?}").unwrap();
     }
 }
 
@@ -158,9 +162,7 @@ impl<S: tracing::Subscriber> Layer<S> for JsForwardingLayer {
                             level_str.to_owned(),
                             target.to_owned(),
                             visitor.log_message.clone(),
-                            // This maps to JS furtherInfo field, that was sometimes used in the DSx driver,
-                            // but is not used here, as we are trying to match the CPP and C# wrappers behavior in logging.
-                            "".to_owned(),
+                            visitor.additional_fields.clone(),
                         ),
                     },
                     ThreadsafeFunctionCallMode::NonBlocking,
