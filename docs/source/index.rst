@@ -7,10 +7,8 @@ This driver is an overlay over the `ScyllaDB Rust Driver <https://github.com/scy
 with the interface based on the `Apache cassandra-driver <https://github.com/apache/cassandra-nodejs-driver>`_.
 Although optimized for ScyllaDB, the driver is also compatible with `Apache Cassandra® <https://cassandra.apache.org/>`_.
 
-.. caution::
-
-   This driver is currently in the experimental state.
-   We are working on features necessary for the driver to be considered production ready.
+This driver is considered production-ready.
+Support for some optional driver features is planned for upcoming releases.
 
 .. toctree::
    :maxdepth: 2
@@ -59,17 +57,18 @@ The driver supports the following:
 - Built-in TypeScript support
 - Password authentication
 - SSL support
+- Configurable load balancing, retry policies
+- Simple address translation policy
 - Error handling, based on the Rust driver
+- Driver logging
+- Faster performance, compared to DataStax Node.js driver(*)
+
+(*) In most of the internally conducted benchmarks
 
 Roadmap
 -------
 
-Features planned for the driver to become production ready:
-
-- Configurable load balancing and retry policies
-- Faster performance, compared to Apache cassandra-driver
-
-For other planned features, see the `Milestones <https://github.com/scylladb/nodejs-rs-driver/milestones>`_.
+For planned features, see the `Milestones <https://github.com/scylladb/nodejs-rs-driver/milestones>`_.
 
 Other resources
 ===============

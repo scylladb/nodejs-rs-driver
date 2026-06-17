@@ -6,4 +6,5 @@
 prepared.md
 unprepared.md
 batch.md
+parameterized-queries.md
 ```

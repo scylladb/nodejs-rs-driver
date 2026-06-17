@@ -8,7 +8,7 @@ This driver is an overlay over the [ScyllaDB Rust Driver](https://github.com/scy
 with the interface based on the [Node.js Driver for Apache Cassandra](https://github.com/apache/cassandra-nodejs-driver) (formerly known as DataStax Node.js Driver).
 Although optimized for ScyllaDB, the driver is also compatible with [Apache Cassandra®](https://cassandra.apache.org/).
 
-This driver is currently in the experimental state. We are working on features necessary for the driver to be considered production ready.
+This driver is considered production-ready. Support for some optional driver features is planned for upcoming releases
 
 ## Getting started
 
@@ -20,7 +20,9 @@ Currently only linux x86_64 architecture is supported with planned support for o
 
 ### Documentation
 
-The API ([documentation](https://nodejs-rs-driver.docs.scylladb.com/stable/api/)) of the driver is based on the Cassandra driver.
+See the [online documentation](https://nodejs-rs-driver.docs.scylladb.com/) for ScyllaDB Node.js RS Driver.
+It includes the [Getting Started](https://nodejs-rs-driver.docs.scylladb.com/stable/getting-started/getting-started.html) guide, the [Migration Guide](https://nodejs-rs-driver.docs.scylladb.com/stable/migration-guide/migration-guide.html), the [API documentation](https://nodejs-rs-driver.docs.scylladb.com/stable/api/), and more.
+
 Some of the endpoints are already implemented, others are planned, and some parts of the API (including features that were deprecated and are specific to DataStax databases) are removed.
 The status of each API endpoint is listed in [this document](https://docs.google.com/spreadsheets/d/e/2PACX-1vRR8BUXy5u_DLNMet4L2MEmjSE0eeOX2SQIq8Sxy5BI8OoLeOopWlD2I_6-IWcas-rKw06o19la5-q6/pubhtml?gid=2021765806) and unimplemented features are tracked in the repository [issues](https://github.com/scylladb/nodejs-rs-driver/issues).
 
@@ -45,17 +47,16 @@ The driver supports the following:
 - Row streaming and pipes
 - Built-in TypeScript support
 - Password authentication
-- Configurable load balancing policies
+- Configurable load balancing, retry policies
+- Simple address translation policy
 - Error handling, based on the Rust driver
 - SSL support
+- Driver logging
+- Faster performance, compared to DataStax Node.js driver(*)
 
-Features that are planned for the driver to become production ready:
+(*) In most of the internally conducted benchmarks
 
-- Configurable retry policies
-- Faster performance, compared to DataStax Node.js driver
-- Migration guide from the DataStax driver
-
-For other planned features see our [Milestones](https://github.com/scylladb/nodejs-rs-driver/milestones)
+For planned features see our [Milestones](https://github.com/scylladb/nodejs-rs-driver/milestones)
 
 ## Reference Documentation
 
