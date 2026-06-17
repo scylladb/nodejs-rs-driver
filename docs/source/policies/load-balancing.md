@@ -22,7 +22,7 @@ You can set all or a subset of these options:
 You can assume `undefined` is equivalent to `null` for the purpose of all configurations.
 
 ```js
-const DefaultLoadBalancingPolicy = require("scylladb-driver-alpha").policies.loadBalancing.DefaultLoadBalancingPolicy;
+const DefaultLoadBalancingPolicy = require("@scylladb/driver").policies.loadBalancing.DefaultLoadBalancingPolicy;
 
 let policy = new DefaultLoadBalancingPolicy({
     preferDatacenter: "my_dc",

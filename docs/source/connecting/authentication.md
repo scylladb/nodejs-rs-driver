@@ -11,7 +11,7 @@ The Node.js RS Driver supports both username/password authentication and SSL/TLS
 To connect with username/password credentials, provide them in the `credentials` option:
 
 ```javascript
-const { Client } = require('scylladb-driver-alpha');
+const { Client } = require('@scylladb/driver');
 
 (async () => {
   const client = new Client({
@@ -42,7 +42,7 @@ To connect over SSL, provide an `sslOptions` object. The SSL options are passed 
 
 ```javascript
 const fs = require('fs');
-const { Client } = require('scylladb-driver-alpha');
+const { Client } = require('@scylladb/driver');
 
 (async () => {
   const client = new Client({
@@ -75,7 +75,7 @@ You can combine username/password authentication with SSL for secure connections
 
 ```javascript
 const fs = require('fs');
-const { Client } = require('scylladb-driver-alpha');
+const { Client } = require('@scylladb/driver');
 
 (async () => {
   const client = new Client({

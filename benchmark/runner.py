@@ -78,7 +78,7 @@ num_steps = 4
 scale_factor = 4
 
 # --------- libs and rust benchmark names ----------
-libs = ["scylladb-driver-alpha", "cassandra-driver"]
+libs = ["@scylladb/driver", "cassandra-driver"]
 benchmarks = ["concurrent_insert.js", "insert.js", "select.js",
              "concurrent_select.js", "batch.js", "paging.js",
              "concurrent_paging.js", "large_select.js", "deser.js", 

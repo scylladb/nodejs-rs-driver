@@ -22,7 +22,7 @@ We recommend explicitly setting the desired logging level when using this driver
 To choose a specific minimum severity:
 
 ```js
-const { Client, types } = require('scylladb-driver-alpha');
+const { Client, types } = require('@scylladb/driver');
 
 const client = new Client({
   contactPoints: ['127.0.0.1'],
@@ -33,7 +33,7 @@ const client = new Client({
 To disable logging entirely, set `logLevel` to `'off'`:
 
 ```js
-const { Client, types } = require('scylladb-driver-alpha');
+const { Client, types } = require('@scylladb/driver');
 
 const client = new Client({
   contactPoints: ['127.0.0.1'],
@@ -112,7 +112,7 @@ when filtering or routing events.
 ## Example
 
 ```js
-const { Client, types } = require('scylladb-driver-alpha');
+const { Client, types } = require('@scylladb/driver');
 
 const client = new Client({
   contactPoints: ['10.0.1.101', '10.0.1.102'],

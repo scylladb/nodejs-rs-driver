@@ -7,7 +7,7 @@ This page will guide you through installing the Node.js RS Driver and executing 
 Install the driver using npm:
 
 ```bash
-npm install scylladb-driver-alpha
+npm install @scylladb/driver
 ```
 
 **Supported architectures:** Linux x86_64 and Linux ARM.
@@ -17,7 +17,7 @@ npm install scylladb-driver-alpha
 Create a `Client` instance and connect to your ScyllaDB cluster:
 
 ```javascript
-const { Client } = require('scylladb-driver-alpha');
+const { Client } = require('@scylladb/driver');
 
 (async () => {
   const client = new Client({
@@ -56,7 +56,7 @@ For a detailed overview of statement types and best practices, see [Executing CQ
 The following example creates a keyspace and table, inserts a row, and reads it back:
 
 ```javascript
-const { Client, types } = require('scylladb-driver-alpha');
+const { Client, types } = require('@scylladb/driver');
 
 async function main() {
   const client = new Client({

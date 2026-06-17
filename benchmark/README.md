@@ -83,7 +83,7 @@ SCYLLA_URI="172.17.0.2:9042" python3 benchmark/runner.py
 
 Each benchmark recreates the table before execution to ensure consistent and isolated results.
 
-Each of the JS benchmarks has an equivalent in Rust. For JS benchmarks, `driver` parameter determines which driver is tested. It can be `scylladb-driver-alpha` or `cassandra-driver`.
+Each of the JS benchmarks has an equivalent in Rust. For JS benchmarks, `driver` parameter determines which driver is tested. It can be `@scylladb/driver` or `cassandra-driver`.
 
 For every benchmark you can use default values for either number of queries of concurrency level (supported benchmarks only).
 To use default values in JS benchmarks, provide `default` instead of numerical value for the parameter.

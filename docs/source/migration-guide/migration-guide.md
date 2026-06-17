@@ -118,7 +118,7 @@ re-creating its functionality.
 To achieve similar behavior, you can update your code in the following way:
 
 ```js
-const DefaultLoadBalancingPolicy = require("scylladb-driver-alpha").policies.loadBalancing.DefaultLoadBalancingPolicy;
+const DefaultLoadBalancingPolicy = require("@scylladb/driver").policies.loadBalancing.DefaultLoadBalancingPolicy;
 
 // Old version
 let policy = new DefaultLoadBalancingPolicy({
@@ -199,7 +199,7 @@ This is different from `cassandra-driver`, where all events were always emitted.
 To receive all events (including `trace` and `debug`), set `logLevel` explicitly:
 
 ```javascript
-const { Client, types } = require('scylladb-driver-alpha');
+const { Client, types } = require('@scylladb/driver');
 
 const client = new Client({
     contactPoints: ['127.0.0.1'],
