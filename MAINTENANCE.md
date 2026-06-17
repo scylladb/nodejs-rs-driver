@@ -97,11 +97,11 @@ the main directory, `examples/`, and `benchmark/`. You can do this by running `n
 5. Create release notes on GitHub. The version tag must match version from `package.json` with `v` prefix (for example: `v0.2.0`).
 Once you publish release notes, CI action will trigger automatically. This action will build and publish the npm package.
 6. Once the CI action finishes, check if it succeeded. If it failed, you will have to fix the underlying issue, and re-run the CI action.
-7. Verify that the new release is visible at [npmjs site](https://www.npmjs.com/package/scylladb-driver-alpha).
+7. Verify that the new release is visible at [npmjs site](https://www.npmjs.com/package/@scylladb/driver).
 8. Test the package, by installing it directly from npm. Go to `examples` directory, in `package.json` update the line:
-`"scylladb-driver-alpha": "file:./../"`
+`"@scylladb/driver": "file:./../"`
 to:
-`"scylladb-driver-alpha": "<just-released-version>"`,
+`"@scylladb/driver": "<just-released-version>"`,
 then run the following command:
 `npm i && node ./runner.js`
 <!-- The last step can potentially be set up as a CI action step. -->

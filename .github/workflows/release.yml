@@ -211,7 +211,7 @@ jobs:
           build-command: |
             cd examples
             VERSION=$(node -p "require('../package.json').version")
-            npm pkg set "dependencies.scylladb-driver-alpha=$VERSION"
+            npm pkg set "dependencies.@scylladb/driver=$VERSION"
             (for i in 1 2 3 4 5; do
               npm install && exit 0
               echo "Attempt $i failed, retrying in 15s (waiting for npm propagation)..."

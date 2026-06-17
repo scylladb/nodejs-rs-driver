@@ -1,5 +1,5 @@
 "use strict";
-const cassandra = require("scylladb-driver-alpha");
+const cassandra = require("@scylladb/driver");
 const { getClientArgs } = require("../util");
 
 const client = new cassandra.Client(getClientArgs());

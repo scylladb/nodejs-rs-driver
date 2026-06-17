@@ -1,5 +1,5 @@
 "use strict";
-const cassandra = require("scylladb-driver-alpha");
+const cassandra = require("@scylladb/driver");
 const { getClientArgs } = require("../util");
 const executeConcurrent = cassandra.concurrent.executeConcurrent;
 const Uuid = cassandra.types.Uuid;
