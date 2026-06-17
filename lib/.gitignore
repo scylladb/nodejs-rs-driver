@@ -3,3 +3,5 @@ execution-profile.js
 execution-profile.d.ts
 new-utils.js
 new-utils.d.ts
+errors.js
+errors.d.ts

@@ -13,6 +13,7 @@ import Uuid = types.Uuid;
 // Export imported submodules
 export * as concurrent from "./lib/concurrent";
 export * as mapping from "./lib/mapping";
+export * as errors from "./lib/errors";
 export { auth, metadata, metrics, policies, tracker, types };
 
 export const version: number;
@@ -303,56 +304,6 @@ export class ExecutionProfile {
       serialConsistency?: types.consistencies;
     },
   );
-}
-
-export namespace errors {
-  class ArgumentError extends DriverError {
-    constructor(message: string);
-  }
-
-  class AuthenticationError extends DriverError {
-    constructor(message: string);
-  }
-
-  class BusyConnectionError extends DriverError {
-    constructor(
-      address: string,
-      maxRequestsPerConnection: number,
-      connectionLength: number,
-    );
-  }
-
-  abstract class DriverError extends Error {
-    info: string;
-
-    constructor(message: string, constructor?: any);
-  }
-
-  class DriverInternalError extends DriverError {
-    constructor(message: string);
-  }
-
-  class NoHostAvailableError extends DriverError {
-    innerErrors: any;
-
-    constructor(innerErrors: any, message?: string);
-  }
-
-  class NotSupportedError extends DriverError {
-    constructor(message: string);
-  }
-
-  class OperationTimedOutError extends DriverError {
-    host?: string;
-
-    constructor(message: string, host?: string);
-  }
-
-  class ResponseError extends DriverError {
-    code: number;
-
-    constructor(code: number, message: string);
-  }
 }
 
 export namespace token {
