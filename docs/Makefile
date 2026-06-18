@@ -43,7 +43,7 @@ clean:
 # Generate output commands
 .PHONY: jsdoc
 jsdoc:
-	cd .. && ./node_modules/.bin/tsc -p tsconfig.build.json --noEmitOnError false; npm run js-doc
+	cd .. && npm run js-doc
 	@echo
 	@echo "JSDoc build finished. The API docs are in ../public/docs/."
 
