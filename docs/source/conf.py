@@ -10,9 +10,9 @@ sys.path.insert(0, os.path.abspath("../_extensions"))
 # -- General configuration ------------------------------------------
 
 # Build documentation for the following tags and branches
-TAGS = ["v0.6.0"]
+TAGS = ["v0.6.1"]
 BRANCHES = ["main"]
-LATEST_VERSION = "v0.6.0"
+LATEST_VERSION = "v0.6.1"
 UNSTABLE_VERSIONS = ["main"]
 DEPRECATED_VERSIONS = []
 
