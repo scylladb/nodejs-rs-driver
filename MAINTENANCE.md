@@ -135,6 +135,7 @@ When converting existing code from JS to TS you can do it in 2 parts:
 
 - Ensuring type safety within JS code,
 - Converting JS to TS.
+- Ensure empty `.npmignore` is present in the directory you just introduced the typescript file in.
 
 The repository is set up in a way that supports files at all 3 conversion steps (including fully unconverted files).
 
