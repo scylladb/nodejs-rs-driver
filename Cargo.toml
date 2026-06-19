@@ -24,9 +24,6 @@ tracing-subscriber = { version = "0.3", features = ["registry"] }
 [lints.rust]
 unsafe-op-in-unsafe-fn = "warn"
 
-[workspace]
-members = ["benchmark"]
-
 [build-dependencies]
 napi-build = "2.1.5"
 
