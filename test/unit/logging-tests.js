@@ -10,7 +10,7 @@ const Client = require("../../lib/client");
 // Because `tracing` has a single global subscriber per process, all tests
 // share that subscriber.  However, `setupLogging` now registers a
 // *per-client* callback and returns an id.  We register in `before` and
-// unregister in `after` so each `describe` block gets a clean slate.
+// unregister in `after` so each `describe` block gets a clean state.
 // ---------------------------------------------------------------------------
 
 const allEvents = [];
