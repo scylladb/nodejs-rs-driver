@@ -64,6 +64,24 @@ The following options' default values have changed:
 With the update of encoding options, we encourage usage of the builtin types.
 The ability to use the driver with types is kept as a legacy option, and may be removed in the future.
 
+## Client internal members
+
+In the `cassandra-driver`, several `Client` members were accessible at runtime
+from JavaScript even though they were marked as private (internal) in the
+driver's TypeScript type definitions. Because the two APIs disagreed, any change
+would break at least one of them at any given moment.
+
+The ScyllaDB Node.js RS Driver unifies both APIs by treating these members as
+internal. They are no longer part of the public API and may change or be removed
+without notice. The following `Client` members are now internal:
+
+- `options`
+- `connected`
+- `connecting`
+- `isShuttingDown`
+
+If your application read any of these members, you should stop relying on them.
+
 ## Unprepared statements with bind markers
 
 When an unprepared statement contains bind markers (`?`), the driver silently
