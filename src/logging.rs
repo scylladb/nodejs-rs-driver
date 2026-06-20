@@ -217,6 +217,85 @@ pub fn remove_logging(id: i64) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tracing::field::Field;
+
+    /// Helper to create a `Field` from a tracing event.
+    fn with_fields<F: FnMut(&Field)>(field_name: &str, mut f: F) {
+        use tracing::Callsite;
+        use tracing::field::FieldSet;
+        use tracing::metadata::Kind;
+
+        static CALLSITE: tracing::callsite::DefaultCallsite =
+            tracing::callsite::DefaultCallsite::new(&tracing::metadata::Metadata::new(
+                "test",
+                "test_target",
+                Level::INFO,
+                Some("test.rs"),
+                Some(1),
+                Some("test"),
+                FieldSet::new(
+                    &["message", "key1", "key2", "key3"],
+                    tracing::callsite::Identifier(&CALLSITE),
+                ),
+                Kind::EVENT,
+            ));
+
+        let meta = CALLSITE.metadata();
+        let field = meta.fields().field(field_name).unwrap();
+        f(&field);
+    }
+
+    #[test]
+    fn record_str_message_field() {
+        let mut v = MessageVisitor::new();
+        with_fields("message", |f| {
+            v.record_str(f, "hello world");
+        });
+        assert_eq!(v.log_message, "\"hello world\"");
+        assert_eq!(v.additional_fields, "");
+    }
+
+    #[test]
+    fn message_and_extras_are_split() {
+        let mut v = MessageVisitor::new();
+        with_fields("message", |f| {
+            v.record_str(f, "the message");
+        });
+        with_fields("key1", |f| {
+            v.record_str(f, "str_val");
+        });
+        assert_eq!(v.log_message, "\"the message\"");
+        assert_eq!(v.additional_fields, "key1: \"str_val\"");
+    }
+
+    #[test]
+    fn mixed_str_and_debug_extras() {
+        let mut v = MessageVisitor::new();
+        with_fields("key1", |f| {
+            v.record_str(f, "str_val");
+        });
+        with_fields("key2", |f| {
+            v.record_debug(f, &42);
+        });
+        assert_eq!(v.log_message, "");
+        assert_eq!(v.additional_fields, "key1: \"str_val\", key2: 42");
+    }
+
+    #[test]
+    fn three_extras_comma_separated() {
+        let mut v = MessageVisitor::new();
+        with_fields("key1", |f| {
+            v.record_str(f, "a");
+        });
+        with_fields("key2", |f| {
+            v.record_str(f, "b");
+        });
+        with_fields("key3", |f| {
+            v.record_str(f, "c");
+        });
+        assert_eq!(v.log_message, "");
+        assert_eq!(v.additional_fields, "key1: \"a\", key2: \"b\", key3: \"c\"");
+    }
 
     #[test]
     fn rust_level_to_js_mapping() {

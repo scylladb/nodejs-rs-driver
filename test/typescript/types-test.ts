@@ -22,6 +22,15 @@ async function myTest(): Promise<void> {
 
     types.protocolVersion.isSupported(types.protocolVersion.v4);
 
+    // logLevels enum
+    let ll: types.logLevels;
+    ll = types.logLevels.trace;
+    ll = types.logLevels.debug;
+    ll = types.logLevels.info;
+    ll = types.logLevels.warning;
+    ll = types.logLevels.error;
+    ll = types.logLevels.off;
+
     id = Uuid.random();
 
     id = TimeUuid.now();
