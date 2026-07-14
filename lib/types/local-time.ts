@@ -25,8 +25,7 @@ class LocalTime {
     #nanosecond: number;
 
     value: Long;
-    /** @internal */
-    _partsCache: number[] | undefined;
+    #partsCache: number[] | undefined;
 
     /**
      * Creates a new instance of LocalTime.
@@ -280,7 +279,7 @@ class LocalTime {
      * @ignore
      */
     #getParts(): number[] {
-        if (!this._partsCache) {
+        if (!this.#partsCache) {
             // hours, minutes, seconds and nanos
             const parts = [0, 0, 0, 0];
             const secs = this.value.div(nanoSecInSec);
@@ -301,9 +300,9 @@ class LocalTime {
                 parts[0] = Math.floor(parts[1] / 60);
                 parts[1] = parts[1] % 60;
             }
-            this._partsCache = parts;
+            this.#partsCache = parts;
         }
-        return this._partsCache;
+        return this.#partsCache;
     }
 }
 
