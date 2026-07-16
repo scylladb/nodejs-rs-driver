@@ -26,7 +26,7 @@ type RetryPolicy = retry.RetryPolicy;
  *
  * client.execute(query, params, { executionProfile: 'metrics-oltp' }, callback);
  */
-class ExecutionProfile {
+export class ExecutionProfile {
     /** Name of the execution profile. */
     name: string;
     /** Consistency level. */
@@ -83,7 +83,7 @@ class ExecutionProfile {
  * Contains the logic to handle the different execution profiles of a {@link Client}.
  * @ignore
  */
-class ProfileManager {
+export class ProfileManager {
     #profiles: ExecutionProfile[];
     #defaultConfiguredRetryPolicy: RetryPolicy | undefined;
     #defaultProfile: ExecutionProfile;
@@ -170,8 +170,3 @@ class ProfileManager {
         return this.#defaultConfiguredRetryPolicy;
     }
 }
-
-export = {
-    ProfileManager,
-    ExecutionProfile,
-};
