@@ -15,5 +15,5 @@
         "declaration": true,
         "types": ["node"],
     },
-    "include": ["lib/**/*.ts"]
+    "include": ["lib/**/*.ts", "main.d.ts"]
 }
