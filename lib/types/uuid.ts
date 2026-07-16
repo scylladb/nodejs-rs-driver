@@ -123,6 +123,7 @@ class Uuid {
 
     /**
      * @internal
+     * @ignore
      */
     static fromRust(buffer: Buffer): Uuid {
         return new Uuid(buffer);
@@ -130,6 +131,7 @@ class Uuid {
 
     /**
      * @internal
+     * @ignore
      */
     getInternal(): Buffer {
         return this.#raw;

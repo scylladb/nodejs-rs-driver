@@ -73,5 +73,9 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "exports": {
+    "types": "./main.d.ts",
+    "default": "./main.js"
   }
 }

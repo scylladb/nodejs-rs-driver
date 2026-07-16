@@ -13,11 +13,11 @@ class BigDecimal {
     /**
      * @private
      */
-    _intVal: Integer;
+    #intVal: Integer;
     /**
      * @private
      */
-    _scale: number;
+    #scale: number;
 
     /**
      * Constructs an immutable arbitrary-precision signed decimal number.
@@ -36,8 +36,8 @@ class BigDecimal {
         if (typeof unscaledValue === "number") {
             unscaledValue = Integer.fromNumber(unscaledValue);
         }
-        this._intVal = unscaledValue;
-        this._scale = scale;
+        this.#intVal = unscaledValue;
+        this.#scale = scale;
     }
 
     /**
@@ -53,9 +53,9 @@ class BigDecimal {
      * Returns a buffer representation composed of the scale as a BE int 32 and the unsigned value as a BE varint
      */
     static toBuffer(value: BigDecimal): Buffer {
-        const unscaledValueBuffer = Integer.toBuffer(value._intVal);
+        const unscaledValueBuffer = Integer.toBuffer(value.#intVal);
         const scaleBuffer = utils.allocBufferUnsafe(4);
-        scaleBuffer.writeInt32BE(value._scale, 0);
+        scaleBuffer.writeInt32BE(value.#scale, 0);
         return Buffer.concat(
             [scaleBuffer, unscaledValueBuffer],
             scaleBuffer.length + unscaledValueBuffer.length,
@@ -133,30 +133,30 @@ class BigDecimal {
      */
     subtract(other: BigDecimal): BigDecimal {
         const first = this;
-        if (first._scale === other._scale) {
+        if (first.#scale === other.#scale) {
             return new BigDecimal(
-                first._intVal.subtract(other._intVal),
-                first._scale,
+                first.#intVal.subtract(other.#intVal),
+                first.#scale,
             );
         }
         let diffScale;
         let unscaledValue;
-        if (first._scale < other._scale) {
+        if (first.#scale < other.#scale) {
             // The scale of this is lower
-            diffScale = other._scale - first._scale;
+            diffScale = other.#scale - first.#scale;
             // multiple this unScaledValue to compare in the same scale
-            unscaledValue = first._intVal
+            unscaledValue = first.#intVal
                 .multiply(Integer.fromNumber(Math.pow(10, diffScale)))
-                .subtract(other._intVal);
-            return new BigDecimal(unscaledValue, other._scale);
+                .subtract(other.#intVal);
+            return new BigDecimal(unscaledValue, other.#scale);
         }
         // The scale of this is higher
-        diffScale = first._scale - other._scale;
+        diffScale = first.#scale - other.#scale;
         // multiple this unScaledValue to compare in the same scale
-        unscaledValue = first._intVal.subtract(
-            other._intVal.multiply(Integer.fromNumber(Math.pow(10, diffScale))),
+        unscaledValue = first.#intVal.subtract(
+            other.#intVal.multiply(Integer.fromNumber(Math.pow(10, diffScale))),
         );
-        return new BigDecimal(unscaledValue, first._scale);
+        return new BigDecimal(unscaledValue, first.#scale);
     }
 
     /**
@@ -166,30 +166,30 @@ class BigDecimal {
      */
     add(other: BigDecimal): BigDecimal {
         const first = this;
-        if (first._scale === other._scale) {
+        if (first.#scale === other.#scale) {
             return new BigDecimal(
-                first._intVal.add(other._intVal),
-                first._scale,
+                first.#intVal.add(other.#intVal),
+                first.#scale,
             );
         }
         let diffScale;
         let unscaledValue;
-        if (first._scale < other._scale) {
+        if (first.#scale < other.#scale) {
             // The scale of this is lower
-            diffScale = other._scale - first._scale;
+            diffScale = other.#scale - first.#scale;
             // multiple this unScaledValue to compare in the same scale
-            unscaledValue = first._intVal
+            unscaledValue = first.#intVal
                 .multiply(Integer.fromNumber(Math.pow(10, diffScale)))
-                .add(other._intVal);
-            return new BigDecimal(unscaledValue, other._scale);
+                .add(other.#intVal);
+            return new BigDecimal(unscaledValue, other.#scale);
         }
         // The scale of this is higher
-        diffScale = first._scale - other._scale;
+        diffScale = first.#scale - other.#scale;
         // multiple this unScaledValue to compare in the same scale
-        unscaledValue = first._intVal.add(
-            other._intVal.multiply(Integer.fromNumber(Math.pow(10, diffScale))),
+        unscaledValue = first.#intVal.add(
+            other.#intVal.multiply(Integer.fromNumber(Math.pow(10, diffScale))),
         );
-        return new BigDecimal(unscaledValue, first._scale);
+        return new BigDecimal(unscaledValue, first.#scale);
     }
 
     /**
@@ -201,20 +201,20 @@ class BigDecimal {
 
     /** Whether this value is negative. */
     isNegative(): boolean {
-        return this._intVal.isNegative();
+        return this.#intVal.isNegative();
     }
 
     /** Whether this value is zero. */
     isZero(): boolean {
-        return this._intVal.isZero();
+        return this.#intVal.isZero();
     }
 
     /**
      * Returns the string representation of this BigDecimal
      */
     toString(): string {
-        let intString = this._intVal.toString();
-        if (this._scale === 0) {
+        let intString = this.#intVal.toString();
+        if (this.#scale === 0) {
             return intString;
         }
         let signSymbol = "";
@@ -222,12 +222,12 @@ class BigDecimal {
             signSymbol = "-";
             intString = intString.substr(1);
         }
-        let separatorIndex = intString.length - this._scale;
+        let separatorIndex = intString.length - this.#scale;
         if (separatorIndex <= 0) {
             // add zeros at the beginning, plus an additional zero
             intString =
                 utils.stringRepeat("0", -separatorIndex + 1) + intString;
-            separatorIndex = intString.length - this._scale;
+            separatorIndex = intString.length - this.#scale;
         }
         return (
             signSymbol +

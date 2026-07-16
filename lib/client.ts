@@ -90,21 +90,39 @@ const loggingFinalizationRegistry = new FinalizationRegistry(
  * console.log(row['key']);
  */
 class Client extends events.EventEmitter {
-    /** @package */
+    /**
+     * @internal
+     * @ignore
+     */
     rustClient: rust.SessionWrapper | undefined;
     #encoder: Encoder;
     #loggingId: number | undefined;
 
-    /** @package */
+    /**
+     * @internal
+     * @ignore
+     */
     options: clientOptions.ClientOptions;
-    /** @package */
+    /**
+     * @internal
+     * @ignore
+     */
     rustOptions: ReturnType<typeof clientOptions.setRustOptions>;
     readonly profileManager!: InstanceType<typeof ProfileManager>;
-    /** @package */
+    /**
+     * @internal
+     * @ignore
+     */
     connected: boolean;
-    /** @package */
+    /**
+     * @internal
+     * @ignore
+     */
     connecting?: boolean;
-    /** @package */
+    /**
+     * @internal
+     * @ignore
+     */
     isShuttingDown: boolean;
     /**
      * Gets the schema and cluster metadata information.
@@ -203,7 +221,8 @@ class Client extends events.EventEmitter {
      * Creating those options requires a native call, but they can be reused
      * without any additional native calls, which improves performance
      * for queries with the same QueryOptions.
-     * @package
+     * @internal
+     * @ignore
      */
     createOptions(options?: QueryOptions | ExecutionOptions): ExecutionOptions {
         if (options instanceof ExecutionOptions) {
@@ -217,7 +236,8 @@ class Client extends events.EventEmitter {
 
     /**
      * Manually prepare query into prepared statement.
-     * @package
+     * @internal
+     * @ignore
      */
     async prepareStatement(statement: string): Promise<PreparedInfo> {
         // This will be called only after checking that client is connected
@@ -420,7 +440,8 @@ class Client extends events.EventEmitter {
      * When called without pageState, executes an unpaged query.
      * @param pageState When provided (including null), enables paged execution.
      * When unprovided (undefined), executes an unpaged query.
-     * @package
+     * @internal
+     * @ignore
      */
     async rustyExecute(
         query: string | PreparedInfo,
