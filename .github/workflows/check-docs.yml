@@ -34,6 +34,12 @@ jobs:
       - name: Install npm dependencies
         run: npm install --dev
 
+      - name: Update rust toolchain
+        run: rustup update
+
+      - name: Build native module
+        run: npm run build
+
       - name: Build js-doc
         run: npm run js-doc
 
