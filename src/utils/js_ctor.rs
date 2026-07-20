@@ -1,10 +1,17 @@
+use napi::Env;
+use napi::bindgen_prelude::{Buffer, FnArgs, Function, FunctionRef, JsValue, Object};
 use std::cell::RefCell;
+
 use crate::utils::js_instance::JsInstance;
 
 /// Zero-sized marker types naming each JS class that Rust constructs directly.
 /// They exist only to parametrize `JsInstance` and, in turn, `NapiRef`.
 pub mod js_constructible_class {
+    pub enum Host {}
 }
+
+/// Arguments passed to `Host(address, datacenter, rack, hostId)`.
+type HostCtorArgs = FnArgs<(String, Option<String>, Option<String>, Buffer)>;
 
 /// Defines a per-thread constructor registry for a single pure-JS class, together with:
 /// - a `#[napi]` `register_*_ctor` function that JS calls once, at module load time, to hand
@@ -15,7 +22,6 @@ pub mod js_constructible_class {
 /// The `Return` type parameter of the underlying `Function`/`FunctionRef` is always ignored:
 /// it is only used by `Function::call`, whereas we always construct instances via
 /// `Function::new_instance`, so we set it to arbitrary `()`.
-#[expect(unused)]
 macro_rules! define_js_ctor {
     (
         $(#[$doc:meta])*
@@ -79,3 +85,12 @@ macro_rules! define_js_ctor {
         }
     };
 }
+
+define_js_ctor!(
+    /// `Host(address, datacenter, rack, hostId)`
+    static_name: HOST_CTOR,
+    register_fn: register_host_ctor,
+    build_fn: build_host,
+    args: HostCtorArgs,
+    class_name: Host,
+);

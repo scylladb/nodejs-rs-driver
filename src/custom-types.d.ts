@@ -48,14 +48,6 @@ export type EncodedValuesWrapper = Uint8Array | null | undefined
 // These are plain JS objects returned from Rust to JS
 // ---------------------------------------------------------------------------
 
-/** Information about a node in the ScyllaDB cluster. */
-export interface HostWrapper {
-  hostId: Buffer
-  address: string
-  datacenter: string | null
-  rack: string | null
-}
-
 // ---------------------------------------------------------------------------
 // Types for objects produced by define_js_to_rust_convertible_object.
 // These are plain JS objects passed from JS into Rust (all fields optional).

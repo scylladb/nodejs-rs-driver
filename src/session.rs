@@ -370,7 +370,7 @@ impl SessionWrapper {
             .is_none_or(|cached_state| !Arc::ptr_eq(&rust_cluster_state, &cached_state.inner))
         {
             cache_guard.0 =
-                Some(ClusterSnapshot::new(rust_cluster_state).into_reference(env)?);
+                Some(ClusterSnapshot::new(rust_cluster_state, env)?.into_reference(env)?);
         }
 
         match cache_guard.0.as_ref() {
