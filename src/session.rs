@@ -26,6 +26,28 @@ pub struct BatchWrapper {
     inner: Batch,
 }
 
+/// A `napi::bindgen_prelude::Reference<T>` (and other N-API handles built on top of it) can only
+/// ever be safely created, read, or dropped on the thread that owns the JS engine it was created
+/// for. Because of that, `Reference<T>` is (rightfully) not `Send`.
+///
+/// However, `SessionWrapper` also exposes `async` methods (e.g. `query_unpaged`), and for those
+/// to compile, `&SessionWrapper` must be `Send`, which in turn requires every field of
+/// `SessionWrapper` - including our cached `Reference<ClusterSnapshot>` - to be `Sync`.
+/// None of those `async` methods ever touch the cached cluster state though: it is only ever
+/// read or written from the synchronous `get_cluster_snapshot`/`get_all_hosts` methods, which N-API
+/// always calls on the JS thread. This wrapper asserts `Send`/`Sync` to satisfy the compiler in
+/// that case.
+///
+/// # Safety
+/// Values of this type must only be constructed, read, or dropped from the JS thread
+/// (i.e. from within a synchronous `#[napi]` function, or a finalizer callback - both of which
+/// N-API always runs on the JS thread). Do not read or drop this from within an `async` method.
+#[expect(unused)]
+struct JsThreadOnly<T>(T);
+
+unsafe impl<T> Send for JsThreadOnly<T> {}
+unsafe impl<T> Sync for JsThreadOnly<T> {}
+
 #[napi]
 pub struct SessionWrapper {
     pub(crate) inner: CachingSession,
