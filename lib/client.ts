@@ -32,7 +32,7 @@ import { HostMap } from "./host";
 
 // Imports for the purpose of type hints.
 import type { QueryOptions } from "./query-options";
-import type {
+import {
     ArrayOrObject,
     CqlValue,
     Host,
@@ -337,6 +337,7 @@ class Client extends events.EventEmitter {
             this.rustClient = await rust.SessionWrapper.createSession(
                 this.rustOptions,
             );
+            this.metadata = new metadataModule.Metadata(this.rustClient);
         } catch (err) {
             // We should close the pools (if any) and reset the state to allow successive calls to connect()
             this.connected = false;

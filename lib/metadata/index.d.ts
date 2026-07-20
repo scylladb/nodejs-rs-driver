@@ -1,5 +1,6 @@
 import * as types from "../types";
 import { EmptyCallback, Host, token, ValueCallback } from "../../";
+import { SessionWrapper as RustClient } from "../../index";
 import dataTypes = types.dataTypes;
 import Uuid = types.Uuid;
 import InetAddress = types.InetAddress;
@@ -141,8 +142,10 @@ export interface KeyspaceMetadata {
     userDefinedTypes: { [name: string]: Udt };
   }
 
-export interface Metadata {
+export class Metadata {
     keyspaces: { [name: string]: { name: string; strategy: string } };
+
+    constructor(client: RustClient);
 
     clearPrepared(): void;
 
