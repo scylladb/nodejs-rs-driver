@@ -1,12 +1,14 @@
 use crate::errors::{ConvertedResult, JsResult, with_custom_error_sync};
 use crate::metadata::host::build_known_nodes;
 use crate::types::type_wrappers::ComplexType;
-use crate::utils::js_ctor::{build_column_metadata, build_table_metadata, js_constructible_class};
+use crate::utils::js_ctor::{
+    build_column_metadata, build_materialized_view, build_table_metadata, js_constructible_class,
+};
 use crate::utils::js_instance::JsInstance;
 use crate::utils::napi_ref::NapiRef;
 use napi::Env;
 use napi::bindgen_prelude::FnArgs;
-use scylla::cluster::metadata::{Column, ColumnKind, Table};
+use scylla::cluster::metadata::{Column, ColumnKind, MaterializedView, Table};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -92,6 +94,23 @@ fn convert_rust_table<'env>(
     )
 }
 
+fn convert_rust_materialized_view<'env>(
+    env: &'env Env,
+    view: &MaterializedView,
+) -> napi::Result<JsInstance<'env, js_constructible_class::MaterializedView>> {
+    let columns = columns_to_metadata(env, &view.view_metadata.columns)?;
+    build_materialized_view(
+        env,
+        FnArgs::from((
+            columns,
+            view.view_metadata.partition_key.clone(),
+            view.view_metadata.clustering_key.clone(),
+            view.view_metadata.partitioner.clone(),
+            view.base_table_name.clone(),
+        )),
+    )
+}
+
 #[napi]
 impl ClusterSnapshot {
     #[napi(ts_return_type = "import('../lib/metadata/table-metadata').TableMetadata | null")]
@@ -110,6 +129,25 @@ impl ClusterSnapshot {
             };
             let table_metadata = convert_rust_table(env, rust_table)?;
             ConvertedResult::Ok(Some(table_metadata))
+        })
+    }
+
+    #[napi(ts_return_type = "import('../lib/metadata/materialized-view').MaterializedView | null")]
+    pub fn get_materialized_view<'env>(
+        &self,
+        env: &'env Env,
+        keyspace: String,
+        view: String,
+    ) -> JsResult<Option<JsInstance<'env, js_constructible_class::MaterializedView>>> {
+        with_custom_error_sync(|| {
+            let Some(rust_keyspace) = self.inner.get_keyspace(&keyspace) else {
+                return ConvertedResult::Ok(None);
+            };
+            let Some(rust_view) = rust_keyspace.views.get(&view) else {
+                return ConvertedResult::Ok(None);
+            };
+            let materialized_view = convert_rust_materialized_view(env, rust_view)?;
+            ConvertedResult::Ok(Some(materialized_view))
         })
     }
 }

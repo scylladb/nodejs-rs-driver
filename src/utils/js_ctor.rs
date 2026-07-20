@@ -10,6 +10,7 @@ use crate::utils::js_instance::JsInstance;
 pub mod js_constructible_class {
     pub enum ColumnMetadata {}
     pub enum TableMetadata {}
+    pub enum MaterializedView {}
     pub enum Host {}
 }
 
@@ -24,6 +25,11 @@ type ColumnMetadataCtorArgs = FnArgs<(ComplexType<'static>, u32)>;
 
 /// Arguments passed to `TableMetadata(columns, partitionKey, clusteringKey, partitioner)`.
 type TableMetadataCtorArgs = FnArgs<(ColumnsArg, Vec<String>, Vec<String>, Option<String>)>;
+
+/// Arguments passed to
+/// `MaterializedView(columns, partitionKey, clusteringKey, partitioner, tableName)`.
+type MaterializedViewCtorArgs =
+    FnArgs<(ColumnsArg, Vec<String>, Vec<String>, Option<String>, String)>;
 
 /// Arguments passed to `Host(address, datacenter, rack, hostId)`.
 type HostCtorArgs = FnArgs<(String, Option<String>, Option<String>, Buffer)>;
@@ -118,6 +124,16 @@ define_js_ctor!(
     build_fn: build_table_metadata,
     args: TableMetadataCtorArgs,
     class_name: TableMetadata,
+);
+
+define_js_ctor!(
+    /// `MaterializedView(columns, partitionKey, clusteringKey, partitioner, tableName)`
+    /// `columns` is an array of `[name, ColumnMetadata]`
+    static_name: MATERIALIZED_VIEW_CTOR,
+    register_fn: register_materialized_view_ctor,
+    build_fn: build_materialized_view,
+    args: MaterializedViewCtorArgs,
+    class_name: MaterializedView,
 );
 
 define_js_ctor!(
