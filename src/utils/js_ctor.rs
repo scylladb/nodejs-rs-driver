@@ -2,13 +2,28 @@ use napi::Env;
 use napi::bindgen_prelude::{Buffer, FnArgs, Function, FunctionRef, JsValue, Object};
 use std::cell::RefCell;
 
+use crate::types::type_wrappers::ComplexType;
 use crate::utils::js_instance::JsInstance;
 
 /// Zero-sized marker types naming each JS class that Rust constructs directly.
 /// They exist only to parametrize `JsInstance` and, in turn, `NapiRef`.
 pub mod js_constructible_class {
+    pub enum ColumnMetadata {}
+    pub enum TableMetadata {}
     pub enum Host {}
 }
+
+/// Columns of a table/materialized view, as an array of `[name, ColumnMetadata]` pairs.
+type ColumnsArg = Vec<(
+    String,
+    JsInstance<'static, js_constructible_class::ColumnMetadata>,
+)>;
+
+/// Arguments passed to `ColumnMetadata(typ, kind)`.
+type ColumnMetadataCtorArgs = FnArgs<(ComplexType<'static>, u32)>;
+
+/// Arguments passed to `TableMetadata(columns, partitionKey, clusteringKey, partitioner)`.
+type TableMetadataCtorArgs = FnArgs<(ColumnsArg, Vec<String>, Vec<String>, Option<String>)>;
 
 /// Arguments passed to `Host(address, datacenter, rack, hostId)`.
 type HostCtorArgs = FnArgs<(String, Option<String>, Option<String>, Buffer)>;
@@ -85,6 +100,25 @@ macro_rules! define_js_ctor {
         }
     };
 }
+
+define_js_ctor!(
+    /// `ColumnMetadata(typ, kind)`
+    static_name: COLUMN_METADATA_CTOR,
+    register_fn: register_column_metadata_ctor,
+    build_fn: build_column_metadata,
+    args: ColumnMetadataCtorArgs,
+    class_name: ColumnMetadata,
+);
+
+define_js_ctor!(
+    /// `TableMetadata(columns, partitionKey, clusteringKey, partitioner)`
+    /// `columns` is an array of `[name, ColumnMetadata]`
+    static_name: TABLE_METADATA_CTOR,
+    register_fn: register_table_metadata_ctor,
+    build_fn: build_table_metadata,
+    args: TableMetadataCtorArgs,
+    class_name: TableMetadata,
+);
 
 define_js_ctor!(
     /// `Host(address, datacenter, rack, hostId)`
