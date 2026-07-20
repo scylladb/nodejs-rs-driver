@@ -11,6 +11,8 @@ pub mod js_constructible_class {
     pub enum ColumnMetadata {}
     pub enum TableMetadata {}
     pub enum MaterializedView {}
+    pub enum UdtField {}
+    pub enum UserDefinedType {}
     pub enum Host {}
 }
 
@@ -30,6 +32,16 @@ type TableMetadataCtorArgs = FnArgs<(ColumnsArg, Vec<String>, Vec<String>, Optio
 /// `MaterializedView(columns, partitionKey, clusteringKey, partitioner, tableName)`.
 type MaterializedViewCtorArgs =
     FnArgs<(ColumnsArg, Vec<String>, Vec<String>, Option<String>, String)>;
+
+/// Arguments passed to `UdtField(name, typ)`.
+type UdtFieldCtorArgs = FnArgs<(String, ComplexType<'static>)>;
+
+/// Arguments passed to `UserDefinedType(name, keyspace, fields)`.
+type UserDefinedTypeCtorArgs = FnArgs<(
+    String,
+    String,
+    Vec<JsInstance<'static, js_constructible_class::UdtField>>,
+)>;
 
 /// Arguments passed to `Host(address, datacenter, rack, hostId)`.
 type HostCtorArgs = FnArgs<(String, Option<String>, Option<String>, Buffer)>;
@@ -134,6 +146,25 @@ define_js_ctor!(
     build_fn: build_materialized_view,
     args: MaterializedViewCtorArgs,
     class_name: MaterializedView,
+);
+
+define_js_ctor!(
+    /// `UdtField(name, typ)`
+    static_name: UDT_FIELD_CTOR,
+    register_fn: register_udt_field_ctor,
+    build_fn: build_udt_field,
+    args: UdtFieldCtorArgs,
+    class_name: UdtField,
+);
+
+define_js_ctor!(
+    /// `UserDefinedType(name, keyspace, fields)`
+    /// `fields` is an array of `UdtField` instances
+    static_name: USER_DEFINED_TYPE_CTOR,
+    register_fn: register_user_defined_type_ctor,
+    build_fn: build_user_defined_type,
+    args: UserDefinedTypeCtorArgs,
+    class_name: UserDefinedType,
 );
 
 define_js_ctor!(

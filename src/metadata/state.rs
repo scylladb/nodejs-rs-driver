@@ -2,13 +2,14 @@ use crate::errors::{ConvertedResult, JsResult, with_custom_error_sync};
 use crate::metadata::host::build_known_nodes;
 use crate::types::type_wrappers::ComplexType;
 use crate::utils::js_ctor::{
-    build_column_metadata, build_materialized_view, build_table_metadata, js_constructible_class,
+    build_column_metadata, build_materialized_view, build_table_metadata, build_udt_field,
+    build_user_defined_type, js_constructible_class,
 };
 use crate::utils::js_instance::JsInstance;
 use crate::utils::napi_ref::NapiRef;
 use napi::Env;
 use napi::bindgen_prelude::FnArgs;
-use scylla::cluster::metadata::{Column, ColumnKind, MaterializedView, Table};
+use scylla::cluster::metadata::{Column, ColumnKind, MaterializedView, Table, UserDefinedType};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -111,6 +112,24 @@ fn convert_rust_materialized_view<'env>(
     )
 }
 
+fn convert_rust_udt<'env>(
+    env: &'env Env,
+    udt: &UserDefinedType<'static>,
+) -> napi::Result<JsInstance<'env, js_constructible_class::UserDefinedType>> {
+    let fields = udt
+        .field_types
+        .iter()
+        .map(|(field_name, field_type)| {
+            let typ = ComplexType::new_owned(field_type.clone());
+            build_udt_field(env, FnArgs::from((field_name.to_string(), typ)))
+        })
+        .collect::<napi::Result<Vec<_>>>()?;
+    build_user_defined_type(
+        env,
+        FnArgs::from((udt.name.to_string(), udt.keyspace.to_string(), fields)),
+    )
+}
+
 #[napi]
 impl ClusterSnapshot {
     #[napi(ts_return_type = "import('../lib/metadata/table-metadata').TableMetadata | null")]
@@ -148,6 +167,25 @@ impl ClusterSnapshot {
             };
             let materialized_view = convert_rust_materialized_view(env, rust_view)?;
             ConvertedResult::Ok(Some(materialized_view))
+        })
+    }
+
+    #[napi(ts_return_type = "import('../lib/metadata/user-defined-type').UserDefinedType | null")]
+    pub fn get_udt<'env>(
+        &self,
+        env: &'env Env,
+        keyspace: String,
+        name: String,
+    ) -> JsResult<Option<JsInstance<'env, js_constructible_class::UserDefinedType>>> {
+        with_custom_error_sync(|| {
+            let Some(rust_keyspace) = self.inner.get_keyspace(&keyspace) else {
+                return ConvertedResult::Ok(None);
+            };
+            let Some(rust_udt) = rust_keyspace.user_defined_types.get(&name) else {
+                return ConvertedResult::Ok(None);
+            };
+            let udt = convert_rust_udt(env, rust_udt)?;
+            ConvertedResult::Ok(Some(udt))
         })
     }
 }
