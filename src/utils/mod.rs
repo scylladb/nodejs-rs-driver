@@ -1,4 +1,5 @@
 pub mod from_napi_obj;
+pub mod js_ctor;
 pub mod js_instance;
 pub mod napi_ref;
 pub mod to_napi_obj;
