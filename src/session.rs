@@ -1,7 +1,9 @@
 pub mod config;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use config::SessionOptions;
+use napi::Env;
+use napi::bindgen_prelude::{JavaScriptClassExt, Reference};
 use scylla::client::caching_session::CachingSession;
 use scylla::response::{PagingState, PagingStateResponse};
 use scylla::statement::batch::Batch;
@@ -11,6 +13,7 @@ use crate::errors::{
     ConvertedError, ConvertedResult, JsResult, make_js_error, with_custom_error_async,
     with_custom_error_sync,
 };
+use crate::metadata::state::ClusterSnapshot;
 use crate::paging::{PagingResult, PagingResultWithExecutor, PagingStateWrapper};
 use crate::requests::request::{QueryOptionsObj, QueryOptionsWrapper};
 use crate::session::config::configure_session_builder;
@@ -26,9 +29,33 @@ pub struct BatchWrapper {
     inner: Batch,
 }
 
+/// A `napi::bindgen_prelude::Reference<T>` (and other N-API handles built on top of it) can only
+/// ever be safely created, read, or dropped on the thread that owns the JS engine it was created
+/// for. Because of that, `Reference<T>` is (rightfully) not `Send`.
+///
+/// However, `SessionWrapper` also exposes `async` methods (e.g. `query_unpaged`), and for those
+/// to compile, `&SessionWrapper` must be `Send`, which in turn requires every field of
+/// `SessionWrapper` - including our cached `Reference<ClusterSnapshot>` - to be `Sync`.
+/// None of those `async` methods ever touch the cached cluster state though: it is only ever
+/// read or written from the synchronous `get_cluster_snapshot`/`get_all_hosts` methods, which N-API
+/// always calls on the JS thread. This wrapper asserts `Send`/`Sync` to satisfy the compiler in
+/// that case.
+///
+/// # Safety
+/// Values of this type must only be constructed, read, or dropped from the JS thread
+/// (i.e. from within a synchronous `#[napi]` function, or a finalizer callback - both of which
+/// N-API always runs on the JS thread). Do not read or drop this from within an `async` method.
+struct JsThreadOnly<T>(T);
+
+unsafe impl<T> Send for JsThreadOnly<T> {}
+unsafe impl<T> Sync for JsThreadOnly<T> {}
+
 #[napi]
 pub struct SessionWrapper {
     pub(crate) inner: CachingSession,
+    /// Cache of the last `ClusterSnapshot` (JS object) that was returned to JS,
+    /// alongside the `Arc<ClusterState>` pointer it was built from.
+    cluster_snapshot: Arc<Mutex<JsThreadOnly<Option<Reference<ClusterSnapshot>>>>>,
 }
 
 /// This object allows executing queries for following pages of the result,
@@ -120,7 +147,12 @@ impl SessionWrapper {
             let builder = configure_session_builder(options)?;
             let session = builder.build().await?;
             let session: CachingSession = CachingSession::from(session, cache_size);
-            ConvertedResult::Ok(SessionWrapper { inner: session })
+            // The cluster state snapshot is built lazily, on first access,
+            // since building it requires a JS `Env`.
+            ConvertedResult::Ok(SessionWrapper {
+                inner: session,
+                cluster_snapshot: Arc::new(Mutex::new(JsThreadOnly(None))),
+            })
         })
         .await
     }
@@ -297,6 +329,56 @@ impl SessionWrapper {
             batch = self.apply_batch_options(batch, &options.options)?;
             ConvertedResult::Ok(BatchWrapper { inner: batch })
         })
+    }
+
+    /// Returns a snapshot of the current cluster state (topology + schema metadata).
+    #[napi(ts_return_type = "ClusterSnapshot")]
+    pub fn get_cluster_snapshot(&self, env: Env) -> JsResult<Reference<ClusterSnapshot>> {
+        with_custom_error_sync(|| self.get_or_create_cluster_snapshot(env))
+    }
+}
+
+impl SessionWrapper {
+    /// Returns the JS `ClusterSnapshot` object representing the current cluster state.
+    ///
+    /// `ClusterState` snapshots produced by the Rust driver are never mutated in place:
+    /// whenever the driver refreshes cluster topology/schema metadata in the background,
+    /// it produces a brand new `Arc<ClusterState>`, leaving any previously handed out
+    /// `Arc` untouched. This lets us detect whether our cached snapshot is stale by
+    /// comparing Arc pointers (`Arc::ptr_eq`):
+    /// - if the pointers match, nothing changed since the last access, so we return the
+    ///   very same JS object (preserving its identity, and avoiding rebuilding)
+    /// - if the pointers differ, the snapshot is stale, so we build (and cache) a new
+    ///   `ClusterSnapshot` from the fresh `Arc<ClusterState>`.
+    ///
+    /// This approach helps avoid any ABA problems: if the driver refreshes the cluster state
+    /// multiple times between two calls to this function, we will still detect that the cached
+    /// snapshot is stale, because we keep the cached `Arc` alive.
+    pub(crate) fn get_or_create_cluster_snapshot(
+        &self,
+        env: Env,
+    ) -> ConvertedResult<Reference<ClusterSnapshot>> {
+        let mut cache_guard = self
+            .cluster_snapshot
+            .lock()
+            .expect("poisoning impossible due to process-aborting panics");
+        let rust_cluster_state = self.inner.get_session().get_cluster_state();
+
+        let cached_state = cache_guard.0.as_ref();
+
+        if cached_state
+            .is_none_or(|cached_state| !Arc::ptr_eq(&rust_cluster_state, &cached_state.inner))
+        {
+            cache_guard.0 =
+                Some(ClusterSnapshot::new(rust_cluster_state, env)?.into_reference(env)?);
+        }
+
+        match cache_guard.0.as_ref() {
+            Some(cached_state) => ConvertedResult::Ok(cached_state.clone(env)?),
+            None => ConvertedResult::Err(ConvertedError::from(make_js_error(
+                "Cluster snapshot was just initialized above, but is still None",
+            ))),
+        }
     }
 }
 

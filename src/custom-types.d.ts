@@ -48,12 +48,15 @@ export type EncodedValuesWrapper = Uint8Array | null | undefined
 // These are plain JS objects returned from Rust to JS
 // ---------------------------------------------------------------------------
 
-/** Information about a node in the ScyllaDB cluster. */
-export interface HostWrapper {
-  hostId: Buffer
-  address: string
-  datacenter: string | null
-  rack: string | null
+/**
+ * Some columns have a specific meaning in the context of a table,
+ * and this meaning is represented by this enum.
+ */
+export const enum ColumnKindValue {
+  Regular = 0,
+  Static = 1,
+  ClusteringKey = 2,
+  PartitionKey = 3,
 }
 
 // ---------------------------------------------------------------------------

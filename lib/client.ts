@@ -32,7 +32,7 @@ import { HostMap } from "./host";
 
 // Imports for the purpose of type hints.
 import type { QueryOptions } from "./query-options";
-import type {
+import {
     ArrayOrObject,
     CqlValue,
     Host,
@@ -205,9 +205,9 @@ class Client extends events.EventEmitter {
     get hosts(): HostMap {
         if (!this.rustClient) return HostMap.fromRust([]);
 
-        // For now we retrieve all the hosts per each access to this field.
-        // This may be inefficient when user works directly with this field multiple times,
-        // but with this approach we shift the responsibility of ensuring validity of the data to Rust driver
+        // rustClient.getAllHosts() attempts to read the cached hosts from the Rust driver.
+        // If no cache is available, or the previous cache is stale, it will trigger a refresh
+        // of the host list from the cluster.
         return HostMap.fromRust(this.rustClient.getAllHosts());
     }
 
@@ -337,6 +337,7 @@ class Client extends events.EventEmitter {
             this.rustClient = await rust.SessionWrapper.createSession(
                 this.rustOptions,
             );
+            this.metadata = new metadataModule.Metadata(this.rustClient);
         } catch (err) {
             // We should close the pools (if any) and reset the state to allow successive calls to connect()
             this.connected = false;
