@@ -1,6 +1,7 @@
 "use strict";
 
-import { ColumnInfo } from "../types/cql-utils";
+import { ColumnInfo, convertComplexType } from "../types/cql-utils";
+import rust = require("../../index");
 
 /**
  * Describes a field of a user-defined type.
@@ -17,9 +18,16 @@ class UdtField {
      */
     type: ColumnInfo;
 
-    constructor(name: string, typ: ColumnInfo) {
+    /**
+     * Constructs a UdtField instance.
+     *
+     * Instances of this class are constructed directly from the native code when reading cluster metadata.
+     * @internal
+     * @ignore
+     */
+    constructor(name: string, typ: rust.ComplexType) {
         this.name = name;
-        this.type = typ;
+        this.type = convertComplexType(typ);
     }
 }
 
@@ -45,6 +53,9 @@ class Udt {
     fields: UdtField[];
 
     /**
+     * Constructs a UserDefinedType instance.
+     *
+     * Instances of this class are constructed directly from the native code when reading cluster metadata.
      * @internal
      * @ignore
      */
@@ -56,3 +67,8 @@ class Udt {
 }
 
 export { Udt, UdtField };
+
+// Registers the UdtField/Udt constructors, so that Rust can construct fully-formed
+// instances directly when reading cluster metadata.
+rust.registerUdtFieldCtor(UdtField);
+rust.registerUdtCtor(Udt);

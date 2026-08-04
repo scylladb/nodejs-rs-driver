@@ -17,11 +17,14 @@ import {
   ColumnKind,
 } from "./table-metadata";
 import { MaterializedView } from "./materialized-view";
+import { Udt, UdtField } from "./user-defined-type";
 export {
   TableMetadata,
   ColumnMetadata,
   ColumnKind,
   MaterializedView,
+  Udt,
+  UdtField,
 };
 
 import dataTypes = types.dataTypes;
@@ -141,17 +144,6 @@ export interface SchemaFunction {
   name: string;
   returnType: string;
   signature: string[];
-}
-
-export interface UdtField {
-  name: string;
-  type: ColumnInfo;
-}
-
-export interface Udt {
-  name: string;
-  keyspace: string;
-  fields: UdtField[];
 }
 
 export class Metadata {
