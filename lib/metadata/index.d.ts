@@ -1,6 +1,7 @@
 import * as types from "../types";
 import { EmptyCallback, Host, token, ValueCallback } from "../../";
 import { CqlType } from "../../index";
+import { SessionWrapper as RustClient } from "../../index";
 import dataTypes = types.dataTypes;
 import Uuid = types.Uuid;
 import InetAddress = types.InetAddress;
@@ -165,7 +166,9 @@ export interface KeyspaceMetadata {
   udts: { [name: string]: Udt };
 }
 
-export interface Metadata {
+export class Metadata {
+  constructor(client: RustClient);
+
   getKeyspace(name: string): KeyspaceMetadata | null;
 
   getKeyspaces(): Map<string, KeyspaceMetadata>;
