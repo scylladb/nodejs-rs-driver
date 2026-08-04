@@ -3,13 +3,15 @@ use crate::metadata::host::cache_host_map;
 use crate::session::SessionWrapper;
 use crate::types::type_wrappers::ComplexType;
 use crate::utils::cache::{NapiRefCache, ReferenceCache};
-use crate::utils::js_ctor::{build_column_metadata, build_table_metadata, js_constructible_class};
+use crate::utils::js_ctor::{
+    build_column_metadata, build_materialized_view, build_table_metadata, js_constructible_class,
+};
 use crate::utils::js_instance::JsInstance;
 use crate::utils::napi_ref::NapiRef;
 use crate::utils::to_napi_obj::NamedMap;
 use napi::Env;
 use napi::bindgen_prelude::{Either4, FnArgs, JavaScriptClassExt, Reference};
-use scylla::cluster::metadata::{Column, ColumnKind, Keyspace, Strategy, Table};
+use scylla::cluster::metadata::{Column, ColumnKind, Keyspace, MaterializedView, Strategy, Table};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -90,6 +92,7 @@ impl ClusterSnapshot {
 pub struct KeyspaceWrapper {
     inner: Keyspace,
     tables: NapiRefCache<js_constructible_class::TableMetadata>,
+    views: NapiRefCache<js_constructible_class::MaterializedView>,
 }
 
 impl KeyspaceWrapper {
@@ -97,6 +100,7 @@ impl KeyspaceWrapper {
         KeyspaceWrapper {
             inner,
             tables: NapiRefCache::new(),
+            views: NapiRefCache::new(),
         }
     }
 }
@@ -146,6 +150,23 @@ fn convert_rust_table<'env>(
             &table.partition_key,
             &table.clustering_key,
             table.partitioner.as_deref(),
+        )),
+    )
+}
+
+fn convert_rust_materialized_view<'env>(
+    env: &'env Env,
+    view: &MaterializedView,
+) -> napi::Result<JsInstance<'env, js_constructible_class::MaterializedView>> {
+    let columns = columns_to_metadata(env, &view.view_metadata.columns)?;
+    build_materialized_view(
+        env,
+        FnArgs::from((
+            columns,
+            &view.view_metadata.partition_key,
+            &view.view_metadata.clustering_key,
+            view.view_metadata.partitioner.as_deref(),
+            view.base_table_name.as_str(),
         )),
     )
 }
@@ -253,6 +274,33 @@ impl SessionWrapper {
         })
     }
 
+    /// Gets the definition of a CQL materialized view for a given name.
+    ///
+    /// The view is converted lazily and cached against its keyspace: repeated lookups for the
+    /// same view, whether through this method or through `KeyspaceWrapper::views`, return the
+    /// same JS object.
+    #[napi(ts_return_type = "import('./lib/metadata/materialized-view').MaterializedView | null")]
+    pub fn get_materialized_view<'env>(
+        &self,
+        env: &'env Env,
+        keyspace: String,
+        view: String,
+    ) -> JsResult<Option<JsInstance<'env, js_constructible_class::MaterializedView>>> {
+        with_custom_error_sync(|| {
+            self.with_cluster_snapshot(env, |snapshot| {
+                let Some(ks) = snapshot.keyspace_wrapper(env, &keyspace)? else {
+                    return ConvertedResult::Ok(None);
+                };
+                ks.views.get_or_init(env, &view, || {
+                    let Some(rust_view) = ks.inner.views.get(&view) else {
+                        return ConvertedResult::Ok(None);
+                    };
+                    ConvertedResult::Ok(Some(convert_rust_materialized_view(env, rust_view)?))
+                })
+            })
+        })
+    }
+
     /// Returns metadata about the keyspace with the given name, or `null` if it does not exist.
     ///
     /// The keyspace is converted lazily and cached: repeated lookups for the same name
@@ -327,6 +375,32 @@ impl KeyspaceWrapper {
                     >>()
             })?;
             ConvertedResult::Ok(NamedMap::new(tables))
+        })
+    }
+
+    /// Materialized views in the keyspace, keyed by view name.
+    #[napi(
+        getter,
+        ts_return_type = "Record<string, import('./lib/metadata/materialized-view').MaterializedView>"
+    )]
+    pub fn views<'env>(
+        &self,
+        env: &'env Env,
+    ) -> JsResult<NamedMap<String, JsInstance<'env, js_constructible_class::MaterializedView>>>
+    {
+        with_custom_error_sync(|| {
+            let views = self.views.get_or_init_all(env, || {
+                self.inner
+                    .views
+                    .iter()
+                    .map(|(name, view)| {
+                        Ok((name.clone(), convert_rust_materialized_view(env, view)?))
+                    })
+                    .collect::<ConvertedResult<
+                        HashMap<String, JsInstance<'env, js_constructible_class::MaterializedView>>,
+                    >>()
+            })?;
+            ConvertedResult::Ok(NamedMap::new(views))
         })
     }
 }

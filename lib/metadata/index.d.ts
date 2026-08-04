@@ -16,10 +16,12 @@ import {
   ColumnMetadata,
   ColumnKind,
 } from "./table-metadata";
+import { MaterializedView } from "./materialized-view";
 export {
   TableMetadata,
   ColumnMetadata,
   ColumnKind,
+  MaterializedView,
 };
 
 import dataTypes = types.dataTypes;
@@ -111,10 +113,6 @@ export interface Index {
   isCustomKind(): boolean;
 
   isKeysKind(): boolean;
-}
-
-export interface MaterializedView extends TableMetadata {
-  tableName: string;
 }
 
 export interface QueryTrace {

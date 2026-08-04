@@ -17,6 +17,7 @@ pub mod js_constructible_class {
     pub enum TestJsClass {}
     pub enum ColumnMetadata {}
     pub enum TableMetadata {}
+    pub enum MaterializedView {}
     pub enum SocketAddress {}
     pub enum Host {}
     pub enum HostMap {}
@@ -58,6 +59,16 @@ type TableMetadataCtorArgs<'a> = FnArgs<(
     &'a Vec<String>,
     &'a Vec<String>,
     Option<&'a str>,
+)>;
+
+/// Arguments passed to
+/// `MaterializedView(columns, partitionKey, clusteringKey, partitioner, tableName)`.
+type MaterializedViewCtorArgs<'a> = FnArgs<(
+    ColumnsArg<'a>,
+    &'a Vec<String>,
+    &'a Vec<String>,
+    Option<&'a str>,
+    &'a str,
 )>;
 
 /// Defines a per-environment constructor registry for a single pure-JS class, together with:
@@ -225,4 +236,14 @@ define_js_ctor!(
     build_fn: build_table_metadata,
     args: TableMetadataCtorArgs<'_>,
     class_name: TableMetadata,
+);
+
+define_js_ctor!(
+    /// `MaterializedView(columns, partitionKey, clusteringKey, partitioner, tableName)`
+    /// `columns` is an already-built `Record<string, ColumnMetadata>`
+    static_name: MATERIALIZED_VIEW_CTOR,
+    register_fn: register_materialized_view_ctor,
+    build_fn: build_materialized_view,
+    args: MaterializedViewCtorArgs<'_>,
+    class_name: MaterializedView,
 );
