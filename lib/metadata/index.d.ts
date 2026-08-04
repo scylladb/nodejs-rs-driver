@@ -11,6 +11,17 @@ import {
 } from "../../index";
 import { StrategyKind, Strategy } from "./strategy";
 
+import {
+  TableMetadata,
+  ColumnMetadata,
+  ColumnKind,
+} from "./table-metadata";
+export {
+  TableMetadata,
+  ColumnMetadata,
+  ColumnKind,
+};
+
 import dataTypes = types.dataTypes;
 import Uuid = types.Uuid;
 import InetAddress = types.InetAddress;
@@ -83,18 +94,6 @@ export interface ColumnInfo {
   customTypeName?: string;
 }
 
-export enum ColumnKind {
-  Regular = 0,
-  Static = 1,
-  ClusteringKey = 2,
-  PartitionKey = 3,
-}
-
-export interface ColumnMetadata {
-  type: ColumnInfo;
-  kind: ColumnKind;
-}
-
 export enum IndexKind {
   custom = 0,
   keys,
@@ -116,13 +115,6 @@ export interface Index {
 
 export interface MaterializedView extends TableMetadata {
   tableName: string;
-}
-
-export interface TableMetadata {
-  columns: { [name: string]: ColumnMetadata };
-  partitionKey: string[];
-  clusteringKey: string[];
-  partitioner: string | null;
 }
 
 export interface QueryTrace {

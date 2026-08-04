@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 use crate::types::type_helpers::SocketAddrWrapper;
+use crate::types::type_wrappers::ComplexType;
 use crate::utils::js_instance::JsInstance;
 use crate::utils::to_napi_obj::{CopyableBuffer, NamedMap};
 
@@ -14,6 +15,8 @@ use crate::utils::to_napi_obj::{CopyableBuffer, NamedMap};
 pub mod js_constructible_class {
     /// Test-only marker for `TestJsClass(name, value)`, used by `crate::tests::napi_ref_tests`.
     pub enum TestJsClass {}
+    pub enum ColumnMetadata {}
+    pub enum TableMetadata {}
     pub enum SocketAddress {}
     pub enum Host {}
     pub enum HostMap {}
@@ -42,6 +45,20 @@ pub(crate) type HostCtorArgs<'a> = FnArgs<(
 /// host's id.
 type HostMapCtorArgs<'a> =
     FnArgs<(NamedMap<String, JsInstance<'a, js_constructible_class::Host>>,)>;
+
+/// Columns of a table/materialized view, as an already-built `Record<string, ColumnMetadata>`.
+type ColumnsArg<'a> = NamedMap<&'a str, JsInstance<'a, js_constructible_class::ColumnMetadata>>;
+
+/// Arguments passed to `ColumnMetadata(typ, kind)`.
+type ColumnMetadataCtorArgs<'a> = FnArgs<(ComplexType<'a>, u32)>;
+
+/// Arguments passed to `TableMetadata(columns, partitionKey, clusteringKey, partitioner)`.
+type TableMetadataCtorArgs<'a> = FnArgs<(
+    ColumnsArg<'a>,
+    &'a Vec<String>,
+    &'a Vec<String>,
+    Option<&'a str>,
+)>;
 
 /// Defines a per-environment constructor registry for a single pure-JS class, together with:
 /// - a `#[napi]` `register_*_ctor` function that JS calls once per environment, at module load
@@ -189,4 +206,23 @@ define_js_ctor!(
     build_fn: build_host_map,
     args: HostMapCtorArgs<'_>,
     class_name: HostMap,
+);
+
+define_js_ctor!(
+    /// `ColumnMetadata(typ, kind)`
+    static_name: COLUMN_METADATA_CTOR,
+    register_fn: register_column_metadata_ctor,
+    build_fn: build_column_metadata,
+    args: ColumnMetadataCtorArgs<'_>,
+    class_name: ColumnMetadata,
+);
+
+define_js_ctor!(
+    /// `TableMetadata(columns, partitionKey, clusteringKey, partitioner)`
+    /// `columns` is an already-built `Record<string, ColumnMetadata>`
+    static_name: TABLE_METADATA_CTOR,
+    register_fn: register_table_metadata_ctor,
+    build_fn: build_table_metadata,
+    args: TableMetadataCtorArgs<'_>,
+    class_name: TableMetadata,
 );
