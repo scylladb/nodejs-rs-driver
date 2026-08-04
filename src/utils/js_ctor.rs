@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 use crate::types::type_helpers::SocketAddrWrapper;
+use crate::types::type_wrappers::ComplexType;
 use crate::utils::js_instance::JsInstance;
 use crate::utils::to_napi_obj::{CopyableBuffer, NamedMap};
 
@@ -14,6 +15,8 @@ use crate::utils::to_napi_obj::{CopyableBuffer, NamedMap};
 pub mod js_constructible_class {
     /// Test-only marker for `TestJsClass(name, value)`, used by `crate::tests::napi_ref_tests`.
     pub enum TestJsClass {}
+    pub enum ColumnMetadata {}
+    pub enum TableMetadata {}
     pub enum Strategy {}
     pub enum SocketAddress {}
     pub enum Host {}
@@ -52,6 +55,20 @@ type StrategyCtorArgs<'a> = FnArgs<(
     Option<HashMap<&'a str, u32>>,
     Option<&'a str>,
     Option<HashMap<&'a str, &'a str>>,
+)>;
+
+/// Columns of a table/materialized view, as an already-built `Record<string, ColumnMetadata>`.
+type ColumnsArg<'a> = NamedMap<&'a str, JsInstance<'a, js_constructible_class::ColumnMetadata>>;
+
+/// Arguments passed to `ColumnMetadata(typ, kind)`.
+type ColumnMetadataCtorArgs<'a> = FnArgs<(ComplexType<'a>, u32)>;
+
+/// Arguments passed to `TableMetadata(columns, partitionKey, clusteringKey, partitioner)`.
+type TableMetadataCtorArgs<'a> = FnArgs<(
+    ColumnsArg<'a>,
+    &'a Vec<String>,
+    &'a Vec<String>,
+    Option<&'a str>,
 )>;
 
 /// Defines a per-environment constructor registry for a single pure-JS class, together with:
@@ -209,4 +226,23 @@ define_js_ctor!(
     build_fn: build_strategy,
     args: StrategyCtorArgs<'_>,
     class_name: Strategy,
+);
+
+define_js_ctor!(
+    /// `ColumnMetadata(typ, kind)`
+    static_name: COLUMN_METADATA_CTOR,
+    register_fn: register_column_metadata_ctor,
+    build_fn: build_column_metadata,
+    args: ColumnMetadataCtorArgs<'_>,
+    class_name: ColumnMetadata,
+);
+
+define_js_ctor!(
+    /// `TableMetadata(columns, partitionKey, clusteringKey, partitioner)`
+    /// `columns` is an already-built `Record<string, ColumnMetadata>`
+    static_name: TABLE_METADATA_CTOR,
+    register_fn: register_table_metadata_ctor,
+    build_fn: build_table_metadata,
+    args: TableMetadataCtorArgs<'_>,
+    class_name: TableMetadata,
 );

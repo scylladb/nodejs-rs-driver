@@ -48,6 +48,17 @@ export type EncodedValuesWrapper = Uint8Array | null | undefined
 // These are plain JS objects returned from Rust to JS
 // ---------------------------------------------------------------------------
 
+/**
+ * Some columns have a specific meaning in the context of a table,
+ * and this meaning is represented by this enum.
+ */
+export const enum ColumnKindValue {
+  Regular = 0,
+  Static = 1,
+  ClusteringKey = 2,
+  PartitionKey = 3,
+}
+
 // ---------------------------------------------------------------------------
 // Types for objects produced by define_js_to_rust_convertible_object.
 // These are plain JS objects passed from JS into Rust (all fields optional).

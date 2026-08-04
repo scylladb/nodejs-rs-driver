@@ -1,6 +1,7 @@
 "use strict";
 
-import { ColumnInfo } from "../types/cql-utils";
+import { ColumnInfo, convertComplexType } from "../types/cql-utils";
+import rust = require("../../index");
 
 /**
  * Some columns have a specific meaning in the context of a table,
@@ -34,11 +35,14 @@ class ColumnMetadata {
     kind: ColumnKind;
 
     /**
+     * Constructs a ColumnMetadata instance.
+     *
+     * Instances of this class are constructed directly from the native code when reading cluster metadata.
      * @internal
      * @ignore
      */
-    constructor(typ: ColumnInfo, kind: ColumnKind) {
-        this.type = typ;
+    constructor(typ: rust.ComplexType, kind: ColumnKind) {
+        this.type = convertComplexType(typ);
         this.kind = kind;
     }
 }
@@ -73,6 +77,9 @@ class TableMetadata {
     partitioner: string | null;
 
     /**
+     * Constructs a TableMetadata instance.
+     *
+     * Instances of this class are constructed directly from the native code when reading cluster metadata.
      * @internal
      * @ignore
      */
@@ -90,3 +97,9 @@ class TableMetadata {
 }
 
 export { TableMetadata, ColumnMetadata, ColumnKind };
+
+// Registers the ColumnMetadata/TableMetadata constructors, so that Rust can construct
+// fully-formed instances directly when reading cluster metadata, instead of handing
+// JS a plain data object to convert.
+rust.registerColumnMetadataCtor(ColumnMetadata);
+rust.registerTableMetadataCtor(TableMetadata);
