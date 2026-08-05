@@ -3,6 +3,7 @@
 import { TableMetadata } from "./table-metadata";
 import { MaterializedView } from "./materialized-view";
 import { Udt } from "./user-defined-type";
+import rust = require("../../index");
 
 /**
  * Identifies the replication strategy variant.
@@ -75,6 +76,11 @@ class Strategy {
     data: Record<string, string> | null;
 
     /**
+     * Constructs a Strategy instance.
+     *
+     * Instances of this class are constructed directly from the native code
+     * when reading cluster metadata. Only the field(s) relevant to `kind`
+     * are set; the rest are `null`.
      * @internal
      * @ignore
      */
@@ -129,3 +135,9 @@ class KeyspaceMetadata {
 }
 
 export { KeyspaceMetadata, Strategy, StrategyKind };
+
+// Registers the Strategy constructor, so that Rust can construct fully-formed instances
+// directly when reading cluster metadata. StrategyKind is a plain object of numeric
+// constants, not a class, so unlike Strategy it has nothing to register: Rust and JS
+// simply agree on the same numeric values
+rust.registerStrategyCtor(Strategy);
