@@ -106,20 +106,22 @@ export interface TableMetadata {
   partitioner: string | null;
 }
 
+export interface TracingEvent {
+  id: Uuid;
+  activity: string | null;
+  source: InetAddress | null;
+  elapsed: number | null;
+  thread: string | null;
+}
+
 export interface QueryTrace {
-  requestType: string;
-  coordinator: InetAddress;
-  parameters: { [key: string]: any };
-  startedAt: number | types.Long;
-  duration: number;
-  clientAddress: string;
-  events: Array<{
-    id: Uuid;
-    activity: any;
-    source: any;
-    elapsed: any;
-    thread: any;
-  }>;
+  requestType: string | null;
+  coordinator: InetAddress | null;
+  parameters: { [key: string]: string };
+  startedAt: number | types.Long | null;
+  duration: number | null;
+  clientAddress: InetAddress | null;
+  events: TracingEvent[];
 }
 
 export interface SchemaFunction {

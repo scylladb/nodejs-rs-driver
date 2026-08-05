@@ -12,6 +12,7 @@ export default [
   includeIgnoreFile(path.join(__dirname, "lib", ".gitignore")),
   includeIgnoreFile(path.join(__dirname, "lib", "metadata", ".gitignore")),
   includeIgnoreFile(path.join(__dirname, "lib", "types", ".gitignore")),
+  includeIgnoreFile(path.join(__dirname, "lib", "metadata", ".gitignore")),
   pluginJs.configs.recommended,
   {
     languageOptions: {

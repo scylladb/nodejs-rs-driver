@@ -1,6 +1,6 @@
 "use strict";
 
-// In pedantic mode, when any warnings are detected, exit program imminently 
+// In pedantic mode, when any warnings are detected, exit program imminently
 const process = require('node:process');
 if (process.env.PEDANTIC == "true") {
   process.on('warning', (warning) => {
@@ -37,6 +37,7 @@ const {
 } = require("./lib/metadata/table-metadata");
 const { MaterializedView } = require("./lib/metadata/materialized-view");
 const { Udt, UdtField } = require("./lib/metadata/user-defined-type");
+const { TracingEvent, QueryTrace } = require("./lib/metadata/query-trace");
 exports.metadata = {
   Metadata: Metadata,
   KeyspaceMetadata: KeyspaceMetadata,
@@ -48,6 +49,8 @@ exports.metadata = {
   MaterializedView: MaterializedView,
   Udt: Udt,
   UdtField: UdtField,
+  TracingEvent: TracingEvent,
+  QueryTrace: QueryTrace,
 };
 
 const token = require("./lib/token");

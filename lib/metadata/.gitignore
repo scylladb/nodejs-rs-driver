@@ -7,3 +7,5 @@ materialized-view.js
 materialized-view.d.ts
 user-defined-type.js
 user-defined-type.d.ts
+query-trace.js
+query-trace.d.ts
