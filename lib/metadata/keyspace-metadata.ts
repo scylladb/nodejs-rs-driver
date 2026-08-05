@@ -111,6 +111,7 @@ class KeyspaceMetadata {
      * Native keyspace wrapper this instance delegates to.
      * @private
      */
+    #wrapper: rust.KeyspaceWrapper;
     #strategy: Strategy | undefined;
     #tables: Record<string, TableMetadata> | undefined;
     #views: Record<string, MaterializedView> | undefined;
@@ -121,16 +122,75 @@ class KeyspaceMetadata {
      * @internal
      * @ignore
      */
-    constructor(
-        strategy: Strategy | undefined,
-        tables: Record<string, TableMetadata> | undefined,
-        views: Record<string, MaterializedView> | undefined,
-        udts: Record<string, Udt> | undefined,
-    ) {
-        this.#strategy = strategy;
-        this.#tables = tables;
-        this.#views = views;
-        this.#udts = udts;
+    constructor(wrapper: rust.KeyspaceWrapper) {
+        this.#wrapper = wrapper;
+    }
+
+    /**
+     * Replication strategy used by the keyspace.
+     */
+    get strategy(): Strategy {
+        let strategy = this.#strategy;
+        if (!strategy) {
+            // `KeyspaceWrapper.strategy`'s declared type in the generated `index.d.ts` points
+            // back at `Strategy` in this very file - that circular reference confuses TS's
+            // inference into widening it to `Strategy | undefined`, hence the explicit assertion.
+            strategy = this.#wrapper.strategy as Strategy;
+            this.#strategy = strategy;
+        }
+        return strategy;
+    }
+
+    /**
+     * Whether the keyspace has durable writes enabled.
+     */
+    get durableWrites(): boolean {
+        return this.#wrapper.durableWrites;
+    }
+
+    /**
+     * Tables in the keyspace, keyed by table name.
+     */
+    get tables(): Record<string, TableMetadata> {
+        let tables = this.#tables;
+        if (!tables) {
+            tables = this.#wrapper.tables;
+            this.#tables = tables;
+        }
+        return tables;
+    }
+
+    /**
+     * Materialized views in the keyspace, keyed by view name.
+     */
+    get views(): Record<string, MaterializedView> {
+        let views = this.#views;
+        if (!views) {
+            views = this.#wrapper.views;
+            this.#views = views;
+        }
+        return views;
+    }
+
+    /**
+     * User-defined types in the keyspace, keyed by type name.
+     */
+    get udts(): Record<string, Udt> {
+        let udts = this.#udts;
+        if (!udts) {
+            udts = this.#wrapper.udts;
+            this.#udts = udts;
+        }
+        return udts;
+    }
+
+    /**
+     * Creates a KeyspaceMetadata instance backed by a native keyspace wrapper.
+     * @internal
+     * @ignore
+     */
+    static fromRust(keyspaceWrapper: rust.KeyspaceWrapper): KeyspaceMetadata {
+        return new KeyspaceMetadata(keyspaceWrapper);
     }
 }
 
