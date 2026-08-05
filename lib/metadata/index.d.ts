@@ -2,9 +2,26 @@ import * as types from "../types";
 import { EmptyCallback, Host, token, ValueCallback } from "../../";
 import { CqlType } from "../../index";
 import { SessionWrapper as RustClient } from "../../index";
+import {
+  SimpleStrategy,
+  NetworkTopologyStrategy,
+  LocalStrategy,
+  OtherStrategy,
+} from "../../index";
+import { StrategyKind, Strategy } from "./strategy";
+
 import dataTypes = types.dataTypes;
 import Uuid = types.Uuid;
 import InetAddress = types.InetAddress;
+
+export {
+  SimpleStrategy,
+  NetworkTopologyStrategy,
+  LocalStrategy,
+  OtherStrategy,
+  StrategyKind,
+  Strategy,
+};
 
 export interface Aggregate {
   argumentTypes: Array<{ code: dataTypes; info: any }>;
@@ -144,19 +161,6 @@ export interface Udt {
   keyspace: string;
   fields: UdtField[];
 }
-
-export enum StrategyKind {
-  SimpleStrategy = 0,
-  NetworkTopologyStrategy = 1,
-  LocalStrategy = 2,
-  Other = 3,
-}
-
-export type Strategy =
-  | { kind: StrategyKind.SimpleStrategy; replicationFactor: number }
-  | { kind: StrategyKind.NetworkTopologyStrategy; datacenterRepfactors: { [datacenter: string]: number } }
-  | { kind: StrategyKind.LocalStrategy }
-  | { kind: StrategyKind.Other; name: string; data: { [key: string]: string } };
 
 export interface KeyspaceMetadata {
   strategy: Strategy;
