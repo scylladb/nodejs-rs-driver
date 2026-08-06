@@ -963,7 +963,7 @@ class Client extends events.EventEmitter {
                 undefined,
             );
             // wait until finish connecting for easier troubleshooting
-            await promiseUtils.fromEvent(this, "connected");
+            await new Promise<void>((resolve) => this.once("connected", resolve));
         }
 
         this.connected = false;
