@@ -950,7 +950,7 @@ class Client extends events.EventEmitter {
             undefined,
         );
 
-        if (!this.connected) {
+        if (!this.connected && !this.connecting) {
             // not initialized
             return;
         }

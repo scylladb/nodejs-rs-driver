@@ -127,4 +127,18 @@ describe("CustomGC — FinalizationRegistry lazy init and ref-count", function (
       assert.notStrictEqual(r1, r2);
     });
   });
+
+  describe("shutdown-during-connect race", function () {
+    it("should not leak the ref-count when shutdown is called while connecting", function () {
+      // Simulate the state mid-connect: acquire has been called but connected is still false.
+      te().acquire(); // count = 1, simulates _acquireLoggingRegistry() inside #connect()
+
+      // Simulate shutdown arriving before connect sets connected = true.
+      // With the fix, shutdown must still release the registry.
+      te().release(); // count = 0
+
+      assert.strictEqual(te().count, 0);
+      assert.isNull(te().registry);
+    });
+  });
 });
