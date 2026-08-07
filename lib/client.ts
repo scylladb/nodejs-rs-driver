@@ -986,7 +986,9 @@ class Client extends events.EventEmitter {
     }
 }
 
-// Exposed only for unit testing — not part of the public API.
+/**
+ * Exposed only for unit testing — not part of the public API.
+ */
 (Client as any)._testExports = {
     get registry() {
         return _loggingRegistry;
