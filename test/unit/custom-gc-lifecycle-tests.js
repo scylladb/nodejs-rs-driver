@@ -144,5 +144,42 @@ describe("CustomGC — FinalizationRegistry lazy init and ref-count", function (
       assert.strictEqual(te().count, 0);
       assert.isNull(te().registry);
     });
+
+    it("should block re-entrant connect() while shutdown awaits connected", async function () {
+      let resolveCreate;
+      const PausedClient = proxyquire.noPreserveCache()("../../lib/client", {
+        "../index": {
+          removeLogging: () => { },
+          setupLogging: () => 1,
+          getRandomUuidV4: () => Buffer.alloc(16),
+          RetryPolicyKind: { Default: 0, Fallthrough: 1 },
+          SessionWrapper: {
+            createSession: () => new Promise((r) => { resolveCreate = r; }),
+          },
+          "@global": true,
+          "@noCallThru": true,
+        },
+      });
+      const client = new PausedClient({ contactPoints: ["localhost"] });
+
+      const connectPromise = client.connect();
+      await new Promise((r) => setImmediate(r));
+
+      const shutdownPromise = client.shutdown();
+      await new Promise((r) => setImmediate(r));
+
+      let caught;
+      try {
+        await client.connect();
+      } catch (err) {
+        caught = err;
+      }
+      assert.ok(caught, "expected connect() to throw while shutdown is pending");
+      assert.include(caught.message, "Connecting after shutdown");
+
+      resolveCreate({});
+      await connectPromise;
+      await shutdownPromise;
+    });
   });
 });

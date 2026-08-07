@@ -964,6 +964,7 @@ class Client extends events.EventEmitter {
                 undefined,
                 undefined,
             );
+            this.isShuttingDown = true;
             // wait until finish connecting for easier troubleshooting
             await new Promise<void>((resolve) => this.once("connected", resolve));
         }
