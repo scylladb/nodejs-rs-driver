@@ -51,7 +51,9 @@ const { version } = packageInfo;
  */
 type ResultCallback = (err?: Error | null, result?: ResultSet) => void;
 
-// Lazy registry + ref-count: avoids creating a CustomGC handle at module import time.
+/**
+ * Lazy registry + ref-count: avoids creating a CustomGC handle at module import time.
+ */
 let _loggingRegistry: FinalizationRegistry<number> | null = null;
 let _activeLoggingCount = 0;
 

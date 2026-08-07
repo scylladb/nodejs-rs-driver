@@ -3,7 +3,6 @@ const { assert } = require("chai");
 const asyncHooks = require("async_hooks");
 const proxyquire = require("proxyquire");
 
-// Stub for the native Rust module — allows loading lib/client without a compiled .node binary.
 const rustStub = {
   removeLogging: () => { },
   setupLogging: () => 1,
@@ -138,11 +137,9 @@ describe("CustomGC — FinalizationRegistry lazy init and ref-count", function (
     });
 
     it("should release the ref-count even when connect fails during shutdown wait", function () {
-      // Simulates: acquire happened (mid-connect), then connect throws → connect's catch
-      // already called release. Verifies count stays 0 after the double-release guard.
-      te().acquire(); // count = 1 (connect registered logging)
-      te().release(); // count = 0 (connect's catch called #closeLogging)
-      te().release(); // shutdown calls #closeLogging too — idempotent, must not go negative
+      te().acquire();
+      te().release();
+      te().release();
 
       assert.strictEqual(te().count, 0);
       assert.isNull(te().registry);
