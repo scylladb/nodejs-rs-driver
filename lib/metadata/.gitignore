@@ -3,3 +3,5 @@ keyspace-metadata.js
 keyspace-metadata.d.ts
 table-metadata.js
 table-metadata.d.ts
+materialized-view.js
+materialized-view.d.ts
