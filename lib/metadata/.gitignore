@@ -1,3 +1,5 @@
 # TypeScript build output (emitted in-place from .ts files)
 table-metadata.js
 table-metadata.d.ts
+materialized-view.js
+materialized-view.d.ts
