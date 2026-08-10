@@ -1,9 +1,6 @@
-// @ts-nocheck
 "use strict";
 
-// Used for JS doc
-// eslint-disable-next-line no-unused-vars
-const { ColumnInfo } = require("../types/cql-utils");
+import { ColumnInfo } from "../types/cql-utils";
 
 /**
  * Describes a field of a user-defined type.
@@ -12,15 +9,18 @@ const { ColumnInfo } = require("../types/cql-utils");
 class UdtField {
     /**
      * Name of the field.
-     * @type {string}
      */
-    name;
+    name: string;
 
     /**
      * CQL type of the field.
-     * @type {ColumnInfo}
      */
-    type;
+    type: ColumnInfo;
+
+    constructor(name: string, typ: ColumnInfo) {
+        this.name = name;
+        this.type = typ;
+    }
 }
 
 /**
@@ -29,23 +29,30 @@ class UdtField {
  */
 class Udt {
     /**
-     * Definition of a user-defined type (UDT).
+     * Name of the user-defined type (UDT).
      * UDT is composed of fields, each with a name and an optional value of its own type.
-     * @type {string}
      */
-    name;
+    name: string;
 
     /**
      * Name of the keyspace the type belongs to.
-     * @type {string}
      */
-    keyspace;
+    keyspace: string;
 
     /**
      * Fields of the user-defined type.
-     * @type {Array.<UdtField>}
      */
-    fields;
+    fields: UdtField[];
+
+    /**
+     * @internal
+     * @ignore
+     */
+    constructor(name: string, keyspace: string, fields: UdtField[]) {
+        this.name = name;
+        this.keyspace = keyspace;
+        this.fields = fields;
+    }
 }
 
-module.exports = { Udt, UdtField };
+export { Udt, UdtField };

@@ -5,3 +5,5 @@ table-metadata.js
 table-metadata.d.ts
 materialized-view.js
 materialized-view.d.ts
+user-defined-type.js
+user-defined-type.d.ts
