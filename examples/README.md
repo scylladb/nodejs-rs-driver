@@ -47,8 +47,7 @@ Those examples are present in this directory and have the `.broken` in the name 
   - [Insert and retrieve using the Mapper](mapper/mapper-insert-retrieve.js) -->
 - Metadata
   - [Get hosts information](metadata/metadata-hosts.js)
-<!--   - [Get keyspaces information](metadata/metadata-keyspaces.js)
-  - [Get table information](metadata/metadata-table.js) -->
+  - [Get schema information: keyspaces, tables, UDTs and materialized views](metadata/metadata-schema.js)
 - Data types
   - [Working with user-defined types (UDT)](udt/udt-insert-select.js)
   - [Working with tuples](tuple/tuple-insert-select.js)
