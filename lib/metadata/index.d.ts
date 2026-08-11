@@ -152,11 +152,17 @@ export enum StrategyKind {
   Other = 3,
 }
 
-export type Strategy =
-  | { kind: StrategyKind.SimpleStrategy; replicationFactor: number }
-  | { kind: StrategyKind.NetworkTopologyStrategy; datacenterRepfactors: { [datacenter: string]: number } }
-  | { kind: StrategyKind.LocalStrategy }
-  | { kind: StrategyKind.Other; name: string; data: { [key: string]: string } };
+export interface Strategy {
+  kind: StrategyKind;
+  // Only set when `kind` is `StrategyKind.SimpleStrategy`, null otherwise.
+  replicationFactor: number | null;
+  // Only set when `kind` is `StrategyKind.NetworkTopologyStrategy`, null otherwise.
+  datacenterRepfactors: { [datacenter: string]: number } | null;
+  // Only set when `kind` is `StrategyKind.Other`, null otherwise.
+  name: string | null;
+  // Only set when `kind` is `StrategyKind.Other`, null otherwise.
+  data: { [key: string]: string } | null;
+}
 
 export interface KeyspaceMetadata {
   strategy: Strategy;

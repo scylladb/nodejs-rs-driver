@@ -23,16 +23,6 @@ pub mod js_constructible_class {
 /// Arguments passed to the test-only `TestJsClass(name, value)` constructor.
 type TestJsClassCtorArgs<'a> = FnArgs<(&'a str, i32)>;
 
-/// Arguments passed to `Strategy(kind, replicationFactor, datacenterRepfactors, name, data)`.
-/// Only the field(s) relevant to `kind` are set (`Some`); the rest are `None`.
-type StrategyCtorArgs<'a> = FnArgs<(
-    u32,
-    Option<u32>,
-    Option<HashMap<&'a str, u32>>,
-    Option<&'a str>,
-    Option<HashMap<&'a str, &'a str>>,
-)>;
-
 /// Arguments passed to `net.SocketAddress({ address, port, family })`.
 ///
 /// `net.SocketAddress` takes a single options object, which `SocketAddrWrapper`'s `ToNapiValue`
@@ -53,6 +43,16 @@ pub(crate) type HostCtorArgs<'a> = FnArgs<(
 /// host's id.
 type HostMapCtorArgs<'a> =
     FnArgs<(NamedMap<String, JsInstance<'a, js_constructible_class::Host>>,)>;
+
+/// Arguments passed to `Strategy(kind, replicationFactor, datacenterRepfactors, name, data)`.
+/// Only the field(s) relevant to `kind` are set (`Some`); the rest are `None`.
+type StrategyCtorArgs<'a> = FnArgs<(
+    u32,
+    Option<u32>,
+    Option<HashMap<&'a str, u32>>,
+    Option<&'a str>,
+    Option<HashMap<&'a str, &'a str>>,
+)>;
 
 /// Defines a per-environment constructor registry for a single pure-JS class, together with:
 /// - a `#[napi]` `register_*_ctor` function that JS calls once per environment, at module load
