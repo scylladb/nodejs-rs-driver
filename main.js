@@ -24,14 +24,32 @@ exports.tracker = require("./lib/tracker");
 exports.metrics = require("./lib/metrics");
 exports.concurrent = require("./lib/concurrent");
 
+const Metadata = require("./lib/metadata");
+const { KeyspaceMetadata } = require("./index");
+const { StrategyKind } = require("./lib/metadata/strategy");
+const {
+    TableMetadata,
+    ColumnMetadata,
+    ColumnKind,
+} = require("./lib/metadata/table-metadata");
+const { MaterializedView } = require("./lib/metadata/materialized-view");
+const { Udt, UdtField } = require("./lib/metadata/user-defined-type");
+exports.metadata = {
+    Metadata: Metadata,
+    KeyspaceMetadata: KeyspaceMetadata,
+    StrategyKind: StrategyKind,
+    TableMetadata: TableMetadata,
+    ColumnMetadata: ColumnMetadata,
+    ColumnKind: ColumnKind,
+    MaterializedView: MaterializedView,
+    Udt: Udt,
+    UdtField: UdtField,
+};
+
 const token = require("./lib/token");
 exports.token = {
     Token: token.Token,
     TokenRange: token.TokenRange,
-};
-const Metadata = require("./lib/metadata");
-exports.metadata = {
-    Metadata: Metadata,
 };
 exports.geometry = require("./lib/geometry");
 exports.datastax = require("./lib/datastax");
