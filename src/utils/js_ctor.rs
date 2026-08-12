@@ -154,6 +154,15 @@ macro_rules! define_js_ctor {
 }
 
 define_js_ctor!(
+    /// `TestJsClass(name, value)` - test-only class used by `crate::tests::napi_ref_tests`.
+    static_name: TEST_JS_CLASS_CTOR,
+    register_fn: register_test_js_class_ctor,
+    build_fn: build_test_js_class,
+    args: TestJsClassCtorArgs<'_>,
+    class_name: TestJsClass,
+);
+
+define_js_ctor!(
     /// `net.SocketAddress({ address, port, family })` - Node's built-in socket address class,
     /// registered by `lib/host.js` so that Rust can hand back already-parsed host addresses.
     static_name: SOCKET_ADDRESS_CTOR,
@@ -161,15 +170,6 @@ define_js_ctor!(
     build_fn: build_socket_address,
     args: SocketAddressCtorArgs,
     class_name: SocketAddress,
-);
-
-define_js_ctor!(
-    /// `TestJsClass(name, value)` - test-only class used by `crate::tests::napi_ref_tests`.
-    static_name: TEST_JS_CLASS_CTOR,
-    register_fn: register_test_js_class_ctor,
-    build_fn: build_test_js_class,
-    args: TestJsClassCtorArgs<'_>,
-    class_name: TestJsClass,
 );
 
 define_js_ctor!(
