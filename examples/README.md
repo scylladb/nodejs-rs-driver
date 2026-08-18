@@ -50,8 +50,8 @@ Those examples are present in this directory and have the `.broken` in the name 
 - Data types
   - [Working with user-defined types (UDT)](udt/udt-insert-select.js)
   - [Working with tuples](tuple/tuple-insert-select.js)
-<!-- - Query tracing
-  - [Retrieving the trace of a query request](tracing/retrieve-query-trace.js) -->
+- Query tracing
+  - [Retrieving the trace of a query request](tracing/retrieve-query-trace.js)
 - Concurrent execution
   - [Insert multiple rows in a table from an Array using built-in
     method](concurrent-executions/execute-concurrent-array.js)
