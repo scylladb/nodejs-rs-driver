@@ -217,8 +217,18 @@ export class Metadata {
 
   getTrace(
     traceId: Uuid,
-    consistency?: types.consistencies,
-  ): QueryTrace | null;
+    consistency: types.consistencies,
+    callback: ValueCallback<QueryTrace>,
+  ): void;
+
+  getTrace(
+    traceId: Uuid,
+    consistency: types.consistencies,
+  ): Promise<QueryTrace>;
+
+  getTrace(traceId: Uuid, callback: ValueCallback<QueryTrace>): void;
+
+  getTrace(traceId: Uuid): Promise<QueryTrace>;
 
   getReplicas(
     keyspaceName: string,
