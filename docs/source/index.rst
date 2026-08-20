@@ -17,6 +17,7 @@ Support for some optional driver features is planned for upcoming releases.
    getting-started/getting-started
    statements/index
    paging/paging
+   tracing/tracing
    logging/logging
    policies/index
    connecting/authentication
@@ -35,6 +36,7 @@ Contents
   - :doc:`Batch Statements <statements/batch>`
 
 - :doc:`Fetching Large Result Sets <paging/paging>` - Paging through large result sets
+- :doc:`Query Tracing <tracing/tracing>` - Diagnosing query execution with server-side traces
 - :doc:`Policies <policies/index>` - Load balancing and retry policies
 - :doc:`Authentication <connecting/authentication>` - Connecting with credentials or SSL
 - :doc:`Shutdown <shutdown/shutdown>` - How the driver manages connection lifecycle
@@ -61,6 +63,7 @@ The driver supports the following:
 - Simple address translation policy
 - Error handling, based on the Rust driver
 - Driver logging
+- Query tracing
 - Faster performance, compared to DataStax Node.js driver(*)
 
 (*) In most of the internally conducted benchmarks

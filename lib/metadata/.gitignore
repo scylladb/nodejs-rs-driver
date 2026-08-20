@@ -1,0 +1,11 @@
+# TypeScript build output (emitted in-place from .ts files)
+keyspace-metadata.js
+keyspace-metadata.d.ts
+table-metadata.js
+table-metadata.d.ts
+materialized-view.js
+materialized-view.d.ts
+user-defined-type.js
+user-defined-type.d.ts
+query-trace.js
+query-trace.d.ts

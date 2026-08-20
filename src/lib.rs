@@ -13,6 +13,7 @@ pub mod requests;
 pub mod result;
 pub mod session;
 pub mod tests;
+pub mod tracing_info;
 pub mod types;
 pub mod utils;
 

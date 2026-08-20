@@ -1,6 +1,6 @@
 "use strict";
 
-// In pedantic mode, when any warnings are detected, exit program imminently 
+// In pedantic mode, when any warnings are detected, exit program imminently
 const process = require('node:process');
 if (process.env.PEDANTIC == "true") {
   process.on('warning', (warning) => {
@@ -24,14 +24,39 @@ exports.tracker = require("./lib/tracker");
 exports.metrics = require("./lib/metrics");
 exports.concurrent = require("./lib/concurrent");
 
+const Metadata = require("./lib/metadata");
+const {
+  KeyspaceMetadata,
+  Strategy,
+  StrategyKind,
+} = require("./lib/metadata/keyspace-metadata");
+const {
+  TableMetadata,
+  ColumnMetadata,
+  ColumnKind,
+} = require("./lib/metadata/table-metadata");
+const { MaterializedView } = require("./lib/metadata/materialized-view");
+const { Udt, UdtField } = require("./lib/metadata/user-defined-type");
+const { TracingEvent, QueryTrace } = require("./lib/metadata/query-trace");
+exports.metadata = {
+  Metadata: Metadata,
+  KeyspaceMetadata: KeyspaceMetadata,
+  Strategy: Strategy,
+  StrategyKind: StrategyKind,
+  TableMetadata: TableMetadata,
+  ColumnMetadata: ColumnMetadata,
+  ColumnKind: ColumnKind,
+  MaterializedView: MaterializedView,
+  Udt: Udt,
+  UdtField: UdtField,
+  TracingEvent: TracingEvent,
+  QueryTrace: QueryTrace,
+};
+
 const token = require("./lib/token");
 exports.token = {
   Token: token.Token,
   TokenRange: token.TokenRange,
-};
-const Metadata = require("./lib/metadata");
-exports.metadata = {
-  Metadata: Metadata,
 };
 exports.geometry = require("./lib/geometry");
 exports.datastax = require("./lib/datastax");

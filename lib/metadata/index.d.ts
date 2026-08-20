@@ -1,6 +1,7 @@
 import * as types from "../types";
 import { EmptyCallback, Host, token, ValueCallback } from "../../";
 import { CqlType } from "../../index";
+import { SessionWrapper as RustClient } from "../../index";
 import dataTypes = types.dataTypes;
 import Uuid = types.Uuid;
 import InetAddress = types.InetAddress;
@@ -105,20 +106,22 @@ export interface TableMetadata {
   partitioner: string | null;
 }
 
+export interface TracingEvent {
+  id: Uuid;
+  activity: string | null;
+  source: InetAddress | null;
+  elapsed: number | null;
+  thread: string | null;
+}
+
 export interface QueryTrace {
-  requestType: string;
-  coordinator: InetAddress;
-  parameters: { [key: string]: any };
-  startedAt: number | types.Long;
-  duration: number;
-  clientAddress: string;
-  events: Array<{
-    id: Uuid;
-    activity: any;
-    source: any;
-    elapsed: any;
-    thread: any;
-  }>;
+  requestType: string | null;
+  coordinator: InetAddress | null;
+  parameters: { [key: string]: string };
+  startedAt: number | types.Long | null;
+  duration: number | null;
+  clientAddress: InetAddress | null;
+  events: TracingEvent[];
 }
 
 export interface SchemaFunction {
@@ -151,11 +154,17 @@ export enum StrategyKind {
   Other = 3,
 }
 
-export type Strategy =
-  | { kind: StrategyKind.SimpleStrategy; replicationFactor: number }
-  | { kind: StrategyKind.NetworkTopologyStrategy; datacenterRepfactors: { [datacenter: string]: number } }
-  | { kind: StrategyKind.LocalStrategy }
-  | { kind: StrategyKind.Other; name: string; data: { [key: string]: string } };
+export interface Strategy {
+  kind: StrategyKind;
+  // Only set when `kind` is `StrategyKind.SimpleStrategy`, null otherwise.
+  replicationFactor: number | null;
+  // Only set when `kind` is `StrategyKind.NetworkTopologyStrategy`, null otherwise.
+  datacenterRepfactors: { [datacenter: string]: number } | null;
+  // Only set when `kind` is `StrategyKind.Other`, null otherwise.
+  name: string | null;
+  // Only set when `kind` is `StrategyKind.Other`, null otherwise.
+  data: { [key: string]: string } | null;
+}
 
 export interface KeyspaceMetadata {
   strategy: Strategy;
@@ -165,7 +174,9 @@ export interface KeyspaceMetadata {
   udts: { [name: string]: Udt };
 }
 
-export interface Metadata {
+export class Metadata {
+  constructor(client: RustClient);
+
   getKeyspace(name: string): KeyspaceMetadata | null;
 
   getKeyspaces(): Map<string, KeyspaceMetadata>;
@@ -206,8 +217,18 @@ export interface Metadata {
 
   getTrace(
     traceId: Uuid,
-    consistency?: types.consistencies,
-  ): QueryTrace | null;
+    consistency: types.consistencies,
+    callback: ValueCallback<QueryTrace>,
+  ): void;
+
+  getTrace(
+    traceId: Uuid,
+    consistency: types.consistencies,
+  ): Promise<QueryTrace>;
+
+  getTrace(traceId: Uuid, callback: ValueCallback<QueryTrace>): void;
+
+  getTrace(traceId: Uuid): Promise<QueryTrace>;
 
   getReplicas(
     keyspaceName: string,

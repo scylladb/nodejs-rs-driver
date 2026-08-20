@@ -1,3 +1,4 @@
+pub mod cache;
 pub mod from_napi_obj;
 pub mod js_ctor;
 pub mod js_instance;

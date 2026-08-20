@@ -31,15 +31,18 @@ async function myTest(): Promise<any> {
     const keyspace: KeyspaceMetadata | null =
         client.metadata.getKeyspace("ks1");
 
-    const trace: QueryTrace | null = client.metadata.getTrace(
+    const trace: QueryTrace = await client.metadata.getTrace(
         types.Uuid.random(),
     );
-    const traceWithConsistency: QueryTrace | null = client.metadata.getTrace(
-        types.Uuid.random(),
-        types.consistencies.one,
+    client.metadata.getTrace(types.Uuid.random(), (err, t) =>
+        useResult<QueryTrace>(err, t),
     );
 
     hosts = client.getState().getConnectedHosts();
     n = client.getState().getInFlightQueries(hosts[0]);
     n = client.getState().getOpenConnections(hosts[0]);
+}
+
+function useResult<T>(err: Error, rs: T): void {
+    // Mock function that takes the parameters defined in the driver callback
 }

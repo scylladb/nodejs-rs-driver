@@ -43,13 +43,15 @@ Those examples are present in this directory and have the `.broken` in the name 
   - [Insert and retrieve using the Mapper](mapper/mapper-insert-retrieve.js) -->
 - Metadata
   - [Get hosts information](metadata/metadata-hosts.js)
-<!--   - [Get keyspaces information](metadata/metadata-keyspaces.js)
-  - [Get table information](metadata/metadata-table.js) -->
+  - [Get keyspaces information](metadata/metadata-keyspaces.js)
+  - [Get table information](metadata/metadata-table.js)
+  - [Get user-defined type information](metadata/metadata-udt.js)
+  - [Get materialized view information](metadata/metadata-materialized-view.js)
 - Data types
   - [Working with user-defined types (UDT)](udt/udt-insert-select.js)
   - [Working with tuples](tuple/tuple-insert-select.js)
-<!-- - Query tracing
-  - [Retrieving the trace of a query request](tracing/retrieve-query-trace.js) -->
+- Query tracing
+  - [Retrieving the trace of a query request](tracing/retrieve-query-trace.js)
 - Concurrent execution
   - [Insert multiple rows in a table from an Array using built-in
     method](concurrent-executions/execute-concurrent-array.js)
