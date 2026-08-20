@@ -52,22 +52,27 @@ const { version } = packageInfo;
 type ResultCallback = (err?: Error | null, result?: ResultSet) => void;
 
 /**
- * FinalizationRegistry that ensures the Rust logging callback is unregistered
- * when a Client instance is garbage-collected without being explicitly shut down.
- *
- * While in general FinalizationRegistry usage is discouraged, we use it here
- * to avoid blocking the client from being cleaned up, once it's no longer used by the user,
- * and also clean up all the resources in the process.
- * This justifies using finalization registry, despite heavy warnings against it in the documentation.
- *
- * To understand more, check the JS documentation.
- * https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/FinalizationRegistry
+ * Lazy registry + ref-count: avoids creating a CustomGC handle at module import time.
  */
-const loggingFinalizationRegistry = new FinalizationRegistry(
-    (loggingId: number) => {
-        rust.removeLogging(loggingId);
-    },
-);
+let _loggingRegistry: FinalizationRegistry<number> | null = null;
+let _activeLoggingCount = 0;
+
+function _acquireLoggingRegistry(): FinalizationRegistry<number> {
+    if (!_loggingRegistry) {
+        _loggingRegistry = new FinalizationRegistry((loggingId: number) => {
+            rust.removeLogging(loggingId);
+            _releaseLoggingRegistry();
+        });
+    }
+    _activeLoggingCount++;
+    return _loggingRegistry;
+}
+
+function _releaseLoggingRegistry(): void {
+    if (_activeLoggingCount > 0 && --_activeLoggingCount === 0) {
+        _loggingRegistry = null;
+    }
+}
 
 /**
  * Represents a database client that maintains multiple connections to the cluster nodes, providing methods to
@@ -327,11 +332,7 @@ class Client extends events.EventEmitter {
                     },
                     logLevel,
                 );
-                loggingFinalizationRegistry.register(
-                    this,
-                    this.#loggingId,
-                    this,
-                );
+                _acquireLoggingRegistry().register(this, this.#loggingId, this);
             }
 
             this.rustClient = await rust.SessionWrapper.createSession(
@@ -951,7 +952,7 @@ class Client extends events.EventEmitter {
             undefined,
         );
 
-        if (!this.connected) {
+        if (!this.connected && !this.connecting) {
             // not initialized
             return;
         }
@@ -963,8 +964,9 @@ class Client extends events.EventEmitter {
                 undefined,
                 undefined,
             );
+            this.isShuttingDown = true;
             // wait until finish connecting for easier troubleshooting
-            await promiseUtils.fromEvent(this, "connected");
+            await new Promise<void>((resolve) => this.once("connected", resolve));
         }
 
         this.connected = false;
@@ -979,10 +981,29 @@ class Client extends events.EventEmitter {
             this.#loggingId = undefined;
             // Avoid double-free. While Rust logic doesn't forbid it,
             // there is no need to keep the registry, after the callback is removed.
-            loggingFinalizationRegistry.unregister(this);
+            _loggingRegistry?.unregister(this);
+            _releaseLoggingRegistry();
         }
     }
 }
+
+/**
+ * Exposed only for unit testing — not part of the public API.
+ */
+(Client as any)._testExports = {
+    get registry() {
+        return _loggingRegistry;
+    },
+    get count() {
+        return _activeLoggingCount;
+    },
+    acquire: _acquireLoggingRegistry,
+    release: _releaseLoggingRegistry,
+    reset() {
+        _loggingRegistry = null;
+        _activeLoggingCount = 0;
+    },
+};
 
 /**
  * This function normalizes the type, and combines all possible page state sources.
