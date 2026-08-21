@@ -3,6 +3,7 @@ import { EmptyCallback, Host, token, ValueCallback } from "../../";
 import { CqlType } from "../../index";
 import { SessionWrapper as RustClient } from "../../index";
 import {
+  KeyspaceMetadata,
   SimpleStrategy,
   NetworkTopologyStrategy,
   LocalStrategy,
@@ -15,6 +16,7 @@ import Uuid = types.Uuid;
 import InetAddress = types.InetAddress;
 
 export {
+  KeyspaceMetadata,
   SimpleStrategy,
   NetworkTopologyStrategy,
   LocalStrategy,
@@ -160,14 +162,6 @@ export interface Udt {
   name: string;
   keyspace: string;
   fields: UdtField[];
-}
-
-export interface KeyspaceMetadata {
-  strategy: Strategy;
-  durableWrites: boolean;
-  tables: { [name: string]: TableMetadata };
-  views: { [name: string]: MaterializedView };
-  udts: { [name: string]: Udt };
 }
 
 export class Metadata {
