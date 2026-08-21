@@ -1,5 +1,9 @@
 import { ComplexType, CqlType } from "../../index";
 import type { CqlValue } from "../../main";
+// `lib/encoder.js` has not been converted to TypeScript yet, so it has no declarations. `Encoder`
+// is only used as a parameter type below, so treating it as `any` costs nothing.
+// TODO: Remove once lib/encoder.js is converted to TypeScript.
+// @ts-ignore - untyped JS module
 import Encoder = require("../encoder");
 import { UdtField } from "../metadata/user-defined-type";
 
