@@ -52,6 +52,7 @@
   "scripts": {
     "build:ts": "tsc -p tsconfig.build.json",
     "build": "sh -c 'napi build --platform --release \"$@\" && npm run build:ts' --",
+    "build:test": "sh -c 'napi build --platform --features client-routes-proxy-tests \"$@\" && npm run build:ts' --",
     "all-tests": "npm run unit && npm run integration && npm run unit-not-supported",
     "unit": "./node_modules/.bin/mocha test/unit -t 5000 --recursive",
     "unit-gc": "./node_modules/.bin/mocha --node-option=expose-gc test/unit -t 5000 --recursive --grep 'expose-gc'",

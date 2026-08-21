@@ -10,7 +10,7 @@ crate-type = ["cdylib"]
 
 napi = { version = "3.6.0", default-features = false, features = ["napi4", "napi6", "async"] }
 napi-derive = "3.4.0"
-scylla = { version = "1.7.0", features = ["num-bigint-03", "openssl-010", "unstable-nodejs-rs"] }
+scylla = { version = "1.7.0", features = ["num-bigint-03", "openssl-010", "unstable-nodejs-rs", "unstable-client-routes"] }
 tokio = { version = "1.34", features = ["full"] }
 futures = "0.3"
 uuid = "1"
@@ -20,6 +20,12 @@ num-bigint = "0.4.6"
 openssl = "0.10.70"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["registry"] }
+
+scylla-proxy = { version = "0.0.6", optional = true }
+
+[features]
+# Enables the client-routes fake-NLB test helpers in src/tests/client_routes_proxy_tests.rs.
+client-routes-proxy-tests = ["scylla-proxy"]
 
 [lints.rust]
 unsafe-op-in-unsafe-fn = "warn"
@@ -33,4 +39,3 @@ panic = "abort"
 
 [profile.dev]
 panic = "abort"
-

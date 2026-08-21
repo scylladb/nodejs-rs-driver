@@ -12,8 +12,15 @@ use openssl::ssl::{
 use openssl::x509::X509;
 use openssl::x509::store::X509StoreBuilder;
 use scylla::client::SelfIdentity;
+use scylla::client::client_routes::{
+    ClientRoutesConfig as ScyllaClientRoutesConfig, ClientRoutesProxy,
+};
 use scylla::client::execution_profile::ExecutionProfileBuilder;
-use scylla::client::session_builder::SessionBuilder;
+use scylla::client::session::Session;
+use scylla::client::session_builder::{
+    ClientRoutesSessionBuilder, GenericSessionBuilder, SessionBuilder,
+    SessionBuilderKindSupportsKnownNodes,
+};
 use scylla::policies::host_filter::AllowListHostFilter;
 use scylla::policies::load_balancing::{self, LoadBalancingPolicy};
 use scylla::policies::retry::{DefaultRetryPolicy, FallthroughRetryPolicy, RetryPolicy};
@@ -62,7 +69,7 @@ pub struct LoadBalancingConfig {
     permit_dc_failover, permitDcFailover: bool,
     enable_shuffling_replicas, enableShufflingReplicas: bool,
     allow_list, allowList: Vec<String>,
-    
+
 });
 
 #[derive(Debug, PartialEq, Eq)]
@@ -80,6 +87,22 @@ pub struct FixedAddressTranslatorConfig {
     address_mapping, addressMapping: Vec<(SocketAddrWrapper, SocketAddrWrapper)>,
 });
 
+// A single client routes proxy: a Scylla Cloud connection id, and optionally a
+// hostname to use instead of the one read from system.client_routes for it -
+// useful for testing and for some cloud architectures.
+define_js_to_rust_convertible_object!(
+pub struct ClientRoutesProxyConfig {
+    connection_id, connectionId: String,
+    hostname_override, hostnameOverride: String,
+});
+
+// Configuration for client routes, where each node is reached through its own
+// port on a proxy rather than directly.
+define_js_to_rust_convertible_object!(
+pub struct ClientRoutesConfig {
+    proxies, proxies: Vec<ClientRoutesProxyConfig>,
+});
+
 define_js_to_rust_convertible_object!(
 pub struct SessionOptions {
     connect_points, connectPoints: Vec<String>,
@@ -94,6 +117,7 @@ pub struct SessionOptions {
     load_balancing_config, loadBalancingConfig: LoadBalancingConfig,
     retry_policy, retryPolicy: RetryPolicyKind,
     address_translator_config, addressTranslatorConfig: FixedAddressTranslatorConfig,
+    client_routes_config, clientRoutesConfig: ClientRoutesConfig,
 });
 
 impl Debug for SslOptions {
@@ -268,11 +292,34 @@ fn configure_ssl(options: &SslOptions) -> ConvertedResult<Option<SslContext>> {
     Ok(Some(ssl_context_builder.build()))
 }
 
-pub(crate) fn configure_session_builder(
-    options: SessionOptions,
-) -> ConvertedResult<SessionBuilder> {
-    let mut builder = SessionBuilder::new();
-    builder = builder.custom_identity(self_identity(&options));
+/// A session builder, in one of the two modes the driver supports.
+///
+/// The rust driver models client routes as a separate builder typestate, which
+/// deliberately does not expose the options that would conflict with it (address
+/// translation and TLS), so the two builders cannot be unified into one value.
+pub(crate) enum ConfiguredSessionBuilder {
+    Default(SessionBuilder),
+    ClientRoutes(ClientRoutesSessionBuilder),
+}
+
+impl ConfiguredSessionBuilder {
+    // Returns a ConvertedResult rather than propagating NewSessionError, which is
+    // large enough to trip clippy::result_large_err.
+    pub(crate) async fn build(&self) -> ConvertedResult<Session> {
+        match self {
+            ConfiguredSessionBuilder::Default(builder) => Ok(builder.build().await?),
+            ConfiguredSessionBuilder::ClientRoutes(builder) => Ok(builder.build().await?),
+        }
+    }
+}
+
+/// Applies every option that is meaningful in both modes. TLS (for now)
+/// and address translation are default mode only.
+fn apply_common_options<K: SessionBuilderKindSupportsKnownNodes>(
+    mut builder: GenericSessionBuilder<K>,
+    options: &SessionOptions,
+) -> ConvertedResult<GenericSessionBuilder<K>> {
+    builder = builder.custom_identity(self_identity(options));
     builder = builder.known_nodes(options.connect_points.as_deref().unwrap_or(&[]));
     if let Some(keyspace) = &options.keyspace {
         builder = builder.use_keyspace(keyspace, false);
@@ -290,10 +337,6 @@ pub(crate) fn configure_session_builder(
                 "There is a check in JS Client constructor that should have prevented only one credential passed"
             )
         }
-    }
-
-    if let Some(ssl_options) = &options.ssl_options {
-        builder = builder.tls_context(configure_ssl(ssl_options)?);
     }
 
     if let Some(allow_list) = options
@@ -320,6 +363,32 @@ pub(crate) fn configure_session_builder(
         exec_profile_builder = exec_profile_builder.retry_policy(policy);
     }
 
+    builder = builder.default_execution_profile_handle(exec_profile_builder.build().into_handle());
+    Ok(builder)
+}
+
+pub(crate) fn configure_session_builder(
+    mut options: SessionOptions,
+) -> ConvertedResult<ConfiguredSessionBuilder> {
+    // Taken out so that the remaining fields can still be moved out by the callees.
+    match options.client_routes_config.take() {
+        None => Ok(ConfiguredSessionBuilder::Default(
+            configure_default_builder(options)?,
+        )),
+        Some(client_routes_config) => Ok(ConfiguredSessionBuilder::ClientRoutes(
+            configure_client_routes_builder(client_routes_config, &options)?,
+        )),
+    }
+}
+
+/// Configures a builder for a session that connects to nodes directly.
+fn configure_default_builder(options: SessionOptions) -> ConvertedResult<SessionBuilder> {
+    let mut builder = apply_common_options(SessionBuilder::new(), &options)?;
+
+    if let Some(ssl_options) = &options.ssl_options {
+        builder = builder.tls_context(configure_ssl(ssl_options)?);
+    }
+
     if let Some(address_translator_config) = options.address_translator_config
         && let Some(address_mapping) = address_translator_config.address_mapping
     {
@@ -331,8 +400,67 @@ pub(crate) fn configure_session_builder(
         builder = builder.address_translator(Arc::new(address_mapping));
     }
 
-    builder = builder.default_execution_profile_handle(exec_profile_builder.build().into_handle());
     Ok(builder)
+}
+
+/// Configures a builder for a session that reaches nodes through client routes
+/// proxies, resolving their addresses by Host ID.
+fn configure_client_routes_builder(
+    client_routes_config: ClientRoutesConfig,
+    options: &SessionOptions,
+) -> ConvertedResult<ClientRoutesSessionBuilder> {
+    // Both of these are already impossible to express on the client routes
+    // builder, but we reject them explicitly rather than silently ignore them.
+    if options.address_translator_config.is_some() {
+        return Err(ConvertedError::from(make_js_error(
+            "clientRoutes cannot be combined with an address resolution policy: \
+             client routes performs its own Host ID based address translation",
+        )));
+    }
+    if options.ssl_options.is_some() {
+        return Err(ConvertedError::from(make_js_error(
+            "clientRoutes cannot be combined with sslOptions: \
+             TLS is not yet supported for client routes connections",
+        )));
+    }
+
+    let config = convert_client_routes_config(client_routes_config)?;
+    apply_common_options(ClientRoutesSessionBuilder::new(config), options)
+}
+
+/// Converts the JS side client routes configuration into the rust driver's one.
+pub(crate) fn convert_client_routes_config(
+    client_routes_config: ClientRoutesConfig,
+) -> ConvertedResult<ScyllaClientRoutesConfig> {
+    let proxies = client_routes_config
+        .proxies
+        .unwrap_or_default()
+        .into_iter()
+        .enumerate()
+        .map(|(index, proxy_config)| {
+            let connection_id = proxy_config
+                .connection_id
+                .filter(|id| !id.is_empty())
+                .ok_or_else(|| {
+                    ConvertedError::from(make_js_error(format!(
+                        "clientRoutes proxy at index {index} must have a non-empty connectionId"
+                    )))
+                })?;
+
+            let mut proxy = ClientRoutesProxy::new_with_connection_id(connection_id);
+            if let Some(hostname) = proxy_config.hostname_override.filter(|h| !h.is_empty()) {
+                proxy = proxy.with_overridden_hostname(hostname);
+            }
+            Ok(proxy)
+        })
+        .collect::<ConvertedResult<Vec<_>>>()?;
+
+    // Rejects an empty proxy list.
+    ScyllaClientRoutesConfig::new(proxies).map_err(|err| {
+        ConvertedError::from(make_js_error(format!(
+            "Invalid clientRoutes configuration: {err}"
+        )))
+    })
 }
 
 fn create_load_balancing_policy(

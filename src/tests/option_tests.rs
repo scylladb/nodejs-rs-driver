@@ -61,7 +61,8 @@ pub fn tests_check_client_option(options: SessionOptions, test_case: i32) {
                                 socket: "7.3.1.2:960".parse().unwrap()
                             }
                         )])
-                    })
+                    }),
+                    client_routes_config: None
                 }
             )
         }
@@ -80,7 +81,8 @@ pub fn tests_check_client_option(options: SessionOptions, test_case: i32) {
                     ssl_options: None,
                     load_balancing_config: None,
                     retry_policy: None,
-                    address_translator_config: None
+                    address_translator_config: None,
+                    client_routes_config: None
                 }
             )
         }
@@ -99,7 +101,8 @@ pub fn tests_check_client_option(options: SessionOptions, test_case: i32) {
                     ssl_options: None,
                     load_balancing_config: None,
                     retry_policy: None,
-                    address_translator_config: None
+                    address_translator_config: None,
+                    client_routes_config: None
                 }
             )
         }

@@ -20,6 +20,7 @@ Support for some optional driver features is planned for upcoming releases.
    logging/logging
    policies/index
    connecting/authentication
+   connecting/client-routes
    shutdown/shutdown
    migration-guide/migration-guide
    api/index
@@ -37,6 +38,7 @@ Contents
 - :doc:`Fetching Large Result Sets <paging/paging>` - Paging through large result sets
 - :doc:`Policies <policies/index>` - Load balancing and retry policies
 - :doc:`Authentication <connecting/authentication>` - Connecting with credentials or SSL
+- :doc:`Client Routes <connecting/client-routes>` - Connecting over private networking
 - :doc:`Shutdown <shutdown/shutdown>` - How the driver manages connection lifecycle
 - :doc:`Migration Guide <migration-guide/migration-guide>` - Migrating from the Apache ``cassandra-driver``
 - :doc:`API Reference <api/index>` - Full API documentation
@@ -59,6 +61,7 @@ The driver supports the following:
 - SSL support
 - Configurable load balancing, retry policies
 - Simple address translation policy
+- Private networking
 - Error handling, based on the Rust driver
 - Driver logging
 - Faster performance, compared to DataStax Node.js driver(*)

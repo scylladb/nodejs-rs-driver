@@ -227,8 +227,20 @@ export interface ExecutionOptions {
   setHints(hints: string[]): void;
 }
 
+/** A single client routes proxy the driver should read `system.client_routes` for. */
+export interface ClientRoutesProxy {
+  /** The ScyllaDB Cloud connection id used to filter `system.client_routes`. */
+  connectionId: string;
+  /**
+   * Overrides the hostname read from `system.client_routes` for this connection id.
+   * Useful for testing and for some cloud architectures.
+   */
+  hostnameOverride?: string;
+}
+
 export interface ClientOptions {
   contactPoints?: string[];
+  clientRoutes?: { proxies: ClientRoutesProxy[] };
   localDataCenter?: string;
   keyspace?: string;
   authProvider?: auth.AuthProvider;

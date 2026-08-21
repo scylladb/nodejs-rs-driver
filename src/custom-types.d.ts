@@ -29,7 +29,7 @@ export type PagingResult = [PagingStateWrapper | null, QueryResultWrapper]
  * Result of a paged query that can be continued via a QueryExecutor.
  * Serialized as a 3-element tuple: [pagingState, result, executor].
  * - pagingState is null when there are no more pages.
- * 
+ *
  * This type can also be used to represent an unpaged query result, to allow for better code reuse.
  * This kind of result can be represented by setting pagingState and executor to undefined.
  */
@@ -80,6 +80,17 @@ export interface LoadBalancingConfig {
   allowList?: Array<string>
 }
 
+/** A single client routes proxy passed to ClientRoutesConfig.proxies. */
+export interface ClientRoutesProxyConfig {
+  connectionId?: string
+  hostnameOverride?: string
+}
+
+/** Client routes configuration passed to SessionOptions.clientRoutesConfig. */
+export interface ClientRoutesConfig {
+  proxies?: Array<ClientRoutesProxyConfig>
+}
+
 /** Options for creating a new session via SessionWrapper.createSession. */
 export interface SessionOptions {
   connectPoints?: Array<string>
@@ -93,6 +104,7 @@ export interface SessionOptions {
   sslOptions?: SslOptions
   loadBalancingConfig?: LoadBalancingConfig
   retryPolicy?: RetryPolicyKind
+  clientRoutesConfig?: ClientRoutesConfig
 }
 
 /** Per-query options passed to QueryOptionsWrapper. */
