@@ -1,9 +1,45 @@
 import * as types from "../types";
 import { EmptyCallback, Host, token, ValueCallback } from "../../";
 import { CqlType } from "../../index";
+import { SessionWrapper as RustClient } from "../../index";
+import {
+  KeyspaceMetadata,
+  SimpleStrategy,
+  NetworkTopologyStrategy,
+  LocalStrategy,
+  OtherStrategy,
+} from "../../index";
+import { StrategyKind, Strategy } from "./strategy";
+
+import {
+  TableMetadata,
+  ColumnMetadata,
+  ColumnKind,
+} from "./table-metadata";
+import { MaterializedView } from "./materialized-view";
+import { Udt, UdtField } from "./user-defined-type";
+export {
+  TableMetadata,
+  ColumnMetadata,
+  ColumnKind,
+  MaterializedView,
+  Udt,
+  UdtField,
+};
+
 import dataTypes = types.dataTypes;
 import Uuid = types.Uuid;
 import InetAddress = types.InetAddress;
+
+export {
+  KeyspaceMetadata,
+  SimpleStrategy,
+  NetworkTopologyStrategy,
+  LocalStrategy,
+  OtherStrategy,
+  StrategyKind,
+  Strategy,
+};
 
 export interface Aggregate {
   argumentTypes: Array<{ code: dataTypes; info: any }>;
@@ -63,18 +99,6 @@ export interface ColumnInfo {
   customTypeName?: string;
 }
 
-export enum ColumnKind {
-  Regular = 0,
-  Static = 1,
-  ClusteringKey = 2,
-  PartitionKey = 3,
-}
-
-export interface ColumnMetadata {
-  type: ColumnInfo;
-  kind: ColumnKind;
-}
-
 export enum IndexKind {
   custom = 0,
   keys,
@@ -92,17 +116,6 @@ export interface Index {
   isCustomKind(): boolean;
 
   isKeysKind(): boolean;
-}
-
-export interface MaterializedView extends TableMetadata {
-  tableName: string;
-}
-
-export interface TableMetadata {
-  columns: { [name: string]: ColumnMetadata };
-  partitionKey: string[];
-  clusteringKey: string[];
-  partitioner: string | null;
 }
 
 export interface QueryTrace {
@@ -133,39 +146,9 @@ export interface SchemaFunction {
   signature: string[];
 }
 
-export interface UdtField {
-  name: string;
-  type: ColumnInfo;
-}
+export class Metadata {
+  constructor(client: RustClient);
 
-export interface Udt {
-  name: string;
-  keyspace: string;
-  fields: UdtField[];
-}
-
-export enum StrategyKind {
-  SimpleStrategy = 0,
-  NetworkTopologyStrategy = 1,
-  LocalStrategy = 2,
-  Other = 3,
-}
-
-export type Strategy =
-  | { kind: StrategyKind.SimpleStrategy; replicationFactor: number }
-  | { kind: StrategyKind.NetworkTopologyStrategy; datacenterRepfactors: { [datacenter: string]: number } }
-  | { kind: StrategyKind.LocalStrategy }
-  | { kind: StrategyKind.Other; name: string; data: { [key: string]: string } };
-
-export interface KeyspaceMetadata {
-  strategy: Strategy;
-  durableWrites: boolean;
-  tables: { [name: string]: TableMetadata };
-  views: { [name: string]: MaterializedView };
-  udts: { [name: string]: Udt };
-}
-
-export interface Metadata {
   getKeyspace(name: string): KeyspaceMetadata | null;
 
   getKeyspaces(): Map<string, KeyspaceMetadata>;

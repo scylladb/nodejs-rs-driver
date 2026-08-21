@@ -36,9 +36,9 @@ import type {
     ArrayOrObject,
     CqlValue,
     Host,
-    metadata as metadataModule,
     metrics as metricsModule,
 } from "../";
+import { metadata as metadataModule } from "../";
 
 const { ProfileManager } = executionProfile;
 const description = packageInfo.description;
@@ -337,6 +337,7 @@ class Client extends events.EventEmitter {
             this.rustClient = await rust.SessionWrapper.createSession(
                 this.rustOptions,
             );
+            this.metadata = new metadataModule.Metadata(this.rustClient);
         } catch (err) {
             // We should close the pools (if any) and reset the state to allow successive calls to connect()
             this.connected = false;
