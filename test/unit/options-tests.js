@@ -1,6 +1,7 @@
 "use strict";
 
 const net = require("node:net");
+const { assert } = require("chai");
 const rust = require("../../index");
 const { setRustOptions, extend } = require("../../lib/client-options");
 const {
@@ -89,5 +90,75 @@ describe("Client options", function () {
     });
     it("should correctly verify empty client options", function () {
         extend({ contactPoints: ["1.1.1.1"] });
+    });
+
+    describe("protocolOptions.port", function () {
+        function connectPointsFor(contactPoints, port) {
+            return setRustOptions({
+                contactPoints,
+                protocolOptions: { port },
+            }).connectPoints;
+        }
+
+        it("should append the port to a contact point without one", function () {
+            assert.deepStrictEqual(
+                connectPointsFor(["127.0.0.1", "db.example.com"], 9142),
+                ["127.0.0.1:9142", "db.example.com:9142"],
+            );
+        });
+
+        it("should leave a contact point that already specifies a port", function () {
+            assert.deepStrictEqual(connectPointsFor(["127.0.0.1:9043"], 9142), [
+                "127.0.0.1:9043",
+            ]);
+        });
+
+        it("should bracket a bare IPv6 address before appending the port", function () {
+            assert.deepStrictEqual(connectPointsFor(["::1"], 9142), [
+                "[::1]:9142",
+            ]);
+        });
+
+        it("should append the port to a bracketed IPv6 address without one", function () {
+            assert.deepStrictEqual(connectPointsFor(["[::1]"], 9142), [
+                "[::1]:9142",
+            ]);
+        });
+
+        it("should leave a bracketed IPv6 contact point that already specifies a port", function () {
+            assert.deepStrictEqual(connectPointsFor(["[::1]:9043"], 9142), [
+                "[::1]:9043",
+            ]);
+        });
+
+        it("should apply the default port when protocolOptions is not set", function () {
+            assert.deepStrictEqual(
+                setRustOptions(extend({ contactPoints: ["127.0.0.1"] }))
+                    .connectPoints,
+                ["127.0.0.1:9042"],
+            );
+        });
+
+        it("should reject a port outside the valid range", function () {
+            assert.throws(
+                () =>
+                    extend({
+                        contactPoints: ["127.0.0.1"],
+                        protocolOptions: { port: 65536 },
+                    }),
+                TypeError,
+            );
+        });
+
+        it("should reject a port that is not an integer", function () {
+            assert.throws(
+                () =>
+                    extend({
+                        contactPoints: ["127.0.0.1"],
+                        protocolOptions: { port: "9042" },
+                    }),
+                TypeError,
+            );
+        });
     });
 });
