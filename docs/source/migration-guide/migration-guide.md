@@ -50,6 +50,8 @@ The following options remain unchanged:
 - `encoding.copyBuffer`
 - `encoding.useUndefinedAsUnset`
 - `maxPrepared`
+- `protocolOptions.port`: applied to every contact point that does not carry its own
+  `ipAddress:port` suffix, and defaulting to 9042
 
 The following option implementation has changed significantly,
 but the meaning of the option remains unchanged:
