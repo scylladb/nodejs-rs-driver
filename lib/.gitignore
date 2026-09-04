@@ -9,3 +9,5 @@ errors.js
 errors.d.ts
 host.js
 host.d.ts
+token.js
+token.d.ts

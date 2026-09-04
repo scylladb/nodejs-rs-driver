@@ -1,6 +1,6 @@
 use napi::Env;
 use napi::bindgen_prelude::{
-    FnArgs, FromNapiValue, Function, FunctionRef, JsValue, Object, Unknown,
+    BigInt, FnArgs, FromNapiValue, Function, FunctionRef, JsValue, Object, Unknown,
 };
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -22,6 +22,7 @@ pub mod js_constructible_class {
     pub enum UdtField {}
     pub enum Udt {}
     pub enum SocketAddress {}
+    pub enum Token {}
     pub enum Host {}
     pub enum SimpleStrategy {}
     pub enum NetworkTopologyStrategy {}
@@ -41,6 +42,9 @@ type TestJsClassCtorArgs<'a> = FnArgs<(&'a str, i32)>;
 /// `net.SocketAddress` takes a single options object, which `SocketAddrWrapper`'s `ToNapiValue`
 /// impl produces directly.
 type SocketAddressCtorArgs = FnArgs<(SocketAddrWrapper,)>;
+
+/// Arguments passed to `Token(value)`.
+type TokenCtorArgs = FnArgs<(BigInt,)>;
 
 /// Arguments passed to `Host(address, datacenter, rack, hostId)`.
 pub(crate) type HostCtorArgs<'a> = FnArgs<(
@@ -294,6 +298,15 @@ define_js_ctor!(
     build_fn: build_other_strategy,
     args: OtherStrategyCtorArgs<'_>,
     class_name: OtherStrategy,
+);
+
+define_js_ctor!(
+    /// `Token(value)`.
+    static_name: TOKEN_CTOR,
+    register_fn: register_token_ctor,
+    build_fn: build_token,
+    args: TokenCtorArgs,
+    class_name: Token,
 );
 
 define_js_ctor!(

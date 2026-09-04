@@ -9,6 +9,7 @@ import * as metrics from "./lib/metrics";
 import * as tracker from "./lib/tracker";
 import * as metadata from "./lib/metadata";
 import { Host, HostMap } from "./lib/host";
+import { Token, TokenRange } from "./lib/token";
 import Long = types.Long;
 import Uuid = types.Uuid;
 
@@ -339,32 +340,5 @@ export class ExecutionProfile {
 }
 
 export namespace token {
-  interface Token {
-    compare(other: Token): number;
-
-    equals(other: Token): boolean;
-
-    getType(): { code: types.dataTypes; info: any };
-
-    getValue(): any;
-  }
-
-  interface TokenRange {
-    start: Token;
-    end: Token;
-
-    compare(other: TokenRange): number;
-
-    contains(token: Token): boolean;
-
-    equals(other: TokenRange): boolean;
-
-    isEmpty(): boolean;
-
-    isWrappedAround(): boolean;
-
-    splitEvenly(numberOfSplits: number): TokenRange[];
-
-    unwrap(): TokenRange[];
-  }
+  export { Token, TokenRange };
 }

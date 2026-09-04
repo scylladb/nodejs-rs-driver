@@ -53,11 +53,6 @@ class Host extends events.EventEmitter {
     rack: string | null;
 
     /**
-     * Gets the tokens assigned to the node.
-     */
-    tokens: string[];
-
-    /**
      * Gets the id of the host.
      *
      * This identifier is used by the server for internal communication / gossip.
@@ -89,7 +84,6 @@ class Host extends events.EventEmitter {
         this.cassandraVersion = null;
         this.datacenter = datacenter;
         this.rack = rack;
-        this.tokens = [];
         this.hostId = Uuid.fromRust(hostId);
     }
     /**

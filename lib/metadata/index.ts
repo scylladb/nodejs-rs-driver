@@ -5,10 +5,11 @@
  * @module metadata
  */
 
-import { EmptyCallback, token, ValueCallback } from "../..";
+import { EmptyCallback, ValueCallback } from "../..";
 // TODO: remove once `lib/promise-utils.js` is converted to typescript.
 // @ts-ignore
 import promiseUtils = require("../promise-utils");
+import { Token, TokenRange, minTokenRange } from "../token";
 import { Host } from "../host";
 import types = require("../types");
 import { ColumnInfo } from "../types/cql-utils";
@@ -80,58 +81,100 @@ class Metadata {
      * It uses the pre-loaded keyspace metadata to retrieve the replicas for a token for a given keyspace.
      * When the keyspace metadata has not been loaded, it returns null.
      * @param {string} keyspaceName Name of the keyspace.
-     * @param {Buffer | token.Token | token.TokenRange} token Can be Buffer (serialized partition key),
+     * @param {Buffer | Token | TokenRange} token Can be Buffer (serialized partition key),
      * Token or TokenRange.
      * @returns {Host[]} The replicas.
      */
     getReplicas(
         keyspaceName: string,
-        token: Buffer | token.Token | token.TokenRange,
+        token: Buffer | Token | TokenRange,
     ): Host[] {
         throw new Error("TODO: Not implemented");
     }
 
     /**
      * Gets the token ranges that define data distribution in the ring.
-     * @returns {Set<token.TokenRange>} The ranges of the ring or empty set if schema metadata is
-     * not enabled.
+     * @returns {Set<TokenRange>} The ranges of the ring or empty set if schema metadata is not enabled.
      */
-    getTokenRanges(): Set<token.TokenRange> {
-        throw new Error("TODO: Not implemented");
+    getTokenRanges(): Set<TokenRange> {
+        let ringTokens = this.#rustClient.getRingTokens();
+        const tokenRanges = new Set<TokenRange>();
+        if (ringTokens.length === 1) {
+            // A single token owns the whole ring, that is the range ]minToken, minToken].
+            tokenRanges.add(minTokenRange());
+            return tokenRanges;
+        }
+        for (let i = 0; i < ringTokens.length; i++) {
+            tokenRanges.add(
+                new TokenRange(
+                    ringTokens[i],
+                    ringTokens[(i + 1) % ringTokens.length],
+                ),
+            );
+        }
+        return tokenRanges;
     }
 
     /**
      * Gets the token ranges that are replicated on the given host, for the given keyspace.
      * @param {string} keyspaceName The name of the keyspace to get ranges for.
      * @param {Host} host The host.
-     * @returns {Set<token.TokenRange> | null} Ranges for the keyspace on this host or null if
-     * keyspace isn't found or hasn't been loaded.
+     * @returns {Set<TokenRange> | null} Ranges for the keyspace on this host or null if keyspace
+     * isn't found or hasn't been loaded.
      */
     getTokenRangesForHost(
         keyspaceName: string,
         host: Host,
-    ): Set<token.TokenRange> | null {
+    ): Set<TokenRange> | null {
         throw new Error("TODO: Not implemented");
     }
 
     /**
-     * Constructs a Token from the input buffer(s) or string input. If a string is passed in
-     * it is assumed this matches the token representation reported by cassandra.
-     * @param {Buffer[] | Buffer | string} components The token components.
-     * @returns {token.Token} Constructed token from the input buffer.
+     * Constructs a Token from the input buffer(s)
+     *
+     * The token of a partition key is computed by the Rust driver, which reads the partitioner
+     * from the table's own metadata, so the components have to be the values of that table's
+     * partition key columns, in the order the table declares them, each already serialized with
+     * the CQL type of its column.
+     * @example <caption>Composite partition key</caption>
+     * // Given:
+     * //   CREATE TABLE ks1.users (
+     * //     user_id int,
+     * //     region text,
+     * //     created_at timestamp,
+     * //     PRIMARY KEY ((user_id, region), created_at)
+     * //   )
+     * // the partition key is (user_id, region), so the components must be provided in that
+     * // order: the encoded user_id, then the encoded region.
+     * const userId = Buffer.alloc(4);
+     * userId.writeInt32BE(42);
+     * const region = Buffer.from("eu-west", "utf8");
+     * const t = client.metadata.newToken([userId, region], "ks1", "users");
+     * @param {Buffer[] | Buffer} components The token components.
+     * @param {string} keyspaceName Name of the keyspace the table belongs to.
+     * @param {string} tableName Name of the table the partition key belongs to.
+     * @returns {Token} Constructed token from the input buffer.
      */
-    newToken(components: Buffer[] | Buffer | string): token.Token {
-        throw new Error("TODO: Not implemented");
+    newToken(
+        components: Buffer[] | Buffer,
+        keyspaceName: string,
+        tableName: string,
+    ): Token {
+        return this.#rustClient.computeToken(
+            Array.isArray(components) ? components : [components],
+            keyspaceName,
+            tableName,
+        );
     }
 
     /**
      * Constructs a TokenRange from the given start and end tokens.
-     * @param {token.Token} start The start token.
-     * @param {token.Token} end The end token.
-     * @returns {token.TokenRange} Build range spanning from start (exclusive) to end (inclusive).
+     * @param {Token} start The start token.
+     * @param {Token} end The end token.
+     * @returns {TokenRange} Build range spanning from start (exclusive) to end (inclusive).
      */
-    newTokenRange(start: token.Token, end: token.Token): token.TokenRange {
-        throw new Error("TODO: Not implemented");
+    newTokenRange(start: Token, end: Token): TokenRange {
+        return new TokenRange(start, end);
     }
 
     /**
