@@ -1,5 +1,7 @@
-use crate::errors::{ConvertedError, ConvertedResult, JsResult, with_custom_error_sync};
-use crate::metadata::host::cache_host_map;
+use crate::errors::{
+    ConvertedError, ConvertedResult, JsResult, make_js_error, with_custom_error_sync,
+};
+use crate::metadata::host::cache_hosts;
 use crate::session::SessionWrapper;
 use crate::types::type_wrappers::ComplexType;
 use crate::utils::cache::{NapiRefCache, ReferenceCache, SingleNapiRefCache};
@@ -12,10 +14,11 @@ use crate::utils::js_instance::JsInstance;
 use crate::utils::napi_ref::NapiRef;
 use crate::utils::to_napi_obj::NamedMap;
 use napi::Env;
-use napi::bindgen_prelude::{FnArgs, JavaScriptClassExt, Reference};
+use napi::bindgen_prelude::{FnArgs, JavaScriptClassExt, JsObjectValue, Object, Reference};
 use scylla::cluster::metadata::{
     Column, ColumnKind, Keyspace, MaterializedView, Strategy, Table, UserDefinedType,
 };
+use scylla::routing::{Shard, Token};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -34,6 +37,21 @@ pub enum ViewRecord {}
 /// Tags the `Record<string, Udt>` handed to JS by `KeyspaceMetadata#udts`.
 pub enum UdtRecord {}
 
+/// Tags the `{ host, shard }` object handed to JS by `getReplicas`.
+pub enum ReplicaValue {}
+
+/// Builds the `{ host, shard }` object describing one replica of a partition.
+fn build_replica<'env>(
+    env: &'env Env,
+    host: JsInstance<'env, js_constructible_class::Host>,
+    shard: Shard,
+) -> napi::Result<JsInstance<'env, ReplicaValue>> {
+    let mut replica = Object::new(env)?;
+    replica.set_named_property("host", host)?;
+    replica.set_named_property("shard", shard)?;
+    Ok(JsInstance::from_object(replica))
+}
+
 /// A snapshot of the cluster's topology and schema metadata, as known by the driver
 /// at a given point in time.
 ///
@@ -43,13 +61,15 @@ pub enum UdtRecord {}
 /// snapshot backing a given `ClusterSnapshot` is stale, by comparing Arc pointers.
 pub(crate) struct ClusterSnapshot {
     pub(crate) inner: Arc<scylla::cluster::ClusterState>,
-    /// All nodes known by the Rust driver at the time this snapshot was created, as a JS `HostMap`
-    /// of `Host` objects keyed by address.
+    /// All nodes known by the Rust driver at the time this snapshot was created, as JS `Host`
+    /// objects keyed by the hex-encoded bytes of their host id. Filled in full when the snapshot
+    /// is created.
+    hosts: NapiRefCache<js_constructible_class::Host>,
+    /// The same nodes, collected into the single JS `HostMap` handed to JS as `client.hosts`.
     ///
-    /// The `NapiRef` releases the JS object it pins automatically when dropped (i.e. when this
+    /// The `NapiRef`s release the JS objects they pin automatically when dropped (i.e. when this
     /// `ClusterSnapshot` itself is dropped, or replaced by a fresher one), so no custom finalizer
-    /// is needed here to avoid leaking a `HostMap` on every cluster state refresh. Pinning the map
-    /// keeps every `Host` it holds alive, so the hosts need no separate `NapiRef`s.
+    /// is needed here to avoid leaking a `HostMap` and its hosts on every cluster state refresh.
     pub(crate) host_map: NapiRef<js_constructible_class::HostMap>,
     /// Cache of keyspaces of this snapshot, populated lazily.
     keyspace_cache: ReferenceCache<KeyspaceWrapper>,
@@ -58,14 +78,56 @@ pub(crate) struct ClusterSnapshot {
 }
 
 impl ClusterSnapshot {
-    pub(crate) fn new(inner: Arc<scylla::cluster::ClusterState>, env: &Env) -> napi::Result<Self> {
-        let host_map = cache_host_map(&inner, env)?;
+    pub(crate) fn new(
+        inner: Arc<scylla::cluster::ClusterState>,
+        env: &Env,
+    ) -> ConvertedResult<Self> {
+        let hosts = NapiRefCache::new();
+        let host_map = cache_hosts(&inner, env, &hosts)?;
         Ok(ClusterSnapshot {
             inner,
+            hosts,
             host_map,
             keyspace_cache: ReferenceCache::new(),
             keyspaces_record: SingleNapiRefCache::new(),
         })
+    }
+
+    /// The replicas of `token` of the given table: each the shard of a node the partition lives
+    /// on, paired with the very same JS `Host` object this snapshot's `HostMap` holds.
+    ///
+    /// If passed keyspace is unknown, this falls back to Strategy::SimpleStrategy with
+    /// replication_factor = 1, walks the global ring from token and returns the first node it finds.
+    ///
+    /// If keyspace exists and uses tablets, but the table doesn't exist, this uses keyspace's real
+    /// replication strategy over the vnode ring (tablets aren't considered since they can't be
+    /// looked up).
+    ///
+    /// TODO: update this comment when Rust Driver is fixed – https://github.com/scylladb/scylla-rust-driver/issues/1908.
+    pub(crate) fn replicas<'env>(
+        &self,
+        env: &'env Env,
+        keyspace: &str,
+        table: &str,
+        token: Token,
+    ) -> ConvertedResult<Vec<JsInstance<'env, ReplicaValue>>> {
+        self.inner
+            .get_token_endpoints(keyspace, table, token)
+            .into_iter()
+            .map(|(node, shard)| {
+                let host = self
+                    .hosts
+                    .get_or_init(env, &node.host_id.simple().to_string(), || {
+                        ConvertedResult::Ok(None)
+                    })?.ok_or_else(|| {
+                        ConvertedError::from(make_js_error(format!(
+                            "Node {} replicates {token:?} but is not part of the cluster state it was read from",
+                            node.host_id
+                        )))
+                    })?;
+                build_replica(env, host, shard).map_err(ConvertedError::from)
+            })
+            .collect::<ConvertedResult<Vec<_>>>()
     }
 
     /// Returns the cached `KeyspaceWrapper` reference for `name`, converting and caching it lazily

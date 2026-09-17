@@ -8,7 +8,7 @@ import * as types from "./lib/types";
 import * as metrics from "./lib/metrics";
 import * as tracker from "./lib/tracker";
 import * as metadata from "./lib/metadata";
-import { Host, HostMap } from "./lib/host";
+import { Host, HostMap, Replica } from "./lib/host";
 import { Token, TokenRange } from "./lib/token";
 import Long = types.Long;
 import Uuid = types.Uuid;
@@ -19,6 +19,7 @@ export * as mapping from "./lib/mapping";
 export * as errors from "./lib/errors";
 export { auth, metadata, metrics, policies, tracker, types };
 export { Host, HostMap };
+export type { Replica };
 
 export const version: number;
 
@@ -152,7 +153,11 @@ export class Client extends events.EventEmitter {
 
   shutdown(callback: EmptyCallback): void;
 
-  getReplicas(keyspace: string, token: Buffer): Host[];
+  getReplicas(
+    keyspace: string,
+    table: string,
+    token: Token | TokenRange,
+  ): Replica[];
 
   getState(): metadata.ClientState;
 }

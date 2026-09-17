@@ -127,6 +127,17 @@ class Host extends events.EventEmitter {
 }
 
 /**
+ * A single replica of a partition: the node that holds it, and the shard of that node it lives
+ * on.
+ */
+interface Replica {
+    /** The node replicating the partition. */
+    host: Host;
+    /** The index of the shard of that node the partition lives on, counting from zero. */
+    shard: number;
+}
+
+/**
  * Represents an associative-array of {@link Host hosts} that can be iterated.
  * It creates an internal copy when adding or removing, making it safe to iterate using the values()
  * method within async operations.
@@ -251,6 +262,7 @@ class HostMap extends events.EventEmitter {
 }
 
 export { Host, HostMap };
+export type { Replica };
 
 // Registers the Host and HostMap constructors, so that Rust can construct fully-formed
 // instances directly when reading cluster metadata.

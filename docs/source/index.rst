@@ -19,6 +19,7 @@ Support for some optional driver features is planned for upcoming releases.
    paging/paging
    metadata/schema
    metadata/topology
+   metadata/replicas
    tracing/tracing
    logging/logging
    policies/index
@@ -41,6 +42,7 @@ Contents
 - :doc:`Fetching Large Result Sets <paging/paging>` - Paging through large result sets
 - :doc:`Schema Metadata <metadata/schema>` - Inspecting keyspaces, tables, views and user-defined types
 - :doc:`Cluster Topology <metadata/topology>` - Nodes, addresses, and datacenter awareness
+- :doc:`Replicas <metadata/replicas>` - Host and shard pairs, that replicate a partition
 - :doc:`Query Tracing <tracing/tracing>` - Diagnosing query execution with server-side traces
 - :doc:`Policies <policies/index>` - Load balancing and retry policies
 - :doc:`Authentication <connecting/authentication>` - Connecting with credentials or SSL
