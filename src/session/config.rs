@@ -7,8 +7,7 @@ use napi::bindgen_prelude::BigInt;
 use openssl::pkcs12::Pkcs12;
 use openssl::pkey::PKey;
 use openssl::ssl::{
-    SslContext, SslContextBuilder, SslMethod, SslOptions as OpenSslOptions, SslVerifyMode,
-    SslVersion,
+    SslConnector, SslMethod, SslOptions as OpenSslOptions, SslVerifyMode, SslVersion,
 };
 use openssl::x509::X509;
 use openssl::x509::store::X509StoreBuilder;
@@ -17,7 +16,7 @@ use scylla::client::client_routes::{
     ClientRoutesConfig as ScyllaClientRoutesConfig, ClientRoutesProxy,
 };
 use scylla::client::execution_profile::ExecutionProfileBuilder;
-use scylla::client::session::Session;
+use scylla::client::session::{OpenSsl010Config, Session};
 use scylla::client::session_builder::{
     ClientRoutesSessionBuilder, GenericSessionBuilder, SessionBuilder,
     SessionBuilderKindSupportsKnownNodes,
@@ -154,10 +153,10 @@ fn tls_version_to_ssl_version(version: &TlsVersion) -> SslVersion {
     }
 }
 
-fn configure_ssl(options: &SslOptions) -> ConvertedResult<Option<SslContext>> {
-    let mut ssl_context_builder = SslContextBuilder::new(SslMethod::tls())?;
+fn configure_ssl(options: &SslOptions) -> ConvertedResult<Option<OpenSsl010Config>> {
+    let mut ssl_connector_builder = SslConnector::builder(SslMethod::tls())?;
 
-    ssl_context_builder.set_verify(match options.reject_unauthorized {
+    ssl_connector_builder.set_verify(match options.reject_unauthorized {
         Some(false) => SslVerifyMode::NONE,
         Some(true) | None => SslVerifyMode::PEER,
     });
@@ -187,30 +186,30 @@ fn configure_ssl(options: &SslOptions) -> ConvertedResult<Option<SslContext>> {
         }
         if !cipher_list.is_empty() {
             let cipher_list_string = cipher_list.join(":");
-            ssl_context_builder.set_cipher_list(&cipher_list_string)?;
+            ssl_connector_builder.set_cipher_list(&cipher_list_string)?;
         }
         if !ciphersuites.is_empty() {
             let ciphersuites_string = ciphersuites.join(":");
-            ssl_context_builder.set_ciphersuites(&ciphersuites_string)?;
+            ssl_connector_builder.set_ciphersuites(&ciphersuites_string)?;
         }
     }
 
     if let Some(min_version) = &options.min_version {
         let ssl_version = tls_version_to_ssl_version(min_version);
-        ssl_context_builder.set_min_proto_version(Some(ssl_version))?;
+        ssl_connector_builder.set_min_proto_version(Some(ssl_version))?;
     }
 
     if let Some(max_version) = &options.max_version {
         let ssl_version = tls_version_to_ssl_version(max_version);
-        ssl_context_builder.set_max_proto_version(Some(ssl_version))?;
+        ssl_connector_builder.set_max_proto_version(Some(ssl_version))?;
     }
 
     if let Some(sigalgs) = &options.sigalgs {
-        ssl_context_builder.set_sigalgs_list(sigalgs)?;
+        ssl_connector_builder.set_sigalgs_list(sigalgs)?;
     }
 
     if let Some(ecdh_curve) = &options.ecdh_curve {
-        ssl_context_builder.set_groups_list(ecdh_curve)?;
+        ssl_connector_builder.set_groups_list(ecdh_curve)?;
     }
 
     if let Some(secure_options) = &options.secure_options {
@@ -221,20 +220,22 @@ fn configure_ssl(options: &SslOptions) -> ConvertedResult<Option<SslContext>> {
                 secure_options
             ))));
         }
-        ssl_context_builder.set_options(OpenSslOptions::from_bits_truncate(flags));
+        ssl_connector_builder.set_options(OpenSslOptions::from_bits_truncate(flags));
     }
 
     if let Some(true) = options.honor_cipher_order {
-        ssl_context_builder.set_options(OpenSslOptions::CIPHER_SERVER_PREFERENCE);
+        ssl_connector_builder.set_options(OpenSslOptions::CIPHER_SERVER_PREFERENCE);
     }
 
     if let Some(ca_list) = &options.ca {
+        // Replaces the store, rather than adding to it, so a cluster with its own CA does
+        // not keep trusting the system roots that `SslConnector` starts out with.
         let mut store_builder = X509StoreBuilder::new()?;
         for ca_pem in ca_list {
             let ca = X509::from_pem(ca_pem.as_bytes())?;
             store_builder.add_cert(ca)?;
         }
-        ssl_context_builder.set_cert_store(store_builder.build());
+        ssl_connector_builder.set_cert_store(store_builder.build());
     }
 
     match (&options.pfx, &options.cert, &options.key) {
@@ -243,10 +244,10 @@ fn configure_ssl(options: &SslOptions) -> ConvertedResult<Option<SslContext>> {
             let mut certs_iter = certs.into_iter();
 
             if let Some(main_cert) = certs_iter.next() {
-                ssl_context_builder.set_certificate(&main_cert)?;
+                ssl_connector_builder.set_certificate(&main_cert)?;
             }
             for chain_cert in certs_iter {
-                ssl_context_builder.add_extra_chain_cert(chain_cert)?;
+                ssl_connector_builder.add_extra_chain_cert(chain_cert)?;
             }
             let pkey = match PKey::private_key_from_pem(key_pem.as_bytes()) {
                 Ok(pkey) => pkey,
@@ -260,7 +261,7 @@ fn configure_ssl(options: &SslOptions) -> ConvertedResult<Option<SslContext>> {
                 }
                 Err(e) => return Err(e.into()),
             };
-            ssl_context_builder.set_private_key(&pkey)?;
+            ssl_connector_builder.set_private_key(&pkey)?;
         }
         (Some(pfx_data), None, None) => {
             let pfx_bytes = pfx_data.as_bytes();
@@ -275,15 +276,15 @@ fn configure_ssl(options: &SslOptions) -> ConvertedResult<Option<SslContext>> {
             let parsed = pkcs12.parse2(passphrase)?;
 
             if let Some(cert) = parsed.cert {
-                ssl_context_builder.set_certificate(&cert)?;
+                ssl_connector_builder.set_certificate(&cert)?;
             }
             if let Some(pkey) = parsed.pkey {
-                ssl_context_builder.set_private_key(&pkey)?;
+                ssl_connector_builder.set_private_key(&pkey)?;
             }
 
             if let Some(ca_chain) = parsed.ca {
                 for ca_cert in ca_chain {
-                    ssl_context_builder.add_extra_chain_cert(ca_cert)?;
+                    ssl_connector_builder.add_extra_chain_cert(ca_cert)?;
                 }
             }
         }
@@ -294,7 +295,7 @@ fn configure_ssl(options: &SslOptions) -> ConvertedResult<Option<SslContext>> {
         }
     };
 
-    Ok(Some(ssl_context_builder.build()))
+    Ok(Some(OpenSsl010Config::new(ssl_connector_builder)))
 }
 
 /// A session builder, in one of the two modes the driver supports.
