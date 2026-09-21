@@ -46,9 +46,9 @@ export function defaultLoadBalancingPolicy(
     }
 
     return new loadBalancing.DefaultLoadBalancingPolicy({
-        localDc: localDc,
+        preferDatacenter: localDc,
         permitDcFailover: false,
-    } as loadBalancing.LoadBalancingConfig);
+    });
 }
 
 /**
