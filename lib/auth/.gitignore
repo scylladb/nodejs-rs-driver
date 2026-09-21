@@ -1,0 +1,11 @@
+# TypeScript build output (emitted in-place from .ts files)
+provider.js
+provider.d.ts
+no-auth-provider.js
+no-auth-provider.d.ts
+plain-text-auth-provider.js
+plain-text-auth-provider.d.ts
+gssapi-client.js
+gssapi-client.d.ts
+index.js
+index.d.ts

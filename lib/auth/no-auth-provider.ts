@@ -1,15 +1,14 @@
-// @ts-nocheck
 "use strict";
 
-const { AuthProvider, Authenticator } = require("./provider");
-const errors = require("../errors");
+import { AuthProvider, Authenticator, AuthenticatorCallback } from "./provider";
+import errors = require("../errors");
 
 /**
  * Internal authentication provider that is used when no provider has been set by the user.
  * @ignore
  */
 class NoAuthProvider extends AuthProvider {
-    newAuthenticator(endpoint) {
+    newAuthenticator(endpoint: string): Authenticator {
         // Use an authenticator that doesn't allow auth flow
         return new NoAuthAuthenticator(endpoint);
     }
@@ -20,12 +19,14 @@ class NoAuthProvider extends AuthProvider {
  * @ignore
  */
 class NoAuthAuthenticator extends Authenticator {
-    constructor(endpoint) {
+    endpoint: string;
+
+    constructor(endpoint: string) {
         super();
         this.endpoint = endpoint;
     }
 
-    initialResponse(callback) {
+    initialResponse(callback: AuthenticatorCallback): void {
         callback(
             new errors.AuthenticationError(
                 `Host ${this.endpoint} requires authentication, but no authenticator found in the options`,
@@ -34,4 +35,4 @@ class NoAuthAuthenticator extends Authenticator {
     }
 }
 
-module.exports = NoAuthProvider;
+export = NoAuthProvider;

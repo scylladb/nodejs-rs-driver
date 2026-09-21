@@ -1,9 +1,7 @@
-// @ts-nocheck
 "use strict";
-const provider = require("./provider.js");
-const utils = require("../utils");
-const AuthProvider = provider.AuthProvider;
-const Authenticator = provider.Authenticator;
+
+import { AuthProvider, Authenticator, AuthenticatorCallback } from "./provider";
+import utils = require("../utils");
 
 /**
  * Provides plain text [Authenticator]{@link module:auth~Authenticator} instances to be used when
@@ -16,22 +14,25 @@ const Authenticator = provider.Authenticator;
  * @alias module:auth~PlainTextAuthProvider
  */
 class PlainTextAuthProvider extends AuthProvider {
+    username: string;
+    password: string;
+
     /**
      * Creates a new instance of the Authenticator provider
-     * @param {String} username User name in plain text
-     * @param {String} password Password in plain text
+     * @param username User name in plain text
+     * @param password Password in plain text
      */
-    constructor(username, password) {
+    constructor(username: string, password: string) {
         super();
         this.username = username;
         this.password = password;
     }
+
     /**
      * Returns a new [Authenticator]{@link module:auth~Authenticator} instance to be used for plain text authentication.
      * @override
-     * @returns {Authenticator}
      */
-    newAuthenticator() {
+    newAuthenticator(endpoint: string, name: string): Authenticator {
         return new PlainTextAuthenticator(this.username, this.password);
     }
 }
@@ -40,12 +41,16 @@ class PlainTextAuthProvider extends AuthProvider {
  * @ignore
  */
 class PlainTextAuthenticator extends Authenticator {
-    constructor(username, password) {
+    username: string;
+    password: string;
+
+    constructor(username: string, password: string) {
         super();
         this.username = username;
         this.password = password;
     }
-    initialResponse(callback) {
+
+    initialResponse(callback: AuthenticatorCallback): void {
         const initialToken = Buffer.concat([
             utils.allocBufferFromArray([0]),
             utils.allocBufferFromString(this.username, "utf8"),
@@ -54,13 +59,14 @@ class PlainTextAuthenticator extends Authenticator {
         ]);
         callback(null, initialToken);
     }
-    evaluateChallenge(challenge, callback) {
+
+    evaluateChallenge(
+        challenge: Buffer,
+        callback: AuthenticatorCallback,
+    ): void {
         // noop
         callback();
     }
 }
 
-module.exports = {
-    PlainTextAuthenticator,
-    PlainTextAuthProvider,
-};
+export { PlainTextAuthenticator, PlainTextAuthProvider };
