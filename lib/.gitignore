@@ -11,3 +11,5 @@ host.js
 host.d.ts
 token.js
 token.d.ts
+promise-utils.js
+promise-utils.d.ts

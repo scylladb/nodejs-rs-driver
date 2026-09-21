@@ -1,28 +1,35 @@
-// @ts-nocheck
 "use strict";
+
+import { EventEmitter } from "events";
+// TODO: remove once `lib/execution-options.js` is converted to typescript.
+// @ts-ignore
+import { ExecutionOptions } from "./execution-options";
+
+/**
+ * A callback that reports either a failure or the value produced.
+ */
+type ResultCallback<T = any> = (err?: Error | null, result?: T) => void;
 
 /**
  * Creates a non-clearable timer that resolves the promise once elapses.
- * @param {number} ms
- * @returns {Promise<void>}
  */
-function delay(ms) {
+function delay(ms?: number): Promise<void> {
     return new Promise((r) => setTimeout(r, ms || 0));
 }
 
 /**
  * Creates a Promise that gets resolved or rejected based on an event.
- * @param {object} emitter
- * @param {string} eventName
- * @returns {Promise}
  */
-function fromEvent(emitter, eventName) {
+function fromEvent<T = any>(
+    emitter: EventEmitter,
+    eventName: string,
+): Promise<T> {
     return new Promise((resolve, reject) =>
-        emitter.once(eventName, (err, result) => {
+        emitter.once(eventName, (err?: Error | null, result?: T) => {
             if (err) {
                 reject(err);
             } else {
-                resolve(result);
+                resolve(result as T);
             }
         }),
     );
@@ -30,16 +37,16 @@ function fromEvent(emitter, eventName) {
 
 /**
  * Creates a Promise from a callback based function.
- * @param {Function} fn
- * @returns {Promise}
  */
-function fromCallback(fn) {
+function fromCallback<T = any>(
+    fn: (callback: ResultCallback<T>) => void,
+): Promise<T> {
     return new Promise((resolve, reject) =>
-        fn((err, result) => {
+        fn((err?: Error | null, result?: T) => {
             if (err) {
                 reject(err);
             } else {
-                resolve(result);
+                resolve(result as T);
             }
         }),
     );
@@ -47,12 +54,12 @@ function fromCallback(fn) {
 
 /**
  * Gets a function that has the signature of a callback that invokes the appropriate promise handler parameters.
- * @param {Function} resolve
- * @param {Function} reject
- * @returns {Function}
  */
-function getCallback(resolve, reject) {
-    return function (err, result) {
+function getCallback(
+    resolve: (value: any) => void,
+    reject: (reason?: any) => void,
+): ResultCallback {
+    return function (err?: Error | null, result?: any) {
         if (err) {
             reject(err);
         } else {
@@ -61,29 +68,41 @@ function getCallback(resolve, reject) {
     };
 }
 
-async function invokeSequentially(info, length, fn) {
+async function invokeSequentially(
+    info: { counter: number },
+    length: number,
+    fn: (index: number) => Promise<any>,
+): Promise<void> {
     let index;
     while ((index = info.counter++) < length) {
         await fn(index);
     }
 }
 
+// TODO: type lbp after `lib/policies` is converted to typescript.
 /**
  * Invokes the new query plan of the load balancing policy and returns a Promise.
- * @param {LoadBalancingPolicy} lbp The load balancing policy.
- * @param {String} keyspace Name of currently logged keyspace at `Client` level.
- * @param {ExecutionOptions|null} executionOptions The information related to the execution of the request.
- * @returns {Promise<Iterator>}
+ * @param lbp The load balancing policy.
+ * @param keyspace Name of currently logged keyspace at `Client` level.
+ * @param executionOptions The information related to the execution of the request.
  */
-function newQueryPlan(lbp, keyspace, executionOptions) {
+function newQueryPlan(
+    lbp: any,
+    keyspace: string,
+    executionOptions: ExecutionOptions,
+): Promise<Iterator<any>> {
     return new Promise((resolve, reject) => {
-        lbp.newQueryPlan(keyspace, executionOptions, (err, iterator) => {
-            if (err) {
-                reject(err);
-            } else {
-                resolve(iterator);
-            }
-        });
+        lbp.newQueryPlan(
+            keyspace,
+            executionOptions,
+            (err: Error | null, iterator: Iterator<any>) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(iterator);
+                }
+            },
+        );
     });
 }
 
@@ -91,11 +110,11 @@ function newQueryPlan(lbp, keyspace, executionOptions) {
  * Method that handles optional callbacks (dual promise and callback support).
  * When callback is undefined it returns the promise.
  * When using a callback, it will use it as handlers of the continuation of the promise.
- * @param {Promise} promise
- * @param {Function} [callback]
- * @returns {Promise|undefined}
  */
-function optionalCallback(promise, callback) {
+function optionalCallback<T>(
+    promise: Promise<T>,
+    callback?: Function,
+): Promise<T> | undefined {
     if (!callback) {
         return promise;
     }
@@ -105,12 +124,12 @@ function optionalCallback(promise, callback) {
 
 /**
  * Invokes the provided function multiple times, considering the concurrency level limit.
- * @param {Number} count
- * @param {Number} limit
- * @param {Function} fn
- * @returns {Promise}
  */
-function times(count, limit, fn) {
+function times(
+    count: number,
+    limit: number,
+    fn: (index: number) => Promise<any>,
+): Promise<void[]> {
     if (limit > count) {
         limit = count;
     }
@@ -130,20 +149,15 @@ function times(count, limit, fn) {
 
 /**
  * Deals with unexpected rejections in order to avoid the unhandled promise rejection warning or failure.
- * @param {Promise} promise
- * @returns {undefined}
  */
-function toBackground(promise) {
+function toBackground(promise: Promise<any>): void {
     promise.catch(() => {});
 }
 
 /**
  * Invokes the callback once outside the promise chain the promise is resolved or rejected.
- * @param {Promise} promise
- * @param {Function?} callback
- * @returns {undefined}
  */
-function toCallback(promise, callback) {
+function toCallback<T>(promise: Promise<T>, callback: Function): void {
     promise.then(
         (result) => process.nextTick(() => callback(null, result)),
         // Avoid marking the promise as rejected
@@ -151,7 +165,7 @@ function toCallback(promise, callback) {
     );
 }
 
-module.exports = {
+export {
     delay,
     fromCallback,
     fromEvent,

@@ -6,8 +6,6 @@
  */
 
 import { EmptyCallback, ValueCallback } from "../..";
-// TODO: remove once `lib/promise-utils.js` is converted to typescript.
-// @ts-ignore
 import promiseUtils = require("../promise-utils");
 import { Token, TokenRange, minTokenRange } from "../token";
 import { Host } from "../host";
