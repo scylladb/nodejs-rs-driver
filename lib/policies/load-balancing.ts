@@ -1,48 +1,84 @@
-// @ts-nocheck
 "use strict";
 
-const types = require("../types");
-const utils = require("../utils.js");
-const errors = require("../errors.js");
-const { throwNotSupported } = require("../new-utils.js");
-const _rust = require("../../index");
+import types = require("../types");
+import utils = require("../utils");
+import errors = require("../errors");
+import { throwNotSupported } from "../new-utils";
+import _rust = require("../../index");
+import type { Host, HostMap } from "../host";
+// TODO: Remove after lib/execution-options is converted to Typescript.
+// @ts-ignore
+import type { ExecutionOptions } from "../execution-options";
+import type { Client, EmptyCallback } from "../..";
+
+/**
+ * Receives the error, or the iterator of hosts to use for a query.
+ */
+type QueryPlanCallback = (
+    err?: Error | null,
+    iterator?: Iterator<Host>,
+) => void;
+
+/**
+ * The `init` callback as the policies actually invoke it: with no argument on
+ * success, rather than with the non-optional error of {@link EmptyCallback}.
+ */
+type InitCallback = (err?: Error) => void;
 
 const newlyUpInterval = 60000;
+
+/**
+ * The options {@link LegacyDefaultLoadBalancingPolicy} accepts. Besides the
+ * local data center and the host filter, it takes the four checks the policy
+ * makes while building a query plan, which the tests replace.
+ */
+interface LegacyDefaultLoadBalancingPolicyOptions {
+    localDc?: string;
+    filter?: (host: any) => boolean;
+    isHostNewlyUp?: (host: any) => number | null;
+    healthCheck?: (host: any) => boolean;
+    compare?: (h1: any, h2: any) => number;
+    getReplicas?: (keyspace: string, routingKey: any) => Array<Host> | null;
+}
 
 /** @module policies/loadBalancing */
 /**
  * Base class for Load Balancing Policies
  */
 class LoadBalancingPolicy {
+    client?: Client;
+    hosts?: HostMap;
+    localDc?: string;
+
     constructor() {}
     /**
      * Initializes the load balancing policy, called after the driver obtained the information of the cluster.
-     * @param {Client} client
-     * @param {HostMap} hosts
-     * @param {Function} callback
      */
-    init(client, hosts, callback) {
+    init(client: Client, hosts: HostMap, callback: EmptyCallback): void {
         this.client = client;
         this.hosts = hosts;
-        callback();
+        (callback as InitCallback)();
     }
     /**
      * Returns the distance assigned by this policy to the provided host.
-     * @param {Host} host
      */
-    getDistance(host) {
+    getDistance(host: Host): types.distance {
         return types.distance.local;
     }
     /**
      * Returns an iterator with the hosts for a new query.
      * Each new query will call this method. The first host in the result will
      * then be used to perform the query.
-     * @param {String} keyspace Name of currently logged keyspace at `Client` level.
-     * @param {ExecutionOptions|null} executionOptions The information related to the execution of the request.
-     * @param {Function} callback The function to be invoked with the error as first parameter and the host iterator as
+     * @param keyspace Name of currently logged keyspace at `Client` level.
+     * @param executionOptions The information related to the execution of the request.
+     * @param callback The function to be invoked with the error as first parameter and the host iterator as
      * second parameter.
      */
-    newQueryPlan(keyspace, executionOptions, callback) {
+    newQueryPlan(
+        keyspace: string,
+        executionOptions: ExecutionOptions | null,
+        callback: QueryPlanCallback,
+    ): void {
         callback(
             new Error(
                 "You must implement a query plan for the LoadBalancingPolicy class",
@@ -52,16 +88,15 @@ class LoadBalancingPolicy {
     /**
      * Gets an associative array containing the policy options.
      */
-    getOptions() {
+    getOptions(): Map<string, any> {
         return new Map();
     }
 
     /**
-     * @returns {_rust.LoadBalancingConfig}
      * @internal
      * @ignore
      */
-    getRustConfiguration() {
+    getRustConfiguration(): _rust.LoadBalancingConfig {
         // This error will be thrown by all policies, that do not override this method.
         throw new Error(
             "Currently this load balancing policy is not supported by the driver",
@@ -70,6 +105,8 @@ class LoadBalancingPolicy {
 }
 
 class LoadBalancingRustImplemented extends LoadBalancingPolicy {
+    errorMsg: string;
+
     constructor() {
         super();
         this.errorMsg =
@@ -77,13 +114,17 @@ class LoadBalancingRustImplemented extends LoadBalancingPolicy {
             "Using this policy from JavaScript, or inheriting from this class " +
             "in order to create custom policies is not supported.";
     }
-    init(client, hosts, callback) {
+    init(client: Client, hosts: HostMap, callback: EmptyCallback): void {
         throwNotSupported(this.errorMsg);
     }
-    getDistance(host) {
+    getDistance(host: Host): types.distance {
         throwNotSupported(this.errorMsg);
     }
-    newQueryPlan(keyspace, executionOptions, callback) {
+    newQueryPlan(
+        keyspace: string,
+        executionOptions: ExecutionOptions | null,
+        callback: QueryPlanCallback,
+    ): void {
         throwNotSupported(this.errorMsg);
     }
 }
@@ -93,16 +134,17 @@ class LoadBalancingRustImplemented extends LoadBalancingPolicy {
  * @extends LoadBalancingPolicy
  */
 class RoundRobinPolicy extends LoadBalancingRustImplemented {
+    index: number;
+
     constructor() {
         super();
         this.index = 0;
     }
     /**
-     * @returns {_rust.LoadBalancingConfig}
      * @internal
      * @ignore
      */
-    getRustConfiguration() {
+    getRustConfiguration(): _rust.LoadBalancingConfig {
         return {
             tokenAware: false,
         };
@@ -117,27 +159,26 @@ class RoundRobinPolicy extends LoadBalancingRustImplemented {
  */
 class DCAwareRoundRobinPolicy extends LoadBalancingRustImplemented {
     /**
-     * @param {?String} [localDc] local datacenter name.  This value overrides the 'localDataCenter' Client option \
+     * @param localDc local datacenter name.  This value overrides the 'localDataCenter' Client option \
      * and is useful for cases where you have multiple execution profiles that you intend on using for routing
      * requests to different data centers.
      */
-    constructor(localDc) {
+    constructor(localDc?: string) {
         super();
         this.localDc = localDc;
     }
     /**
      * Gets an associative array containing the policy options.
      */
-    getOptions() {
-        return new Map([["localDataCenter", this.localDc]]);
+    getOptions(): Map<string, any> {
+        return new Map<string, any>([["localDataCenter", this.localDc]]);
     }
 
     /**
-     * @returns {_rust.LoadBalancingConfig}
      * @internal
      * @ignore
      */
-    getRustConfiguration() {
+    getRustConfiguration(): _rust.LoadBalancingConfig {
         return {
             preferDatacenter: this.localDc,
             permitDcFailover: false,
@@ -151,10 +192,9 @@ class DCAwareRoundRobinPolicy extends LoadBalancingRustImplemented {
  * @extends LoadBalancingPolicy
  */
 class TokenAwarePolicy extends LoadBalancingRustImplemented {
-    /**
-     * @param {LoadBalancingPolicy} childPolicy
-     */
-    constructor(childPolicy) {
+    childPolicy: LoadBalancingPolicy;
+
+    constructor(childPolicy: LoadBalancingPolicy) {
         super();
         if (!childPolicy) {
             throw new Error("You must specify a child load balancing policy");
@@ -164,8 +204,8 @@ class TokenAwarePolicy extends LoadBalancingRustImplemented {
     /**
      * Gets an associative array containing the policy options.
      */
-    getOptions() {
-        const map = new Map([
+    getOptions(): Map<string, any> {
+        const map = new Map<string, any>([
             [
                 "childPolicy",
                 this.childPolicy.constructor !== undefined
@@ -182,12 +222,11 @@ class TokenAwarePolicy extends LoadBalancingRustImplemented {
     }
 
     /**
-     * @returns {_rust.LoadBalancingConfig}
      * @internal
      * @ignore
      */
-    getRustConfiguration() {
-        let options = this.childPolicy.getRustConfiguration();
+    getRustConfiguration(): _rust.LoadBalancingConfig {
+        const options = this.childPolicy.getRustConfiguration();
         options.tokenAware = true;
         return options;
     }
@@ -214,17 +253,20 @@ class TokenAwarePolicy extends LoadBalancingRustImplemented {
  * @extends LoadBalancingPolicy
  */
 class AllowListPolicy extends LoadBalancingRustImplemented {
+    childPolicy: LoadBalancingPolicy;
+    allowList: Array<string>;
+
     /**
      * Create a new policy that wraps the provided child policy but only "allow" hosts
      * from the provided list.
-     * @param {LoadBalancingPolicy} childPolicy the wrapped policy.
+     * @param childPolicy the wrapped policy.
      * If the child policy filters some of the hosts out, only hosts present
      * in allow list and accepted by child policy will be contacted by the driver.
-     * @param {Array.<string>}  allowList The hosts address in the format ipAddress:port.
+     * @param allowList The hosts address in the format ipAddress:port.
      * Only hosts from this list may get connected
      * to (whether they will get connected to or not depends on the child policy).
      */
-    constructor(childPolicy, allowList) {
+    constructor(childPolicy: LoadBalancingPolicy, allowList: Array<string>) {
         super();
         if (!childPolicy) {
             throw new Error("You must specify a child load balancing policy");
@@ -242,8 +284,8 @@ class AllowListPolicy extends LoadBalancingRustImplemented {
     /**
      * Gets an associative array containing the policy options.
      */
-    getOptions() {
-        return new Map([
+    getOptions(): Map<string, any> {
+        return new Map<string, any>([
             [
                 "childPolicy",
                 this.childPolicy.constructor !== undefined
@@ -255,17 +297,17 @@ class AllowListPolicy extends LoadBalancingRustImplemented {
     }
 
     /**
-     * @returns {_rust.LoadBalancingConfig}
      * @internal
      * @ignore
      */
-    getRustConfiguration() {
-        let options = this.childPolicy.getRustConfiguration();
-        if (options.allowList) {
+    getRustConfiguration(): _rust.LoadBalancingConfig {
+        const options = this.childPolicy.getRustConfiguration();
+        const childAllowList = options.allowList;
+        if (childAllowList) {
             // In case some other policy provided allow list, we take an intersection
             // to mimic the original behavior of this policy
             options.allowList = this.allowList.filter(function (n) {
-                return options.allowList.indexOf(n) !== -1;
+                return childAllowList.indexOf(n) !== -1;
             });
         } else {
             options.allowList = this.allowList;
@@ -287,32 +329,35 @@ class AllowListPolicy extends LoadBalancingRustImplemented {
  * host in the query plan.
  */
 class LegacyDefaultLoadBalancingPolicy extends LoadBalancingPolicy {
-    #client;
-    #hosts;
-    #filteredHosts;
-    #preferredHost;
-    #index;
-    #filter;
+    #client: any;
+    #hosts: any;
+    #filteredHosts: Array<Host> | null;
+    #preferredHost: any;
+    #index: number;
+    #filter: (host: any) => boolean;
 
     /**
      * Creates a new instance of `LegacyDefaultLoadBalancingPolicy`.
-     * @param {String|Object} [options] The local data center name or the optional policy options object.
+     * @param options The local data center name or the optional policy options object.
      *
      * Note that when providing the local data center name, it overrides `localDataCenter` option at
      * `Client` level.
-     * @param {String} [options.localDc] local data center name.  This value overrides the 'localDataCenter' Client option
+     * @param options.localDc local data center name.  This value overrides the 'localDataCenter' Client option
      * and is useful for cases where you have multiple execution profiles that you intend on using for routing
      * requests to different data centers.
-     * @param {Function} [options.filter] A function to apply to determine if hosts are included in the query plan.
+     * @param options.filter A function to apply to determine if hosts are included in the query plan.
      * The function takes a Host parameter and returns a Boolean.
      */
-    constructor(options) {
+    constructor(options?: string | LegacyDefaultLoadBalancingPolicyOptions) {
         super();
 
+        let resolved: LegacyDefaultLoadBalancingPolicyOptions;
         if (typeof options === "string") {
-            options = { localDc: options };
+            resolved = { localDc: options };
         } else if (!options) {
-            options = utils.emptyObject;
+            resolved = utils.emptyObject;
+        } else {
+            resolved = options;
         }
 
         this.#client = null;
@@ -320,31 +365,29 @@ class LegacyDefaultLoadBalancingPolicy extends LoadBalancingPolicy {
         this.#filteredHosts = null;
         this.#preferredHost = null;
         this.#index = 0;
-        this.localDc = options.localDc;
-        this.#filter = options.filter || this.#defaultFilter;
+        this.localDc = resolved.localDc;
+        this.#filter = resolved.filter || this.#defaultFilter;
 
         // Allow some checks to be injected
-        if (options.isHostNewlyUp) {
-            this.#isHostNewlyUp = options.isHostNewlyUp;
+        if (resolved.isHostNewlyUp) {
+            this.#isHostNewlyUp = resolved.isHostNewlyUp;
         }
-        if (options.healthCheck) {
-            this.#healthCheck = options.healthCheck;
+        if (resolved.healthCheck) {
+            this.#healthCheck = resolved.healthCheck;
         }
-        if (options.compare) {
-            this.#compare = options.compare;
+        if (resolved.compare) {
+            this.#compare = resolved.compare;
         }
-        if (options.getReplicas) {
-            this.#getReplicas = options.getReplicas;
+        if (resolved.getReplicas) {
+            this.#getReplicas = resolved.getReplicas;
         }
     }
 
     /**
      * Initializes the load balancing policy, called after the driver obtained the information of the cluster.
-     * @param {Client} client
-     * @param {HostMap} hosts
-     * @param {Function} callback
      */
-    init(client, hosts, callback) {
+    init(client: Client, hosts: HostMap, callback: EmptyCallback): void {
+        const done = callback as InitCallback;
         this.#client = client;
         this.#hosts = hosts;
 
@@ -355,17 +398,16 @@ class LegacyDefaultLoadBalancingPolicy extends LoadBalancingPolicy {
         try {
             setLocalDc(this, client, this.#hosts);
         } catch (err) {
-            return callback(err);
+            return done(err as Error);
         }
 
-        callback();
+        done();
     }
 
     /**
      * Returns the distance assigned by this policy to the provided host, relatively to the client instance.
-     * @param {Host} host
      */
-    getDistance(host) {
+    getDistance(host: Host): types.distance {
         if (this.#preferredHost !== null && host === this.#preferredHost) {
             // Set the last preferred host as local.
             // It ensures that the pool for the graph analytics host has the appropriate size
@@ -384,22 +426,25 @@ class LegacyDefaultLoadBalancingPolicy extends LoadBalancingPolicy {
     /**
      * Returns a host iterator to be used for a query execution.
      * @override
-     * @param {String} keyspace
-     * @param {ExecutionOptions} executionOptions
-     * @param {Function} callback
      */
-    newQueryPlan(keyspace, executionOptions, callback) {
+    newQueryPlan(
+        keyspace: string,
+        executionOptions: ExecutionOptions | null,
+        callback: QueryPlanCallback,
+    ): void {
         let routingKey;
         let preferredHost;
 
         if (executionOptions) {
             routingKey = executionOptions.getRoutingKey();
 
-            if (executionOptions.getKeyspace()) {
-                keyspace = executionOptions.getKeyspace();
+            const executionKeyspace = executionOptions.getKeyspace();
+            if (executionKeyspace) {
+                keyspace = executionKeyspace;
             }
 
-            preferredHost = executionOptions.getPreferredHost();
+            // Public `ExecutionOptions` interface does not carry `getPreferredHost()`.
+            preferredHost = (executionOptions as any).getPreferredHost();
         }
 
         let iterable;
@@ -428,7 +473,10 @@ class LegacyDefaultLoadBalancingPolicy extends LoadBalancingPolicy {
      * @param iterable
      * @private
      */
-    static *#getPreferredHostFirst(preferredHost, iterable) {
+    static *#getPreferredHostFirst(
+        preferredHost: any,
+        iterable: Iterable<any>,
+    ): Generator<any> {
         yield preferredHost;
 
         for (const host of iterable) {
@@ -440,10 +488,10 @@ class LegacyDefaultLoadBalancingPolicy extends LoadBalancingPolicy {
 
     /**
      * Yields the local hosts without the replicas already yielded
-     * @param {Array<Host>} [localReplicas] The local replicas that we should avoid to include again
+     * @param localReplicas The local replicas that we should avoid to include again
      * @private
      */
-    *#getLocalHosts(localReplicas) {
+    *#getLocalHosts(localReplicas?: Array<Host>): Generator<Host> {
         // Use a local reference
         const hosts = this.#getFilteredLocalHosts();
         const initialIndex = this.#getIndex();
@@ -452,8 +500,8 @@ class LegacyDefaultLoadBalancingPolicy extends LoadBalancingPolicy {
         // it shouldn't be an expensive call. Additionally, this will only be executed when the local replicas
         // have been exhausted in a lazy manner.
         const canBeYield = localReplicas
-            ? (h) => localReplicas.indexOf(h) === -1
-            : (h) => true;
+            ? (h: Host) => localReplicas.indexOf(h) === -1
+            : (h: Host) => true;
 
         for (let i = 0; i < hosts.length; i++) {
             const h = hosts[(i + initialIndex) % hosts.length];
@@ -463,14 +511,17 @@ class LegacyDefaultLoadBalancingPolicy extends LoadBalancingPolicy {
         }
     }
 
-    #getReplicasAndLocalHosts(keyspace, routingKey) {
+    #getReplicasAndLocalHosts(
+        keyspace: string,
+        routingKey: any,
+    ): Generator<Host> {
         let replicas = this.#getReplicas(keyspace, routingKey);
         if (replicas === null) {
             return this.#getLocalHosts();
         }
 
-        const filteredReplicas = [];
-        let newlyUpReplica = null;
+        const filteredReplicas: Array<Host> = [];
+        let newlyUpReplica: Host | null = null;
         let newlyUpReplicaTimestamp = Number.MIN_SAFE_INTEGER;
         let unhealthyReplicas = 0;
 
@@ -542,64 +593,60 @@ class LegacyDefaultLoadBalancingPolicy extends LoadBalancingPolicy {
 
     /**
      * Yields the local replicas followed by the rest of local nodes.
-     * @param {Array<Host>} replicas The local replicas
+     * @param replicas The local replicas
      */
-    *yieldReplicasFirst(replicas) {
+    *yieldReplicasFirst(replicas: Array<Host>): Generator<Host> {
         for (let i = 0; i < replicas.length; i++) {
             yield replicas[i];
         }
         yield* this.#getLocalHosts(replicas);
     }
 
-    #isHostNewlyUp(h) {
+    #isHostNewlyUp = (h: any): number | null => {
         return h.isUpSince !== null &&
             Date.now() - h.isUpSince < newlyUpInterval
             ? h.isUpSince
             : null;
-    }
+    };
 
     /**
      * Returns a boolean determining whether the host health is ok or not.
      * A Host is considered unhealthy when there are enough items in the queue (10 items in-flight) but the
      * Host is not responding to those requests.
-     * @param {Host} h
-     * @return {boolean}
      * @private
      */
-    #healthCheck(h) {
+    #healthCheck = (h: any): boolean => {
         return !(h.getInFlight() >= 10 && h.getResponseCount() <= 1);
-    }
+    };
 
     /**
      * Compares to host and returns 1 if it needs to favor the first host otherwise, -1.
-     * @return {number}
      * @private
      */
-    #compare(h1, h2) {
+    #compare = (h1: any, h2: any): number => {
         return h1.getInFlight() < h2.getInFlight() ? 1 : -1;
-    }
+    };
 
-    #getReplicas(keyspace, routingKey) {
+    #getReplicas = (keyspace: string, routingKey: any): Array<Host> | null => {
         return this.#client.getReplicas(keyspace, routingKey);
-    }
+    };
 
     /**
      * Returns an Array of hosts filtered by DC and predicate.
-     * @returns {Array<Host>}
      * @private
      */
-    #getFilteredLocalHosts() {
-        if (this.#filteredHosts === null) {
-            this.#filteredHosts = this.#hosts
-                .values()
-                .filter(
-                    (h) => this.#filter(h) && h.datacenter === this.localDc,
-                );
+    #getFilteredLocalHosts(): Array<Host> {
+        let filteredHosts = this.#filteredHosts;
+        if (filteredHosts === null) {
+            filteredHosts = (this.#hosts.values() as Array<Host>).filter(
+                (h: Host) => this.#filter(h) && h.datacenter === this.localDc,
+            );
+            this.#filteredHosts = filteredHosts;
         }
-        return this.#filteredHosts;
+        return filteredHosts;
     }
 
-    #getIndex() {
+    #getIndex(): number {
         const result = this.#index++;
         // Overflow protection
         if (this.#index === 0x7fffffff) {
@@ -608,7 +655,10 @@ class LegacyDefaultLoadBalancingPolicy extends LoadBalancingPolicy {
         return result;
     }
 
-    #sendUnhealthyToTheBack(replicas, unhealthyReplicas) {
+    #sendUnhealthyToTheBack(
+        replicas: Array<Host>,
+        unhealthyReplicas: number,
+    ): void {
         let counter = 0;
 
         // Start from the back, move backwards and stop once all unhealthy replicas are at the back
@@ -632,15 +682,15 @@ class LegacyDefaultLoadBalancingPolicy extends LoadBalancingPolicy {
         }
     }
 
-    #defaultFilter() {
+    #defaultFilter(): boolean {
         return true;
     }
 
     /**
      * Gets an associative array containing the policy options.
      */
-    getOptions() {
-        return new Map([
+    getOptions(): Map<string, any> {
+        return new Map<string, any>([
             ["localDataCenter", this.localDc],
             ["filterFunction", this.#filter !== this.#defaultFilter],
         ]);
@@ -649,12 +699,13 @@ class LegacyDefaultLoadBalancingPolicy extends LoadBalancingPolicy {
 
 /**
  * Validates and sets the local data center to be used.
- * @param {LoadBalancingPolicy} lbp
- * @param {Client} client
- * @param {HostMap} hosts
  * @private
  */
-function setLocalDc(lbp, client, hosts) {
+function setLocalDc(
+    lbp: LegacyDefaultLoadBalancingPolicy,
+    client: any,
+    hosts: HostMap,
+): void {
     if (!(lbp instanceof LoadBalancingPolicy)) {
         throw new errors.DriverInternalError(
             "LoadBalancingPolicy instance was not provided",
@@ -699,15 +750,9 @@ function setLocalDc(lbp, client, hosts) {
  * (sending query to a node from a remote datacenter).
  */
 class DefaultLoadBalancingPolicy extends LoadBalancingRustImplemented {
-    /**
-     * @type {LoadBalancingConfig}
-     */
-    #config;
+    #config: LoadBalancingConfig;
 
-    /**
-     * @param {LoadBalancingConfig} [config]
-     */
-    constructor(config) {
+    constructor(config?: LoadBalancingConfig) {
         super();
         if (!config) {
             config = new LoadBalancingConfig();
@@ -717,16 +762,15 @@ class DefaultLoadBalancingPolicy extends LoadBalancingRustImplemented {
     /**
      * Gets an associative array containing the policy options.
      */
-    getOptions() {
+    getOptions(): Map<string, any> {
         throwNotSupported("Not implemented.");
     }
 
     /**
-     * @returns {_rust.LoadBalancingConfig}
      * @internal
      * @ignore
      */
-    getRustConfiguration() {
+    getRustConfiguration(): _rust.LoadBalancingConfig {
         return this.#config;
     }
 }
@@ -755,9 +799,8 @@ class LoadBalancingConfig {
      * Remote nodes will be excluded, even if they are alive and available
      * to serve requests.
      *
-     * @type {string?}
      */
-    preferDatacenter;
+    preferDatacenter?: string;
     /**
      * This option cannot be used without setting `preferDatacenter`.
      *
@@ -769,9 +812,8 @@ class LoadBalancingConfig {
      * When a preferred rack is set, the policy will first return replicas in the local rack
      * in the preferred datacenter, and then the other replicas in the datacenter.
      *
-     * @type {string?}
      */
-    preferRack;
+    preferRack?: string;
     /**
      * Sets whether this policy is token-aware (balances load more consciously) or not.
      *
@@ -796,9 +838,8 @@ class LoadBalancingConfig {
      * that data is accessed locally as much as possible, reducing network overhead
      * and improving throughput.
      *
-     * @type {boolean?}
      */
-    tokenAware;
+    tokenAware?: boolean;
     /**
      * Sets whether this policy permits datacenter failover, i.e. ever attempts
      * to send requests to nodes from a non-preferred datacenter.
@@ -813,9 +854,8 @@ class LoadBalancingConfig {
      * When it is set, the policy will prefer to return alive remote replicas
      * if datacenter failover is permitted.
      *
-     *  @type {boolean?}
      */
-    permitDcFailover;
+    permitDcFailover?: boolean;
     /**
      * Sets whether this policy should shuffle replicas when token-awareness
      * is enabled. Shuffling can help distribute the load over replicas, but
@@ -826,25 +866,23 @@ class LoadBalancingConfig {
      * in some random order that is chosen when the load balancing policy
      * is created and will not change over its lifetime.
      *
-     * @type {boolean?}
      */
-    enableShufflingReplicas;
+    enableShufflingReplicas?: boolean;
 
     /**
      * The hosts address in the format ipAddress:port.
      * When the list is provided, only hosts from this list may get connected to
      * (whether they will get connected to or not depends on the other policy options).
      *
-     * @type {Array<string>?}
      */
-    allowList;
+    allowList?: Array<string>;
 }
 
-function getDataCenters(hosts) {
+function getDataCenters(hosts: HostMap): Set<string | null> {
     return new Set(hosts.values().map((h) => h.datacenter));
 }
 
-module.exports = {
+export {
     AllowListPolicy,
     DCAwareRoundRobinPolicy,
     LegacyDefaultLoadBalancingPolicy,

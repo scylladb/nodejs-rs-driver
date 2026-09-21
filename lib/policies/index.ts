@@ -8,73 +8,77 @@
  *  [speculative execution]{@link module:policies/speculativeExecution}.
  * @module policies
  */
-const addressResolution =
-    (exports.addressResolution = require("./address-resolution"));
-const loadBalancing = (exports.loadBalancing = require("./load-balancing"));
-const reconnection = (exports.reconnection = require("./reconnection"));
-const retry = (exports.retry = require("./retry"));
-const speculativeExecution =
-    (exports.speculativeExecution = require("./speculative-execution"));
-const timestampGeneration =
-    (exports.timestampGeneration = require("./timestamp-generation"));
+import addressResolution = require("./address-resolution");
+import loadBalancing = require("./load-balancing");
+import reconnection = require("./reconnection");
+import retry = require("./retry");
+import speculativeExecution = require("./speculative-execution");
+import timestampGeneration = require("./timestamp-generation");
 
-/**
- * Returns a new instance of the default address translator policy used by the driver.
- * @returns {AddressTranslator}
- */
-exports.defaultAddressTranslator = function () {
-    return new addressResolution.AddressTranslator();
+export {
+    addressResolution,
+    loadBalancing,
+    reconnection,
+    retry,
+    speculativeExecution,
+    timestampGeneration,
 };
 
 /**
+ * Returns a new instance of the default address translator policy used by the driver.
+ */
+export function defaultAddressTranslator(): addressResolution.AddressTranslator {
+    return new addressResolution.AddressTranslator();
+}
+
+/**
  * Returns a new instance of the default load-balancing policy used by the driver.
- * @param {string} [localDc] When provided, it sets the data center that is going to be used as local for the
+ * @param localDc When provided, it sets the data center that is going to be used as local for the
  * load-balancing policy instance, with dc failover disabled.
  *
  * When localDc is undefined, the load balancing policy will not be data-center aware.
- * @returns {DefaultLoadBalancingPolicy}
  */
-exports.defaultLoadBalancingPolicy = function (localDc) {
+export function defaultLoadBalancingPolicy(
+    localDc?: string,
+): loadBalancing.DefaultLoadBalancingPolicy {
     if (!localDc) {
         return new loadBalancing.DefaultLoadBalancingPolicy();
     }
 
-    return new loadBalancing.DefaultLoadBalancingPolicy({ localDc: localDc, permitDcFailover: false });
-
-};
+    return new loadBalancing.DefaultLoadBalancingPolicy({
+        localDc: localDc,
+        permitDcFailover: false,
+    } as loadBalancing.LoadBalancingConfig);
+}
 
 /**
  * Returns a new instance of the default retry policy used by the driver.
- * @returns {RetryPolicy}
  */
-exports.defaultRetryPolicy = function () {
+export function defaultRetryPolicy(): retry.RetryPolicy {
     return new retry.RetryPolicy();
-};
+}
 
 /**
  * Returns a new instance of the default reconnection policy used by the driver.
- * @returns {ReconnectionPolicy}
  */
-exports.defaultReconnectionPolicy = function () {
+export function defaultReconnectionPolicy(): reconnection.ReconnectionPolicy {
     return new reconnection.ExponentialReconnectionPolicy(
         1000,
         10 * 60 * 1000,
         false,
     );
-};
+}
 
 /**
  * Returns a new instance of the default speculative execution policy used by the driver.
- * @returns {SpeculativeExecutionPolicy}
  */
-exports.defaultSpeculativeExecutionPolicy = function () {
+export function defaultSpeculativeExecutionPolicy(): speculativeExecution.SpeculativeExecutionPolicy {
     return new speculativeExecution.NoSpeculativeExecutionPolicy();
-};
+}
 
 /**
  * Returns a new instance of the default timestamp generator used by the driver.
- * @returns {TimestampGenerator}
  */
-exports.defaultTimestampGenerator = function () {
+export function defaultTimestampGenerator(): timestampGeneration.TimestampGenerator {
     return new timestampGeneration.MonotonicTimestampGenerator();
-};
+}

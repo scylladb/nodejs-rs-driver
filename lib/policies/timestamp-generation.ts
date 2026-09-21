@@ -1,9 +1,9 @@
-// @ts-nocheck
 "use strict";
 
-const util = require("util");
-const { Long } = require("../types");
-const errors = require("../errors");
+import util = require("util");
+import { Long } from "../types";
+import errors = require("../errors");
+import type { Client } from "../..";
 
 /** @module policies/timestampGeneration */
 
@@ -41,12 +41,12 @@ class TimestampGenerator {
      *
      * Implementors should strive to achieve microsecond precision in the best possible way,
      * which is usually largely dependent on the underlying operating system's capabilities.
-     * @param {Client} client The {@link Client} instance to generate timestamps to.
-     * @returns {Long|Number|null} the next timestamp (in microseconds). If it's equals to `null`, it won't be
+     * @param client The {@link Client} instance to generate timestamps to.
+     * @returns the next timestamp (in microseconds). If it's equals to `null`, it won't be
      * sent by the driver, letting the server to generate the timestamp.
      * @abstract
      */
-    next(client) {
+    next(client: Client): Long | number | null {
         throw new Error("next() must be implemented");
     }
 }
@@ -61,22 +61,22 @@ class TimestampGenerator {
  * @extends {TimestampGenerator}
  */
 class MonotonicTimestampGenerator extends TimestampGenerator {
-    #warningThreshold;
-    #minLogInterval;
-    #micros;
-    #lastDate;
-    #lastLogDate;
+    #warningThreshold: number;
+    #minLogInterval: number;
+    #micros: number;
+    #lastDate: number;
+    #lastLogDate: number;
 
     /**
      *
-     * @param {Number} [warningThreshold] Determines how far in the future timestamps are allowed to drift before a
+     * @param warningThreshold Determines how far in the future timestamps are allowed to drift before a
      * warning is logged, expressed in milliseconds. Default: `1000`.
-     * @param {Number} [minLogInterval] In case of multiple log events, it determines the time separation between log
+     * @param minLogInterval In case of multiple log events, it determines the time separation between log
      * events, expressed in milliseconds. Use 0 to disable. Default: `1000`.
      */
-    constructor(warningThreshold, minLogInterval) {
+    constructor(warningThreshold?: number, minLogInterval?: number) {
         super();
-        if (warningThreshold < 0) {
+        if (warningThreshold! < 0) {
             throw new errors.ArgumentError(
                 "warningThreshold can not be lower than 0",
             );
@@ -93,12 +93,11 @@ class MonotonicTimestampGenerator extends TimestampGenerator {
     }
     /**
      * Returns the current time in milliseconds since UNIX epoch
-     * @returns {Number}
      */
-    getDate() {
+    getDate(): number {
         return Date.now();
     }
-    next(client) {
+    next(client: Client): Long | number | null {
         let date = this.getDate();
         let drifted = 0;
         if (date > this.#lastDate) {
@@ -139,16 +138,15 @@ class MonotonicTimestampGenerator extends TimestampGenerator {
                     result,
                 );
                 this.#lastLogDate = currentLogDate;
-                client.log("warning", message);
+                (client as any).log("warning", message);
             }
         }
         return result;
     }
     /**
      * @private
-     * @returns {Number|Long}
      */
-    #generateMicroseconds() {
+    #generateMicroseconds(): Long | number {
         if (this.#lastDate < _maxSafeNumberDate) {
             // We are safe until Jun 06 2255, its faster to perform this operations on Number than on Long
             // We hope to have native int64 by then :)
@@ -160,5 +158,4 @@ class MonotonicTimestampGenerator extends TimestampGenerator {
     }
 }
 
-exports.TimestampGenerator = TimestampGenerator;
-exports.MonotonicTimestampGenerator = MonotonicTimestampGenerator;
+export { TimestampGenerator, MonotonicTimestampGenerator };

@@ -1,6 +1,6 @@
 "use strict";
 
-const rust = require("../../index");
+import rust = require("../../index");
 
 /** @module policies/retry */
 /**
@@ -16,11 +16,10 @@ class RetryPolicy {
     constructor() {}
 
     /**
-     * @returns {rust.RetryPolicyKind}
      * @internal
      * @ignore
      */
-    getRustConfiguration() {
+    getRustConfiguration(): rust.RetryPolicyKind {
         if (this.constructor !== RetryPolicy) {
             throw new TypeError(
                 "Currently only built-in retry policies are supported. Inheriting from RetryPolicy is not supported.",
@@ -50,11 +49,10 @@ class FallthroughRetryPolicy extends RetryPolicy {
     }
 
     /**
-     * @returns {rust.RetryPolicyKind}
      * @internal
      * @ignore
      */
-    getRustConfiguration() {
+    getRustConfiguration(): rust.RetryPolicyKind {
         if (this.constructor !== FallthroughRetryPolicy) {
             throw new TypeError(
                 "Currently only built-in retry policies are supported. Inheriting from FallthroughRetryPolicy is not supported.",
@@ -64,5 +62,4 @@ class FallthroughRetryPolicy extends RetryPolicy {
     }
 }
 
-exports.FallthroughRetryPolicy = FallthroughRetryPolicy;
-exports.RetryPolicy = RetryPolicy;
+export { FallthroughRetryPolicy, RetryPolicy };

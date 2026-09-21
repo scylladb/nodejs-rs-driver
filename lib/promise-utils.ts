@@ -4,6 +4,10 @@ import { EventEmitter } from "events";
 // TODO: remove once `lib/execution-options.js` is converted to typescript.
 // @ts-ignore
 import { ExecutionOptions } from "./execution-options";
+import type { Host } from "../";
+import type { loadBalancing } from "./policies";
+
+type LoadBalancingPolicy = loadBalancing.LoadBalancingPolicy;
 
 /**
  * A callback that reports either a failure or the value produced.
@@ -79,7 +83,6 @@ async function invokeSequentially(
     }
 }
 
-// TODO: type lbp after `lib/policies` is converted to typescript.
 /**
  * Invokes the new query plan of the load balancing policy and returns a Promise.
  * @param lbp The load balancing policy.
@@ -87,22 +90,18 @@ async function invokeSequentially(
  * @param executionOptions The information related to the execution of the request.
  */
 function newQueryPlan(
-    lbp: any,
+    lbp: LoadBalancingPolicy,
     keyspace: string,
     executionOptions: ExecutionOptions,
-): Promise<Iterator<any>> {
+): Promise<Iterator<Host>> {
     return new Promise((resolve, reject) => {
-        lbp.newQueryPlan(
-            keyspace,
-            executionOptions,
-            (err: Error | null, iterator: Iterator<any>) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(iterator);
-                }
-            },
-        );
+        lbp.newQueryPlan(keyspace, executionOptions, (err, iterator) => {
+            if (err) {
+                reject(err);
+            } else {
+                resolve(iterator as Iterator<Host>);
+            }
+        });
     });
 }
 

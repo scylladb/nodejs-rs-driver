@@ -1,8 +1,7 @@
-// @ts-nocheck
 "use strict";
-const dns = require("dns");
-const utils = require("../utils");
-const _nodeNet = require("node:net");
+import dns = require("dns");
+import utils = require("../utils");
+import _nodeNet = require("node:net");
 
 /** @module policies/addressResolution */
 /**
@@ -34,16 +33,20 @@ class AddressTranslator {
     constructor() {}
     /**
      * Translates a Cassandra `rpc_address` to another address if necessary.
-     * @param {String} address the address of a node as returned by Cassandra.
+     * @param address the address of a node as returned by Cassandra.
      *
      * Note that if the `rpc_address` of a node has been configured to `0.0.0.0`
      * server side, then the provided address will be the node `listen_address`,
      * *not* `0.0.0.0`.
-     * @param {Number} port The port number, as specified in the [protocolOptions]{@link ClientOptions} at Client instance creation (9042 by default).
-     * @param {Function} callback Callback to invoke with endpoint as first parameter.
+     * @param port The port number, as specified in the [protocolOptions]{@link ClientOptions} at Client instance creation (9042 by default).
+     * @param callback Callback to invoke with endpoint as first parameter.
      * The endpoint is an string composed of the IP address and the port number in the format `ipAddress:port`.
      */
-    translate(address, port, callback) {
+    translate(
+        address: string,
+        port: number,
+        callback: (endpoint: string) => void,
+    ): void {
         callback(address + ":" + port);
     }
 }
@@ -65,10 +68,14 @@ class EC2MultiRegionTranslator extends AddressTranslator {
      * Addresses in the same EC2 region are translated to private IPs and addresses in
      * different EC2 regions (than the client) are unchanged
      */
-    translate(address, port, callback) {
+    translate(
+        address: string,
+        port: number,
+        callback: (endpoint: string) => void,
+    ): void {
         let newAddress = address;
         const self = this;
-        let name;
+        let name: string | undefined;
         utils.series(
             [
                 function resolve(next) {
@@ -108,10 +115,8 @@ class EC2MultiRegionTranslator extends AddressTranslator {
     /**
      * Log method called to log errors that occurred while performing dns resolution.
      * You can assign your own method to the class instance to do proper logging.
-     * @param {String} address
-     * @param {Error} err
      */
-    logError(address, err) {
+    logError(address: string, err: Error): void {
         // Do nothing by default
     }
 }
@@ -121,17 +126,14 @@ class EC2MultiRegionTranslator extends AddressTranslator {
  * into locally queryable addresses.
  */
 class MappingAddressTranslator extends AddressTranslator {
-    /**
-     * @type {Map<_nodeNet.SocketAddress, _nodeNet.SocketAddress>}
-     */
-    #mapping;
+    #mapping: Map<_nodeNet.SocketAddress, _nodeNet.SocketAddress>;
 
     /**
-     * @param {Map<_nodeNet.SocketAddress, _nodeNet.SocketAddress>} mapping Map of addresses to be translated.
+     * @param mapping Map of addresses to be translated.
      * If an address is present as a key in the map, it will be translated to the value present under that key in the map.
      * Otherwise, the address will remain unchanged.
      */
-    constructor(mapping) {
+    constructor(mapping: Map<_nodeNet.SocketAddress, _nodeNet.SocketAddress>) {
         super();
         this.#mapping = mapping;
     }
@@ -139,13 +141,15 @@ class MappingAddressTranslator extends AddressTranslator {
     /**
      * @internal
      * @ignore
-     * @returns {Array<Array<_nodeNet.SocketAddress>>} Array of pairs of addresses
+     * @returns Array of pairs of addresses
      */
-    getRustConfiguration() {
+    getRustConfiguration(): Array<Array<_nodeNet.SocketAddress>> {
         return Array.from(this.#mapping.entries());
     }
 }
 
-exports.AddressTranslator = AddressTranslator;
-exports.EC2MultiRegionTranslator = EC2MultiRegionTranslator;
-exports.MappingAddressTranslator = MappingAddressTranslator;
+export {
+    AddressTranslator,
+    EC2MultiRegionTranslator,
+    MappingAddressTranslator,
+};
