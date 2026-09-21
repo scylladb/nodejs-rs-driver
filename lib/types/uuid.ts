@@ -1,5 +1,6 @@
 import utils = require("../utils");
 import rust = require("../../index");
+import { ValueCallback } from "../..";
 
 /** @module types */
 
@@ -61,16 +62,23 @@ class Uuid {
      * @param callback Optional callback to be invoked with the error as
      * first parameter and the created Uuid as second parameter.
      */
-    static random(
-        callback?: (err: Error | null, uuid?: Uuid) => void,
-    ): Uuid | void {
+    static random(callback: ValueCallback<Uuid>): void;
+    static random(): Uuid;
+    static random(callback?: ValueCallback<Uuid>): Uuid | void {
         // While in theory nothing should throw here, there may be some edge cases,
         // where napi layer will thrown an error, which we need to catch and pass to the callback.
         if (callback) {
+            // The callback is actually invoked either with an error and no
+            // value, or with no error and the new instance, which the stricter
+            // `ValueCallback` the driver exposes cannot express.
+            const done = callback as unknown as (
+                err: Error | null,
+                uuid?: Uuid,
+            ) => void;
             try {
-                return callback(null, new Uuid(rust.getRandomUuidV4()));
+                return done(null, new Uuid(rust.getRandomUuidV4()));
             } catch (err) {
-                return callback(err as Error);
+                return done(err as Error);
             }
         }
         return new Uuid(rust.getRandomUuidV4());

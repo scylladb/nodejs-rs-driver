@@ -1,22 +1,26 @@
-// @ts-nocheck
 "use strict";
 
-const { Readable } = require("stream");
-const utils = require("../utils");
-const errors = require("../errors");
-const clientOptions = require("../client-options");
+import { Readable, ReadableOptions } from "stream";
+import utils = require("../utils");
+import errors = require("../errors");
+// TODO: Remove after lib/client-options.js is converted to Typescript.
+// @ts-ignore
+import clientOptions = require("../client-options");
 
 /** @module types */
 /**
  * Readable stream using to yield data from a result or a field
  */
 class ResultStream extends Readable {
-    #cancelAllowed;
-    #handlersObject;
-    #highWaterMarkRows;
-    #readNext;
+    buffer: Array<any>;
+    paused: boolean;
 
-    constructor(opt) {
+    #cancelAllowed: boolean;
+    #handlersObject: any;
+    #highWaterMarkRows: number;
+    #readNext: (() => void) | null = null;
+
+    constructor(opt?: ReadableOptions) {
         super(opt);
         this.buffer = [];
         this.paused = true;
@@ -25,10 +29,10 @@ class ResultStream extends Readable {
         this.#highWaterMarkRows = 0;
     }
 
-    _read() {
+    _read(): void {
         this.paused = false;
         if (this.buffer.length === 0) {
-            this._readableState.reading = false;
+            (this as any)._readableState.reading = false;
         }
         while (!this.paused && this.buffer.length > 0) {
             this.paused = !this.push(this.buffer.shift());
@@ -42,10 +46,10 @@ class ResultStream extends Readable {
 
     /**
      * Allows for throttling, helping nodejs keep the internal buffers reasonably sized.
-     * @param {function?} readNext function that triggers reading the next result chunk
+     * @param readNext function that triggers reading the next result chunk
      * @ignore
      */
-    _valve(readNext) {
+    _valve(readNext?: (() => void) | null): void {
         this.#readNext = null;
         if (!readNext) {
             return;
@@ -57,14 +61,14 @@ class ResultStream extends Readable {
         }
     }
 
-    add(chunk) {
+    add(chunk: any): number {
         const length = this.buffer.push(chunk);
         this.read(0);
         this.#checkAboveHighWaterMark();
         return length;
     }
 
-    #checkAboveHighWaterMark() {
+    #checkAboveHighWaterMark(): void {
         if (
             !this.#handlersObject ||
             !this.#handlersObject.resumeReadingHandler
@@ -80,7 +84,7 @@ class ResultStream extends Readable {
         this.#handlersObject.resumeReadingHandler(false);
     }
 
-    #checkBelowHighWaterMark() {
+    #checkBelowHighWaterMark(): void {
         if (
             !this.#handlersObject ||
             !this.#handlersObject.resumeReadingHandler
@@ -101,7 +105,7 @@ class ResultStream extends Readable {
      * When continuous paging is enabled, allows the client to notify to the server to stop pushing further pages.
      *
      * Note: This is not part of the public API yet.
-     * @param {Function} [callback] The cancel method accepts an optional callback.
+     * @param callback The cancel method accepts an optional callback.
      * @example <caption>Cancelling a continuous paging execution</caption>
      * const stream = client.stream(query, params, { prepare: true, continuousPaging: true });
      * // ...
@@ -109,7 +113,7 @@ class ResultStream extends Readable {
      * stream.cancel();
      * @ignore
      */
-    cancel(callback) {
+    cancel(callback?: (err?: Error) => void): void {
         if (!this.#cancelAllowed) {
             const err = new Error(
                 "You can only cancel streaming executions when continuous paging is enabled",
@@ -136,11 +140,10 @@ class ResultStream extends Readable {
 
     /**
      * Sets the pointer to the handler to be used to cancel the continuous page execution.
-     * @param options
      * @internal
      * @ignore
      */
-    setHandlers(options) {
+    setHandlers(options: any): void {
         if (!options.continuousPaging) {
             return;
         }
@@ -152,4 +155,4 @@ class ResultStream extends Readable {
     }
 }
 
-module.exports = ResultStream;
+export = ResultStream;

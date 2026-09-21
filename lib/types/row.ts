@@ -1,4 +1,3 @@
-// @ts-nocheck
 "use strict";
 /** @module types */
 
@@ -6,14 +5,18 @@
  * Represents a result row
  */
 class Row {
-    #columns;
+    /**
+     * The value of each column of the row, keyed by column name.
+     */
+    [key: string]: any;
+
+    #columns: Array<string | { name: string }>;
 
     /**
      * Creates Row from array of column names. Column names can be provided either as array of strings
      * or array of objects with property name representing column name. Any other metadata will be ignored
-     * @param {Array<string | {name: string}>} columns
      */
-    constructor(columns) {
+    constructor(columns: Array<string | { name: string }>) {
         if (!columns) {
             throw new Error("Columns not defined");
         }
@@ -22,25 +25,21 @@ class Row {
     }
     /**
      * Returns the cell value.
-     * @param {String|Number} columnName Name or index of the column
+     * @param columnName Name or index of the column
      */
-    get(columnName) {
+    get(columnName: string | number): any {
         if (typeof columnName === "number") {
             // its an index
-            columnName = this.#columns[columnName];
-            if (typeof columnName.name == "string") {
-                columnName = columnName.name;
-            }
-            return this[columnName];
+            const column = this.#columns[columnName];
+            return this[typeof column === "string" ? column : column.name];
         }
         return this[columnName];
     }
     /**
      * Returns an array of the values of the row
-     * @returns {Array<any>}
      */
-    values() {
-        const valuesArray = [];
+    values(): Array<any> {
+        const valuesArray: Array<any> = [];
         this.forEach(function (val) {
             valuesArray.push(val);
         });
@@ -48,10 +47,9 @@ class Row {
     }
     /**
      * Returns an array of the column names of the row
-     * @returns {Array<any>}
      */
-    keys() {
-        const keysArray = [];
+    keys(): Array<string> {
+        const keysArray: Array<string> = [];
         this.forEach(function (val, key) {
             keysArray.push(key);
         });
@@ -59,9 +57,8 @@ class Row {
     }
     /**
      * Executes the callback for each field in the row, containing the value as first parameter followed by the columnName
-     * @param {Function} callback
      */
-    forEach(callback) {
+    forEach(callback: (val: any, columnName: string) => void): void {
         for (const columnName in this) {
             if (!Object.prototype.hasOwnProperty.call(this, columnName)) {
                 continue;
@@ -71,4 +68,4 @@ class Row {
     }
 }
 
-module.exports = Row;
+export = Row;

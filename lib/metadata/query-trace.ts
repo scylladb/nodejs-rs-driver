@@ -1,7 +1,5 @@
 import { registerQueryTraceCtor, registerTracingEventCtor } from "../../index";
 import InetAddress = require("../types/inet-address");
-// TODO: remove once `lib/types/time-uuid.js` is converted to typescript.
-// @ts-ignore
 import TimeUuid = require("../types/time-uuid");
 
 /**

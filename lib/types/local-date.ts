@@ -1,6 +1,5 @@
-// @ts-nocheck
 "use strict";
-const utils = require("../utils");
+import utils = require("../utils");
 /** @module types */
 
 const millisecondsPerDay = 86400000;
@@ -11,11 +10,7 @@ const dateCenter = Math.pow(2, 31);
 
 const daysInAMonth = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
-/**
- * @param {Number} year
- * @returns {boolean}
- */
-function isLeapYear(year) {
+function isLeapYear(year: number): boolean {
     return (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
 }
 
@@ -35,34 +30,19 @@ function isLeapYear(year) {
  * @property {Date} date The date representation if falls within a range of an ES5 data type, otherwise an invalid date.
  */
 class LocalDate {
-    /**
-     * @type {Number}
-     */
-    #year;
-    /**
-     * @type {Number}
-     */
-    #month;
-    /**
-     * @type {Number}
-     */
-    #day;
-    /**
-     * @type {Number}
-     */
-    #value;
-    /**
-     * @type {Date}
-     */
-    #date;
+    #year: number;
+    #month: number;
+    #day: number;
+    #value: number | null;
+    #date!: Date;
 
     /**
      * Creates a new instance of LocalDate.
-     * @param {Number} yearOrDaysSinceEpoch The year or days since epoch. If days since epoch, month and day should not be provided.
-     * @param {Number} month Between 1 and 12 inclusive.
-     * @param {Number} day Between 1 and the number of days in the given month of the given year.
+     * @param yearOrDaysSinceEpoch The year or days since epoch. If days since epoch, month and day should not be provided.
+     * @param month Between 1 and 12 inclusive.
+     * @param day Between 1 and the number of days in the given month of the given year.
      */
-    constructor(yearOrDaysSinceEpoch, month, day) {
+    constructor(yearOrDaysSinceEpoch: number, month?: number, day?: number) {
         // implementation detail: internally uses a UTC based date
         if (
             typeof yearOrDaysSinceEpoch === "number" &&
@@ -128,13 +108,12 @@ class LocalDate {
     /**
      * A number representing the year. May return NaN if cannot be represented as a Date.
      * @readonly
-     * @type {Number}
      */
-    get year() {
+    get year(): number {
         return this.#year;
     }
 
-    set year(_) {
+    set year(_: number) {
         throw new SyntaxError("LocalDate year is read-only");
     }
 
@@ -142,13 +121,12 @@ class LocalDate {
      * A number between 1 and 12 inclusive representing the month.
      * May return NaN if cannot be represented as a Date.
      * @readonly
-     * @type {Number}
      */
-    get month() {
+    get month(): number {
         return this.#month;
     }
 
-    set month(_) {
+    set month(_: number) {
         throw new SyntaxError("LocalDate month is read-only");
     }
 
@@ -156,26 +134,24 @@ class LocalDate {
      * A number between 1 and the number of days in the given month of the given year (value up to 31).
      * May return NaN if cannot be represented as a Date.
      * @readonly
-     * @type {Number}
      */
-    get day() {
+    get day(): number {
         return this.#day;
     }
 
-    set day(_) {
+    set day(_: number) {
         throw new SyntaxError("LocalDate day is read-only");
     }
 
     /**
      * Date object represent this date.
      * @readonly
-     * @type {Date}
      */
-    get date() {
+    get date(): Date {
         return this.#date;
     }
 
-    set date(_) {
+    set date(_: Date) {
         throw new SyntaxError("LocalDate date is read-only");
     }
 
@@ -184,50 +160,47 @@ class LocalDate {
      * @readonly
      * @deprecated This member is in Datastax documentation, but it seems to not be exposed in the API.
      * Additionally we added a new class member: `value` that always returns days since epoch regardless of the date.
-     * @type {Number}
      */
-    get _value() {
+    get _value(): number | null {
         return this.#value;
     }
 
-    set _value(_) {
+    set _value(_: number | null) {
         throw new SyntaxError("LocalDate _value is read-only");
     }
 
     /**
      * Always valid amount of days since epoch.
      * @readonly
-     * @type {Number}
      */
-    get value() {
+    get value(): number {
         return this.#value
             ? this.#value
             : Math.floor(this.date.valueOf() / millisecondsPerDay);
     }
 
-    set value(_) {
+    set value(_: number) {
         throw new SyntaxError("LocalDate value is read-only");
     }
 
     /**
      * Creates a new instance of LocalDate using the current year, month and day from the system clock in the default time-zone.
      */
-    static now() {
+    static now(): LocalDate {
         return LocalDate.fromDate(new Date());
     }
 
     /**
      * Creates a new instance of LocalDate using the current date from the system clock at UTC.
      */
-    static utcNow() {
+    static utcNow(): LocalDate {
         return new LocalDate(Date.now());
     }
 
     /**
      * Creates a new instance of LocalDate using the year, month and day from the provided local date time.
-     * @param {Date} date
      */
-    static fromDate(date) {
+    static fromDate(date: Date): LocalDate {
         if (isNaN(date.getTime())) {
             throw new TypeError(`Invalid date: ${date}`);
         }
@@ -241,9 +214,8 @@ class LocalDate {
     /**
      * Creates a new instance of LocalDate using the year, month and day provided in the form: yyyy-mm-dd or
      * days since epoch (i.e. -1 for Dec 31, 1969).
-     * @param {String} value
      */
-    static fromString(value) {
+    static fromString(value: string): LocalDate {
         const dashCount = (value.match(/-/g) || []).length;
         if (dashCount >= 2) {
             let multiplier = 1;
@@ -267,25 +239,24 @@ class LocalDate {
 
     /**
      * Creates a new instance of LocalDate using the bytes representation.
-     * @param {Buffer} buffer
      */
-    static fromBuffer(buffer) {
+    static fromBuffer(buffer: Buffer): LocalDate {
         // move to unix epoch: 0.
         return new LocalDate(buffer.readUInt32BE(0) - dateCenter);
     }
 
     /**
      * Compares this LocalDate with the given one.
-     * @param {LocalDate} other date to compare against.
-     * @return {number} 0 if they are the same, 1 if the this is greater, and -1
+     * @param other date to compare against.
+     * @return 0 if they are the same, 1 if the this is greater, and -1
      * if the given one is greater.
      */
-    compare(other) {
+    compare(other: LocalDate): number {
         const thisValue = isNaN(this.date.getTime())
-            ? this.#value * millisecondsPerDay
+            ? this.#value! * millisecondsPerDay
             : this.date.getTime();
         const otherValue = isNaN(other.date.getTime())
-            ? other.#value * millisecondsPerDay
+            ? other.#value! * millisecondsPerDay
             : other.date.getTime();
         const diff = thisValue - otherValue;
         if (diff < 0) {
@@ -299,25 +270,22 @@ class LocalDate {
 
     /**
      * Returns true if the value of the LocalDate instance and other are the same
-     * @param {LocalDate} other
-     * @returns {Boolean}
      */
-    equals(other) {
+    equals(other: LocalDate): boolean {
         return other instanceof LocalDate && this.compare(other) === 0;
     }
 
-    inspect() {
+    inspect(): string {
         return `${this.constructor.name} : ${this.toString()}`;
     }
 
     /**
      * Gets the bytes representation of the instance.
-     * @returns {Buffer}
      */
-    toBuffer() {
+    toBuffer(): Buffer {
         // days since unix epoch
         const daysSinceEpoch = isNaN(this.date.getTime())
-            ? this.#value
+            ? this.#value!
             : Math.floor(this.date.getTime() / millisecondsPerDay);
         const value = daysSinceEpoch + dateCenter;
         const buf = utils.allocBufferUnsafe(4);
@@ -328,13 +296,12 @@ class LocalDate {
     /**
      * Gets the string representation of the instance in the form: yyyy-mm-dd if
      * the value can be parsed as a Date, otherwise days since epoch.
-     * @returns {String}
      */
-    toString() {
+    toString(): string {
         let result;
         // if cannot be parsed as date, return days since epoch representation.
         if (isNaN(this.date.getTime())) {
-            return this.#value.toString();
+            return this.#value!.toString();
         }
         if (this.year < 0) {
             result = "-" + fillZeros((this.year * -1).toString(), 4);
@@ -351,23 +318,20 @@ class LocalDate {
 
     /**
      * Gets the string representation of the instance in the form: yyyy-mm-dd, valid for JSON.
-     * @returns {String}
      */
-    toJSON() {
+    toJSON(): string {
         return this.toString();
     }
 }
 
 /**
- * @param {String} value
- * @param {Number} amount
  * @private
  */
-function fillZeros(value, amount) {
+function fillZeros(value: string, amount: number): string {
     if (value.length >= amount) {
         return value;
     }
     return utils.stringRepeat("0", amount - value.length) + value;
 }
 
-module.exports = LocalDate;
+export = LocalDate;

@@ -1,12 +1,11 @@
-// @ts-nocheck
 "use strict";
-const Long = require("long");
-const utils = require("../utils");
-const {
+import Long = require("long");
+import utils = require("../utils");
+import {
     bigintToLong,
     ensure32SignedInteger,
     ensure64SignedInteger,
-} = require("../new-utils");
+} from "../new-utils";
 
 /** @module types */
 
@@ -18,12 +17,14 @@ const reusableBuffers = {
 };
 
 const maxInt32 = 0x7fffffff;
-const maxInt64 = 0x7fffffffffffffffn;
-const nanosPerMicro = 1000n;
-const nanosPerMilli = 1000n * nanosPerMicro;
-const nanosPerSecond = 1000n * nanosPerMilli;
-const nanosPerMinute = 60n * nanosPerSecond;
-const nanosPerHour = 60n * nanosPerMinute;
+const _zero = BigInt(0);
+const _one = BigInt(1);
+const maxInt64 = BigInt("0x7fffffffffffffff");
+const nanosPerMicro = BigInt(1000);
+const nanosPerMilli = BigInt(1000) * nanosPerMicro;
+const nanosPerSecond = BigInt(1000) * nanosPerMilli;
+const nanosPerMinute = BigInt(60) * nanosPerSecond;
+const nanosPerHour = BigInt(60) * nanosPerMinute;
 const daysPerWeek = 7;
 const monthsPerYear = 12;
 const standardRegex = /(\d+)(y|mo|w|d|h|s|ms|us|µs|ns|m)/gi;
@@ -38,26 +39,21 @@ const iso8601AlternateRegex =
  * days in a month varies, and a day can have 23 or 25 hours if a daylight saving is involved.
  */
 class Duration {
-    /**
-     * @type {Number}
-     */
-    #months;
-    /**
-     * @type {Number}
-     */
-    #days;
-    /**
-     * @type {BigInt}
-     */
-    #nanoseconds;
+    #months: number;
+    #days: number;
+    #nanoseconds: bigint;
+
     /**
      * Creates a new instance of {@link Duration}.
-     * @param {Number} months The number of months.
-     * @param {Number} days The number of days.
-     * @param {Number|Long|BigInt} nanoseconds The number of nanoseconds.
-     * @constructor
+     * @param months The number of months.
+     * @param days The number of days.
+     * @param nanoseconds The number of nanoseconds.
      */
-    constructor(months, days, nanoseconds) {
+    constructor(
+        months: number,
+        days: number,
+        nanoseconds: number | Long | bigint,
+    ) {
         if (typeof months !== "number") {
             throw new TypeError(
                 `Expected months to be a number, got ${typeof months}`,
@@ -90,7 +86,7 @@ class Duration {
         ensure64SignedInteger(this.#nanoseconds, "nanoseconds");
     }
 
-    equals(other) {
+    equals(other: Duration): boolean {
         if (!(other instanceof Duration)) {
             return false;
         }
@@ -105,58 +101,52 @@ class Duration {
      * Get duration from rust object. Not intended to be exposed in the API
      * @internal
      * @ignore
-     * @param {rust.DurationWrapper} arg
-     * @returns {Duration}
      */
-    static fromRust(arg) {
-        let res = new Duration(arg.months, arg.days, arg.getNanoseconds());
+    static fromRust(arg: any): Duration {
+        const res = new Duration(arg.months, arg.days, arg.getNanoseconds());
         return res;
     }
 
     /**
      * Gets the number of months
      * @readonly
-     * @type {Number}
      */
-    get months() {
+    get months(): number {
         return this.#months;
     }
 
-    set months(_) {
+    set months(_: number) {
         throw new SyntaxError("Duration months is read-only");
     }
 
     /**
      * Gets the number of days
      * @readonly
-     * @type {Number}
      */
-    get days() {
+    get days(): number {
         return this.#days;
     }
 
-    set days(_) {
+    set days(_: number) {
         throw new SyntaxError("Duration days is read-only");
     }
 
     /**
      * Gets the number of nanoseconds
      * @readonly
-     * @type {Long}
      */
-    get nanoseconds() {
+    get nanoseconds(): Long {
         return bigintToLong(this.#nanoseconds);
     }
 
-    set nanoseconds(_) {
+    set nanoseconds(_: Long) {
         throw new SyntaxError("Duration nanoseconds is read-only");
     }
 
     /**
      * Serializes the duration and returns the representation of the value in bytes.
-     * @returns {Buffer}
      */
-    toBuffer() {
+    toBuffer(): Buffer {
         const lengthMonths = utils.VIntCoding.writeVInt(
             BigInt(this.#months),
             reusableBuffers.months,
@@ -182,11 +172,14 @@ class Duration {
 
     /**
      * Returns the string representation of the value.
-     * @return {string}
      */
-    toString() {
+    toString(): string {
         let value = "";
-        function append(dividend, divisor, unit) {
+        function append(
+            dividend: number,
+            divisor: number,
+            unit: string,
+        ): number {
             if (dividend === 0 || dividend < divisor) {
                 return dividend;
             }
@@ -194,40 +187,44 @@ class Duration {
             value += Math.floor(dividend / divisor) + unit;
             return dividend % divisor;
         }
-        function append64(dividend, divisor, unit) {
-            if (dividend === 0n || dividend < divisor) {
+        function append64(
+            dividend: bigint,
+            divisor: bigint,
+            unit: string,
+        ): bigint {
+            if (dividend === _zero || dividend < divisor) {
                 return dividend;
             }
             // string concatenation is supposed to be faster than join()
             value += (dividend / divisor).toString() + unit;
             return dividend % divisor;
         }
-        if (this.#months < 0 || this.#days < 0 || this.#nanoseconds < 0) {
+        if (this.#months < 0 || this.#days < 0 || this.#nanoseconds < _zero) {
             value = "-";
         }
         let remainder = append(Math.abs(this.#months), monthsPerYear, "y");
         append(remainder, 1, "mo");
         append(Math.abs(this.#days), 1, "d");
 
-        if (this.#nanoseconds !== 0n) {
+        if (this.#nanoseconds !== _zero) {
             const nanos =
-                this.#nanoseconds < 0n ? -this.#nanoseconds : this.#nanoseconds;
-            remainder = append64(nanos, nanosPerHour, "h");
-            remainder = append64(remainder, nanosPerMinute, "m");
-            remainder = append64(remainder, nanosPerSecond, "s");
-            remainder = append64(remainder, nanosPerMilli, "ms");
-            remainder = append64(remainder, nanosPerMicro, "us");
-            append64(remainder, 1n, "ns");
+                this.#nanoseconds < _zero
+                    ? -this.#nanoseconds
+                    : this.#nanoseconds;
+            let remainder64 = append64(nanos, nanosPerHour, "h");
+            remainder64 = append64(remainder64, nanosPerMinute, "m");
+            remainder64 = append64(remainder64, nanosPerSecond, "s");
+            remainder64 = append64(remainder64, nanosPerMilli, "ms");
+            remainder64 = append64(remainder64, nanosPerMicro, "us");
+            append64(remainder64, _one, "ns");
         }
         return value;
     }
 
     /**
      * Creates a new {@link Duration} instance from the binary representation of the value.
-     * @param {Buffer} buffer
-     * @returns {Duration}
      */
-    static fromBuffer(buffer) {
+    static fromBuffer(buffer: Buffer): Duration {
         const offset = { value: 0 };
         const months = Number(utils.VIntCoding.readVInt(buffer, offset));
         const days = Number(utils.VIntCoding.readVInt(buffer, offset));
@@ -237,7 +234,6 @@ class Duration {
 
     /**
      * Creates a new {@link Duration} instance from the string representation of the value.
-     * @param {String} input
      *
      * Accepted formats:
      *
@@ -256,13 +252,12 @@ class Duration {
      * - ISO 8601 alternative format: `P[YYYY]-[MM]-[DD]T[hh]:[mm]:[ss]`
      *
      * Duration can be made negative by adding `-` at the beginning of the input
-     * @returns {Duration}
      * @example <caption>From formatted string</caption>
      * let date = fromString("4mo7d20ns");  // 1 month, 7 days, 20 nanoseconds
      * @example <caption>From ISO 8601</caption>
      * let date = fromString("P2DT5M");     // 2 days, 5 minutes
      */
-    static fromString(input) {
+    static fromString(input: string): Duration {
         const isNegative = input.charAt(0) === "-";
         const source = isNegative ? input.substring(1) : input;
         if (source.charAt(0) === "P") {
@@ -277,13 +272,11 @@ class Duration {
         return parseStandardFormat(isNegative, source);
     }
 }
+
 /**
- * @param {Boolean} isNegative
- * @param {String} source
- * @returns {Duration}
  * @private
  */
-function parseStandardFormat(isNegative, source) {
+function parseStandardFormat(isNegative: boolean, source: string): Duration {
     const builder = new Builder(isNegative);
     standardRegex.lastIndex = 0;
     let matches;
@@ -294,12 +287,9 @@ function parseStandardFormat(isNegative, source) {
 }
 
 /**
- * @param {Boolean} isNegative
- * @param {String} source
- * @returns {Duration}
  * @private
  */
-function parseIso8601Format(isNegative, source) {
+function parseIso8601Format(isNegative: boolean, source: string): Duration {
     const matches = iso8601Regex.exec(source);
     if (!matches || matches[0] !== source) {
         throw new TypeError(`Unable to convert '${source}' to a duration`);
@@ -329,12 +319,9 @@ function parseIso8601Format(isNegative, source) {
 }
 
 /**
- * @param {Boolean} isNegative
- * @param {String} source
- * @returns {Duration}
  * @private
  */
-function parseIso8601WeekFormat(isNegative, source) {
+function parseIso8601WeekFormat(isNegative: boolean, source: string): Duration {
     const matches = iso8601WeekRegex.exec(source);
     if (!matches || matches[0] !== source) {
         throw new TypeError(`Unable to convert '${source}' to a duration`);
@@ -343,12 +330,12 @@ function parseIso8601WeekFormat(isNegative, source) {
 }
 
 /**
- * @param {Boolean} isNegative
- * @param {String} source
- * @returns {Duration}
  * @private
  */
-function parseIso8601AlternativeFormat(isNegative, source) {
+function parseIso8601AlternativeFormat(
+    isNegative: boolean,
+    source: string,
+): Duration {
     const matches = iso8601AlternateRegex.exec(source);
     if (!matches || matches[0] !== source) {
         throw new TypeError(`Unable to convert '${source}' to a duration`);
@@ -364,25 +351,23 @@ function parseIso8601AlternativeFormat(isNegative, source) {
 }
 
 /**
- * @param {Boolean} isNegative
  * @private
- * @constructor
  */
 class Builder {
-    #isNegative;
-    #unitIndex;
-    #months;
-    #days;
-    #nanoseconds;
-    #addMethods;
-    #unitByIndex;
+    #isNegative: boolean;
+    #unitIndex: number;
+    #months: number;
+    #days: number;
+    #nanoseconds: bigint;
+    #addMethods: { [symbol: string]: (value: string | number) => Builder };
+    #unitByIndex: Array<string | null>;
 
-    constructor(isNegative) {
+    constructor(isNegative: boolean) {
         this.#isNegative = isNegative;
         this.#unitIndex = 0;
         this.#months = 0;
         this.#days = 0;
-        this.#nanoseconds = 0n;
+        this.#nanoseconds = _zero;
         this.#addMethods = {
             y: this.addYears,
             mo: this.addMonths,
@@ -393,7 +378,7 @@ class Builder {
             s: this.addSeconds,
             ms: this.addMillis,
             // µs
-            "\u00B5s": this.addMicros,
+            µs: this.addMicros,
             us: this.addMicros,
             ns: this.addNanos,
         };
@@ -411,7 +396,7 @@ class Builder {
             "nanoseconds",
         ];
     }
-    #validateOrder(unitIndex) {
+    #validateOrder(unitIndex: number): void {
         if (unitIndex === this.#unitIndex) {
             throw new TypeError(
                 `Invalid duration. The ${this.#getUnitName(unitIndex)} are specified multiple times`,
@@ -425,11 +410,7 @@ class Builder {
         }
         this.#unitIndex = unitIndex;
     }
-    /**
-     * @param {Number} units
-     * @param {Number} monthsPerUnit
-     */
-    #validateMonths(units, monthsPerUnit) {
+    #validateMonths(units: number, monthsPerUnit: number): void {
         const maxMonths = maxInt32 + (this.#isNegative ? 1 : 0);
         this.#validate32(
             units,
@@ -437,180 +418,121 @@ class Builder {
             "months",
         );
     }
-    /**
-     * @param {Number} units
-     * @param {Number} daysPerUnit
-     */
-    #validateDays(units, daysPerUnit) {
+    #validateDays(units: number, daysPerUnit: number): void {
         const maxDays = maxInt32 + (this.#isNegative ? 1 : 0);
         this.#validate32(units, (maxDays - this.#days) / daysPerUnit, "days");
     }
-    /**
-     * @param {bigint} units
-     * @param {bigint} nanosPerUnit
-     */
-    #validateNanos(units, nanosPerUnit) {
-        const maxNanos = maxInt64 + (this.#isNegative ? 1n : 0n);
+    #validateNanos(units: bigint, nanosPerUnit: bigint): void {
+        const maxNanos = maxInt64 + (this.#isNegative ? _one : _zero);
         this.#validate64(
             units,
             (maxNanos - this.#nanoseconds) / nanosPerUnit,
             "nanoseconds",
         );
     }
-    /**
-     * @param {Number} units
-     * @param {Number} limit
-     * @param {String} unitName
-     */
-    #validate32(units, limit, unitName) {
+    #validate32(units: number, limit: number, unitName: string): void {
         if (units > limit) {
             throw new TypeError(
                 `Invalid duration. The total number of ${unitName} must fit in a 32 bit signed integer.`,
             );
         }
     }
-    /**
-     * @param {bigint} units
-     * @param {bigint} limit
-     * @param {String} unitName
-     */
-    #validate64(units, limit, unitName) {
+    #validate64(units: bigint, limit: bigint, unitName: string): void {
         if (units > limit) {
             throw new TypeError(
                 `Invalid duration. The total number of ${unitName} must fit in a 64 bit signed integer.`,
             );
         }
     }
-    #getUnitName(unitIndex) {
+    #getUnitName(unitIndex: number): string {
         const name = this.#unitByIndex[+unitIndex];
         if (!name) {
             throw new Error("unknown unit index: " + unitIndex);
         }
         return name;
     }
-    add(textValue, symbol) {
+    add(textValue: string, symbol: string): Builder {
         const addMethod = this.#addMethods[symbol.toLowerCase()];
         if (!addMethod) {
             throw new TypeError(`Unknown duration symbol '${symbol}'`);
         }
         return addMethod.call(this, textValue);
     }
-    /**
-     * @param {String|Number} years
-     * @return {Builder}
-     */
-    addYears(years) {
+    addYears(years: string | number): Builder {
         const value = +years;
         this.#validateOrder(1);
         this.#validateMonths(value, monthsPerYear);
         this.#months += value * monthsPerYear;
         return this;
     }
-    /**
-     * @param {String|Number} months
-     * @return {Builder}
-     */
-    addMonths(months) {
+    addMonths(months: string | number): Builder {
         const value = +months;
         this.#validateOrder(2);
         this.#validateMonths(value, 1);
         this.#months += value;
         return this;
     }
-    /**
-     * @param {String|Number} weeks
-     * @return {Builder}
-     */
-    addWeeks(weeks) {
+    addWeeks(weeks: string | number): Builder {
         const value = +weeks;
         this.#validateOrder(3);
         this.#validateDays(value, daysPerWeek);
         this.#days += value * daysPerWeek;
         return this;
     }
-    /**
-     * @param {String|Number} days
-     * @return {Builder}
-     */
-    addDays(days) {
+    addDays(days: string | number): Builder {
         const value = +days;
         this.#validateOrder(4);
         this.#validateDays(value, 1);
         this.#days += value;
         return this;
     }
-    /**
-     * @param {String|Number|BigInt} hours
-     * @return {Builder}
-     */
-    addHours(hours) {
+    addHours(hours: string | number | bigint): Builder {
         const value = BigInt(hours);
         this.#validateOrder(5);
         this.#validateNanos(value, nanosPerHour);
         this.#nanoseconds += value * nanosPerHour;
         return this;
     }
-    /**
-     * @param {String|Number|BigInt} minutes
-     * @return {Builder}
-     */
-    addMinutes(minutes) {
+    addMinutes(minutes: string | number | bigint): Builder {
         const value = BigInt(minutes);
         this.#validateOrder(6);
         this.#validateNanos(value, nanosPerMinute);
         this.#nanoseconds += value * nanosPerMinute;
         return this;
     }
-    /**
-     * @param {String|Number|BigInt} seconds
-     * @return {Builder}
-     */
-    addSeconds(seconds) {
+    addSeconds(seconds: string | number | bigint): Builder {
         const value = BigInt(seconds);
         this.#validateOrder(7);
         this.#validateNanos(value, nanosPerSecond);
         this.#nanoseconds += value * nanosPerSecond;
         return this;
     }
-    /**
-     * @param {String|Number|BigInt} millis
-     * @return {Builder}
-     */
-    addMillis(millis) {
+    addMillis(millis: string | number | bigint): Builder {
         const value = BigInt(millis);
         this.#validateOrder(8);
         this.#validateNanos(value, nanosPerMilli);
         this.#nanoseconds += value * nanosPerMilli;
         return this;
     }
-    /**
-     * @param {String|Number|BigInt} micros
-     * @return {Builder}
-     */
-    addMicros(micros) {
+    addMicros(micros: string | number | bigint): Builder {
         const value = BigInt(micros);
         this.#validateOrder(9);
         this.#validateNanos(value, nanosPerMicro);
         this.#nanoseconds += value * nanosPerMicro;
         return this;
     }
-    /**
-     * @param {String|Number|BigInt} nanos
-     * @return {Builder}
-     */
-    addNanos(nanos) {
+    addNanos(nanos: string | number | bigint): Builder {
         const value = BigInt(nanos);
         this.#validateOrder(10);
-        this.#validateNanos(value, 1n);
+        this.#validateNanos(value, _one);
         this.#nanoseconds += value;
         return this;
     }
-    /** @return {Duration} */
-    build() {
+    build(): Duration {
         return this.#isNegative
             ? new Duration(-this.#months, -this.#days, -this.#nanoseconds)
             : new Duration(this.#months, this.#days, this.#nanoseconds);
     }
 }
 
-module.exports = Duration;
+export = Duration;

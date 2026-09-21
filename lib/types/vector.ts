@@ -1,15 +1,17 @@
-// @ts-nocheck
 "use strict";
 /** @module types */
 
-const util = require("node:util");
+import util = require("node:util");
+
 class Vector {
+    elements: Array<any>;
     /**
-     *
-     * @param {Float32Array | Array<any>} elements
-     * @param {string} [subtype]
+     * Returns the number of the elements.
      */
-    constructor(elements, subtype) {
+    length: number;
+    subtype?: string;
+
+    constructor(elements: Float32Array | Array<any>, subtype?: string) {
         if (elements instanceof Float32Array) {
             this.elements = Array.from(elements);
         } else if (Array.isArray(elements)) {
@@ -22,16 +24,12 @@ class Vector {
         if (this.elements.length === 0) {
             throw new TypeError("Vector must contain at least one value");
         }
-        /**
-         * Returns the number of the elements.
-         * @type Number
-         */
         this.length = this.elements.length;
         this.subtype = subtype;
 
         // eslint-disable-next-line no-constructor-return
         return new Proxy(this, {
-            get: function (obj, key) {
+            get: function (obj: any, key) {
                 if (key === "IDENTITY") {
                     return "Vector";
                 } else if (
@@ -43,14 +41,14 @@ class Vector {
                 }
                 return obj[key];
             },
-            set: function (obj, key, value) {
+            set: function (obj: any, key, value) {
                 if (typeof key === "string" && Number.isInteger(Number(key))) {
                     // key is an index
                     return (obj.elements[key] = value);
                 }
                 return (obj[key] = value);
             },
-            ownKeys: function (obj) {
+            ownKeys: function () {
                 return Reflect.ownKeys(elements);
             },
             getOwnPropertyDescriptor(target, key) {
@@ -64,45 +62,42 @@ class Vector {
     }
     /**
      * Returns the string representation of the vector.
-     * @returns {string}
      */
-    toString() {
+    toString(): string {
         return "[".concat(this.elements.toString(), "]");
     }
-    /**
-     *
-     * @param {number} index
-     */
-    at(index) {
+
+    at(index: number): any {
         return this.elements[index];
     }
 
     /**
-     *
-     * @returns {IterableIterator<any>} an iterator over the elements of the vector
+     * @returns an iterator over the elements of the vector
      */
-    [Symbol.iterator]() {
+    [Symbol.iterator](): IterableIterator<any> {
         return this.elements[Symbol.iterator]();
     }
 
-    static get [Symbol.species]() {
+    static get [Symbol.species](): typeof Vector {
         return Vector;
     }
 
-    forEach(callback) {
+    forEach(
+        callback: (value: any, index: number, array: Array<any>) => void,
+    ): void {
         return this.elements.forEach(callback);
     }
 
     /**
-     * @returns {string | undefined} get the subtype string, e.g., "float", but it's optional so it can return undefined
+     * @returns get the subtype string, e.g., "float", but it's optional so it can return undefined
      */
-    getSubtype() {
+    getSubtype(): string | undefined {
         return this.subtype;
     }
 }
 
 Object.defineProperty(Vector, Symbol.hasInstance, {
-    value: function (i) {
+    value: function (i: any) {
         return (
             (util.types.isProxy(i) && i.IDENTITY === "Vector") ||
             i instanceof Float32Array
@@ -110,4 +105,4 @@ Object.defineProperty(Vector, Symbol.hasInstance, {
     },
 });
 
-module.exports = Vector;
+export = Vector;

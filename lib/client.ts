@@ -759,7 +759,7 @@ class Client extends events.EventEmitter {
         // NOTE: the nodejs stream maintains yet another internal buffer
         // we rely on the default stream implementation to keep memory
         // usage reasonable.
-        const resultStream = new ResultStream({ objectMode: 1 });
+        const resultStream = new ResultStream({ objectMode: true });
         function onFinish(err: any, result: { nextPage: Function }) {
             if (err) {
                 resultStream.emit("error", err);
