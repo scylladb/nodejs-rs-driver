@@ -1,5 +1,3 @@
-// TODO: remove once lib/utils.js is converted to Typescript.
-// @ts-ignore
 import utils = require("../utils");
 import rust = require("../../index");
 

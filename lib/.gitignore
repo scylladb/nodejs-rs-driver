@@ -13,3 +13,5 @@ token.js
 token.d.ts
 promise-utils.js
 promise-utils.d.ts
+utils.js
+utils.d.ts

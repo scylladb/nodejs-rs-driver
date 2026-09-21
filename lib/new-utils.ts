@@ -4,6 +4,8 @@ import { inspect } from "util";
 
 import Long = require("long");
 import { ColumnInfo } from "./types/cql-utils";
+// TODO: Remove after lib/execution-options.js is converted to Typescript.
+// @ts-ignore
 import { ExecutionOptions } from "./execution-options";
 
 /**
