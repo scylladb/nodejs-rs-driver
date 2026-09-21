@@ -33,3 +33,5 @@ time-uuid.js
 time-uuid.d.ts
 vector.js
 vector.d.ts
+index.js
+index.d.ts
