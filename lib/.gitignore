@@ -21,3 +21,5 @@ query-options.js
 query-options.d.ts
 client-options.js
 client-options.d.ts
+reader.js
+reader.d.ts

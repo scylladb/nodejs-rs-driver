@@ -1,26 +1,24 @@
-// @ts-nocheck
 "use strict";
 
 /**
  * Buffer forward reader of CQL binary frames
  */
 class FrameReader {
+    offset: number;
+    buf: Buffer;
+
     /**
      * Creates a new instance of the reader
-     * @param {Buffer} body
      */
-    constructor(body) {
+    constructor(body: Buffer) {
         this.offset = 0;
         this.buf = body;
     }
 
     /**
      * Slices the underlying buffer
-     * @param {Number} begin
-     * @param {Number} [end]
-     * @returns {Buffer}
      */
-    slice(begin, end) {
+    slice(begin: number, end?: number): Buffer {
         if (typeof end === "undefined") {
             end = this.buf.length;
         }
@@ -31,9 +29,8 @@ class FrameReader {
      * Reads any number of bytes and moves the offset.
      * if length not provided or it's larger than the remaining bytes, reads to end.
      * @param length
-     * @returns {Buffer}
      */
-    read(length) {
+    read(length?: number): Buffer {
         let end = this.buf.length;
         if (
             typeof length !== "undefined" &&
@@ -48,9 +45,8 @@ class FrameReader {
 
     /**
      * Reads a BE Int and moves the offset
-     * @returns {Number}
      */
-    readInt() {
+    readInt(): number {
         this.checkOffset(4);
         const result = this.buf.readInt32BE(this.offset);
         this.offset += 4;
@@ -59,21 +55,21 @@ class FrameReader {
 
     /**
      * Checks that the new length to read is within the range of the buffer length. Throws a RangeError if not.
-     * @param {Number} newLength
      */
-    checkOffset(newLength) {
+    checkOffset(newLength: number): void {
         if (this.offset + newLength > this.buf.length) {
             const err = new RangeError("Trying to access beyond buffer length");
-            err.expectedLength = newLength;
+            // The reader tags the error with how much it wanted to read, which
+            // `lib/encoder.js` reads back when it catches a short frame.
+            (err as any).expectedLength = newLength;
             throw err;
         }
     }
 
     /**
      * Reads the amount of bytes that the field has and returns them (slicing them).
-     * @returns {Buffer}
      */
-    readBytes() {
+    readBytes(): Buffer | null {
         const length = this.readInt();
         if (length < 0) {
             return null;
@@ -83,4 +79,4 @@ class FrameReader {
     }
 }
 
-module.exports = { FrameReader };
+export { FrameReader };
