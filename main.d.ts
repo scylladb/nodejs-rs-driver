@@ -1,5 +1,4 @@
 import * as events from "events";
-import * as tls from "tls";
 import { URL } from "url";
 import net = require("node:net");
 import * as auth from "./lib/auth";
@@ -11,10 +10,10 @@ import * as metadata from "./lib/metadata";
 import { Host, HostMap } from "./lib/host";
 import { Token, TokenRange } from "./lib/token";
 import { ExecutionOptions } from "./lib/execution-options";
+import { ClientOptions, SslOptions, ClientRoutesProxy } from "./lib/client-options";
 import { QueryOptions } from "./lib/query-options";
 import { ExecutionProfile } from "./lib/execution-profile";
 import Long = types.Long;
-import Uuid = types.Uuid;
 
 // Export imported submodules
 export * as concurrent from "./lib/concurrent";
@@ -23,6 +22,7 @@ export * as errors from "./lib/errors";
 export { auth, metadata, metrics, policies, tracker, types };
 export { Host, HostMap };
 export { ExecutionOptions };
+export { ClientOptions, SslOptions, ClientRoutesProxy };
 export { QueryOptions };
 export { ExecutionProfile };
 
@@ -161,99 +161,6 @@ export class Client extends events.EventEmitter {
   getReplicas(keyspace: string, token: Buffer): Host[];
 
   getState(): metadata.ClientState;
-}
-
-/** A single client routes proxy the driver should read `system.client_routes` for. */
-export interface ClientRoutesProxy {
-  /** The ScyllaDB Cloud connection id used to filter `system.client_routes`. */
-  connectionId: string;
-  /**
-   * Overrides the hostname read from `system.client_routes` for this connection id.
-   * Useful for testing and for some cloud architectures.
-   */
-  hostnameOverride?: string;
-}
-
-export interface ClientOptions {
-  contactPoints?: string[];
-  clientRoutes?: { proxies: ClientRoutesProxy[] };
-  localDataCenter?: string;
-  keyspace?: string;
-  authProvider?: auth.AuthProvider;
-  credentials?: {
-    username: string;
-    password: string;
-  };
-
-  encoding?: {
-    map?: Function;
-    set?: Function;
-    copyBuffer?: boolean;
-    useUndefinedAsUnset?: boolean;
-    useBigIntAsLong?: boolean;
-    useBigIntAsVarint?: boolean;
-  };
-  maxPrepared?: number;
-  metrics?: metrics.ClientMetrics;
-  policies?: {
-    addressResolution?: policies.addressResolution.AddressTranslator;
-    loadBalancing?: policies.loadBalancing.LoadBalancingPolicy;
-    reconnection?: policies.reconnection.ReconnectionPolicy;
-    retry?: policies.retry.RetryPolicy;
-    speculativeExecution?: policies.speculativeExecution.SpeculativeExecutionPolicy;
-    timestampGeneration?: policies.timestampGeneration.TimestampGenerator;
-  };
-  pooling?: {
-    coreConnectionsPerHost?: { [key: number]: number };
-    heartBeatInterval?: number;
-    maxRequestsPerConnection?: number;
-    warmup?: boolean;
-  };
-  prepareOnAllHosts?: boolean;
-  profiles?: ExecutionProfile[];
-  protocolOptions?: {
-    maxSchemaAgreementWaitSeconds?: number;
-    autoAwaitSchemaAgreement?: boolean;
-    metadataRequestServersideTimeoutSecs?: number;
-    metadataRequestClientsideTimeoutSecs?: number;
-    maxVersion?: number;
-    port?: number;
-  };
-  promiseFactory?: (
-    handler: (callback: (err: Error, result?: any) => void) => void,
-  ) => Promise<any>;
-  queryOptions?: QueryOptions;
-  refreshSchemaDelay?: number;
-  rePrepareOnUp?: boolean;
-  requestTracker?: tracker.RequestTracker;
-  socketOptions?: {
-    coalescingThreshold?: number;
-    connectTimeout?: number;
-    defunctReadTimeoutThreshold?: number;
-    keepAlive?: boolean;
-    keepAliveDelay?: number;
-    readTimeout?: number;
-    tcpNoDelay?: boolean;
-  };
-  sslOptions?: SslOptions;
-  logLevel?: types.logLevels;
-  id?: Uuid;
-  applicationName?: string;
-  applicationVersion?: string;
-}
-
-export interface SslOptions {
-  ca?: string | Buffer | Array<string | Buffer>;
-  cert?: string | Buffer;
-  sigalgs?: string;
-  ciphers?: string;
-  ecdhCurve?: string;
-  honorCipherOrder?: boolean;
-  key?: string | Buffer;
-  maxVersion?: tls.SecureVersion;
-  minVersion?: tls.SecureVersion;
-  secureOptions?: number;
-  rejectUnauthorized?: boolean;
 }
 
 export namespace token {

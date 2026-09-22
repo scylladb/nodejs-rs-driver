@@ -3,8 +3,6 @@
 import { Readable, ReadableOptions } from "stream";
 import utils = require("../utils");
 import errors = require("../errors");
-// TODO: Remove after lib/client-options.js is converted to Typescript.
-// @ts-ignore
 import clientOptions = require("../client-options");
 
 /** @module types */

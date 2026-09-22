@@ -1,24 +1,36 @@
-// @ts-nocheck
 "use strict";
 
-const util = require("util");
-const policies = require("./policies");
-const types = require("./types");
-const utils = require("./utils");
-const tracker = require("./tracker");
-const metrics = require("./metrics");
-const auth = require("./auth");
-const { throwNotSupported } = require("./new-utils");
-const errors = require("./errors.js");
-const rust = require("../index");
-const {
+import util = require("util");
+import policies = require("./policies");
+import types = require("./types");
+import utils = require("./utils");
+import tracker = require("./tracker");
+import metrics = require("./metrics");
+import auth = require("./auth");
+import { throwNotSupported } from "./new-utils";
+import errors = require("./errors");
+import rust = require("../index");
+import {
     MappingAddressTranslator,
     AddressTranslator,
-} = require("./policies/address-resolution.js");
+} from "./policies/address-resolution";
+import { ExecutionProfile } from "./execution-profile";
+import type { QueryOptions } from "./query-options";
+import type { SecureVersion } from "tls";
 
-// Imports for the purpose of type hints in JS docs.
-// eslint-disable-next-line no-unused-vars
-const { ExecutionProfile } = require("./execution-profile.js");
+/** A single client routes proxy the driver should read `system.client_routes` for. */
+export interface ClientRoutesProxy {
+    /**
+     * The ScyllaDB Cloud connection id, used to filter the rows of
+     * `system.client_routes` that apply to this proxy.
+     */
+    connectionId: string;
+    /**
+     * Overrides the hostname read from `system.client_routes` for this
+     * connection id. Useful for testing and for some cloud architectures.
+     */
+    hostnameOverride?: string;
+}
 
 /**
  * Client options.
@@ -29,239 +41,428 @@ const { ExecutionProfile } = require("./execution-profile.js");
  * fine tuning it when not needed.
  *
  * See [Client constructor]{@link Client} documentation for recommended options.
- *
- * @typedef {Object} ClientOptions
- * @property {Array.<string>} contactPoints
- * Array of addresses or host names of the nodes to add as contact points.
- *
- * Contact points are addresses of Cassandra nodes that the driver uses to discover the cluster topology.
- *
- * Only one contact point is required (the driver will retrieve the address of the other nodes automatically),
- * but it is usually a good idea to provide more than one contact point, because if that single contact point is
- * unavailable, the driver will not be able to initialize correctly.
- *
- * A contact point may carry its own port, as `ipAddress:port` or `[ipv6Address]:port`. That port takes precedence
- * over `protocolOptions.port`.
- *
- * @property {Object} [clientRoutes] Client routes configuration, for connecting through proxied setups
- * such as AWS PrivateLink or GCP Private Service Connect.
- *
- * Mutually exclusive with `policies.addressResolution` and, for now, with `sslOptions`.
- *
- * @property {Array.<Object>} clientRoutes.proxies The proxies to read routes for. At least one is required.
- * @property {String} clientRoutes.proxies[].connectionId The ScyllaDB Cloud connection id, used to filter the
- * rows of `system.client_routes` that apply to this proxy.
- * @property {String} [clientRoutes.proxies[].hostnameOverride] Overrides the hostname read from
- * `system.client_routes` for this connection id. Useful for testing and for some cloud architectures.
- * @property {String} [localDataCenter] The local data center to use.
- *
- * If using DCAwareRoundRobinPolicy (default), this option is required and only hosts from this data center are
- * connected to and used in query plans.
- *
- * [TODO: Add support for this field]
- * @property {String} [keyspace] The logged keyspace for all the connections created within the {@link Client} instance.
- * @property {Object} [credentials] An object containing the username and password for plain-text authentication.
- * It configures the authentication provider to be used against Apache Cassandra's PasswordAuthenticator or DSE's
- * DseAuthenticator, when default auth scheme is plain-text.
- *
- * Note that you should configure either `credentials` or `authProvider` to connect to an
- * auth-enabled cluster, but not both.
- *
- * @property {String} [credentials.username] The username to use for plain-text authentication.
- * @property {String} [credentials.password] The password to use for plain-text authentication.
- * @property {Uuid | string} [id] A unique identifier assigned to a {@link Client} object, that will be communicated to the
- * server to identify the client instance created with this options. When not defined, the driver will
- * generate a random identifier.
- * @property {String} [applicationName] An optional setting identifying the name of the application using
- * the {@link Client} instance.
- *
- * This value is passed to database and is useful as metadata for describing a client connection on the server side.
- * @property {String} [applicationVersion] An optional setting identifying the version of the application using
- * the {@link Client} instance.
- *
- * This value is passed to database and is useful as metadata for describing a client connection on the server side.
- * @property {Number} [refreshSchemaDelay] The default window size in milliseconds used to debounce node list and schema
- * refresh metadata requests. Default: 1000.
- * [TODO: Add support for this field]
- * @property {Boolean} [prepareOnAllHosts] Determines if the driver should prepare queries on all hosts in the cluster.
- * Default: `true`.
- * [TODO: Add support for this field]
- * @property {Boolean} [rePrepareOnUp] Determines if the driver should re-prepare all cached prepared queries on a
- * host when it marks it back up.
- * Default: `true`.
- * [TODO: Add support for this field]
- * @property {Number} [maxPrepared] Determines the maximum amount of different prepared queries before evicting items
- * from the internal cache. Reaching a high threshold hints that the queries are not being reused, like when
- * hard-coding parameter values inside the queries.
- * Default: `512`.
- * @property {Object} [policies]
- * @property {LoadBalancingPolicy} [policies.loadBalancing] The load balancing policy instance to be used to determine
- * the coordinator per query.
- * @property {RetryPolicy} [policies.retry] The retry policy.
- * @property {ReconnectionPolicy} [policies.reconnection] The reconnection policy to be used.
- * [TODO: Add support for this field]
- * @property {AddressTranslator} [policies.addressResolution] The address resolution policy.
- * [TODO: Add support for this field]
- * @property {SpeculativeExecutionPolicy} [policies.speculativeExecution] The `SpeculativeExecutionPolicy`
- * instance to be used to determine if the client should send speculative queries when the selected host takes more
- * time than expected.
- *
- * Default: `[NoSpeculativeExecutionPolicy]{@link
- * module:policies/speculativeExecution~NoSpeculativeExecutionPolicy}`
- *
- * [TODO: Add support for this field]
- * @property {TimestampGenerator} [policies.timestampGeneration] The client-side
- * [query timestamp generator]{@link module:policies/timestampGeneration~TimestampGenerator}.
- *
- * Default: `[MonotonicTimestampGenerator]{@link module:policies/timestampGeneration~MonotonicTimestampGenerator}`
- *
- * Use `null` to disable client-side timestamp generation.
- *
- * [TODO: Add support for this field]
- * @property {QueryOptions} [queryOptions] Default options for all queries.
- * [TODO: Add support for this field]
- * @property {Object} [pooling] Pooling options.
- * [TODO: Add support for this field]
- * @property {Number} [pooling.heartBeatInterval] The amount of idle time in milliseconds that has to pass before the
- * driver issues a request on an active connection to avoid idle time disconnections. Default: 30000.
- * [TODO: Add support for this field]
- * @property {Object} [pooling.coreConnectionsPerHost] Associative array containing amount of connections per host
- * distance.
- * [TODO: Add support for this field]
- * @property {Number} [pooling.maxRequestsPerConnection] The maximum number of requests per connection. The default
- * value is:
- * - For modern protocol versions (v3 and above): 2048
- * - For older protocol versions (v1 and v2): 128
- *
- * [TODO: Add support for this field]
- * @property {Boolean} [pooling.warmup] Determines if all connections to hosts in the local datacenter must be opened on
- * connect. Default: true.
- * [TODO: Add support for this field]
- * @property {Object} [protocolOptions]
- * @property {Number} [protocolOptions.port] The port to use to connect to the Cassandra host. It applies to every
- * contact point that does not carry its own `ipAddress:port` suffix. If not set through this method, the default port
- * (9042) will be used instead.
- * @property {Number} [protocolOptions.maxSchemaAgreementWaitSeconds] The maximum time in seconds to wait for schema
- * agreement between nodes before returning from a DDL query. Default: 10.
- * @property {Boolean} [protocolOptions.autoAwaitSchemaAgreement] Determines whether the driver automatically waits
- * for schema agreement after a DDL statement, retrying for up to `maxSchemaAgreementWaitSeconds`. When `false`, DDL
- * queries return as soon as the coordinator acknowledges them, without waiting for the rest of the cluster to
- * catch up. Default: true.
- * @property {Number} [protocolOptions.metadataRequestServersideTimeoutSecs] Server-side timeout applied to schema
- * and topology metadata queries, appended to them as a ScyllaDB-only `USING TIMEOUT` clause so that a tight timeout
- * configured elsewhere cannot cause metadata fetches to fail on a large schema. Has no effect against a non-ScyllaDB
- * cluster. Default: 30.
- * @property {Number} [protocolOptions.metadataRequestClientsideTimeoutSecs] Client-side timeout applied to each page
- * fetch of a metadata query, guarding against a node that stops responding without closing the connection. When not
- * set, it is derived as `metadataRequestServersideTimeoutSecs` + 1, or 30 if that is not set either. Setting it below
- * `metadataRequestServersideTimeoutSecs` is discouraged, as the driver would then abort the request before the
- * server can report its own, more informative timeout error.
- * @property {Number} [protocolOptions.maxVersion] When set, it limits the maximum protocol version used to connect to
- * the nodes.
- * Useful for using the driver against a cluster that contains nodes with different major/minor versions of Cassandra.
- * [TODO: Add support for this field]
- * @property {Object} [socketOptions]
- * [TODO: Add support for this field]
- * @property {Number} [socketOptions.connectTimeout] Connection timeout in milliseconds. Default: 5000.
- * [TODO: Add support for this field]
- * @property {Number} [socketOptions.defunctReadTimeoutThreshold] Determines the amount of requests that simultaneously
- * have to timeout before closing the connection. Default: 64.
- * [TODO: Add support for this field]
- * @property {Boolean} [socketOptions.keepAlive] Whether to enable TCP keep-alive on the socket. Default: true.
- * [TODO: Add support for this field]
- * @property {Number} [socketOptions.keepAliveDelay] TCP keep-alive delay in milliseconds. Default: 0.
- * [TODO: Add support for this field]
- * @property {Number} [socketOptions.readTimeout] Per-host read timeout in milliseconds.
- *
- * Please note that this is not the maximum time a call to {@link Client#execute} may have to wait;
- * this is the maximum time that call will wait for one particular Cassandra host, but other hosts will be tried if
- * one of them timeout. In other words, a {@link Client#execute} call may theoretically wait up to
- * `readTimeout * number_of_cassandra_hosts` (though the total number of hosts tried for a given query also
- * depends on the LoadBalancingPolicy in use).
- *
- * When setting this value, keep in mind the following:
- * - the timeout settings used on the Cassandra side (*_request_timeout_in_ms in cassandra.yaml) should be taken
- * into account when picking a value for this read timeout. You should pick a value a couple of seconds greater than
- * the Cassandra timeout settings.
- * - the read timeout is only approximate and only control the timeout to one Cassandra host, not the full query.
- *
- * Setting a value of 0 disables read timeouts. Default: `12000`.
- * [TODO: Add support for this field]
- * @property {Boolean} [socketOptions.tcpNoDelay] When set to true, it disables the Nagle algorithm. Default: true.
- * [TODO: Add support for this field]
- * @property {Number} [socketOptions.coalescingThreshold] Buffer length in bytes use by the write queue before flushing
- * the frames. Default: 8000.
- * [TODO: Add support for this field]
- * @property {AuthProvider} [authProvider] Provider to be used to authenticate to an auth-enabled cluster.
- * [TODO: Add support for this field]
- * @property {RequestTracker} [requestTracker] The instance of RequestTracker used to monitor or log requests executed
- * with this instance.
- * [TODO: Add support for this field]
- * @property {SslOptions} [sslOptions] Client-to-node ssl options. When set the driver will use the secure layer.
- * You can specify cert, ca, ... options named after the Node.js `tls.connect()` options.
- *
- * It uses the same default values as Node.js `tls.connect()`
- * [TODO: For now, only limited subset of ssl options is supported]
- * @property {Object} [encoding] Encoding options.
- * [TODO: Add support for this field]
- * @property {Function} [encoding.map] Map constructor to use for Cassandra map<k,v> type encoding and decoding.
- * If not set, it will default to Javascript Object with map keys as property names.
- * [TODO: Add support for this field]
- * @property {Function} [encoding.set] Set constructor to use for Cassandra set<k> type encoding and decoding.
- * If not set, it will default to Javascript Array.
- * [TODO: Add support for this field]
- * @property {Boolean} [encoding.copyBuffer] Determines if the network buffer should be copied for buffer based data
- * types (blob, uuid, timeuuid and inet).
- *
- * Setting it to true will cause that the network buffer is copied for each row value of those types,
- * causing additional allocations but freeing the network buffer to be reused.
- * Setting it to true is a good choice for cases where the Row and ResultSet returned by the queries are long-lived
- * objects.
- *
- * Setting it to false will cause less overhead and the reference of the network buffer to be maintained until the row
- * / result set are de-referenced.
- * Default: true.
- *
- * [TODO: Add support for this field]
- * @property {Boolean} [encoding.useUndefinedAsUnset] Valid for Cassandra 2.2 and above. Determines that, if a parameter
- * is set to `undefined` it should be encoded as `unset`.
- *
- * By default, ECMAScript `undefined` is encoded as `null` in the driver. Cassandra 2.2
- * introduced the concept of unset.
- * At driver level, you can set a parameter to unset using the field `types.unset`. Setting this flag to
- * true allows you to use ECMAScript undefined as Cassandra `unset`.
- *
- * Default: true.
- * @property {Boolean} [encoding.useBigIntAsLong] Use [BigInt type](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/BigInt)
- * to represent CQL bigint and counter data types. Defaults to true.
- * @property {Boolean} [encoding.useBigIntAsVarint] Use [BigInt type](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/BigInt)
- * to represent CQL varint data type. Defaults to true.
- *
- * Note, that using Integer as Varint (`useBigIntAsVarint == false`) is deprecated.
- * @property {String} [logLevel] The minimum severity of log events emitted by the driver.
- *
- * **WARNING:** While you can configure different log levels for different clients, each client will receive
- * log messages from all clients at the specified severity.
- *
- * Valid values are defined in the {@link module:types~logLevels} enum.
- * We recommend using the enum values (e.g. `types.logLevels.info`) rather than raw strings.
- *
- * When set to a value other than `'off'`, additional driver log messages (connection events, query routing,
- * retries, etc.) will be emitted as `'log'` events on the {@link Client} instance.
- *
- * When not set, events at `warning` level and above are captured. Set to `'off'` to disable logging.
- * @property {Array.<ExecutionProfile>} [profiles] The array of [execution profiles]{@link ExecutionProfile}.
- * @property {Function} [promiseFactory] Function to be used to create a `Promise` from a
- * callback-style function.
- *
- * Promise libraries often provide different methods to create a promise. For example, you can use Bluebird's
- * `Promise.fromCallback()` method.
- *
- * By default, the driver will use the
- * [Promise constructor]{@link https://developer.mozilla.org/en/docs/Web/JavaScript/Reference/Global_Objects/Promise}.
- *
- * [TODO: Add support for this field]
  */
+export interface ClientOptions {
+    /**
+     * Array of addresses or host names of the nodes to add as contact points.
+     *
+     * Contact points are addresses of Cassandra nodes that the driver uses to discover the cluster topology.
+     *
+     * Only one contact point is required (the driver will retrieve the address of the other nodes automatically),
+     * but it is usually a good idea to provide more than one contact point, because if that single contact point is
+     * unavailable, the driver will not be able to initialize correctly.
+     *
+     * A contact point may carry its own port, as `ipAddress:port` or `[ipv6Address]:port`. That port takes precedence
+     * over `protocolOptions.port`.
+     */
+    contactPoints?: Array<string>;
+    /**
+     * Client routes configuration, for connecting through proxied setups
+     * such as AWS PrivateLink or GCP Private Service Connect.
+     *
+     * Mutually exclusive with `policies.addressResolution` and, for now, with `sslOptions`.
+     */
+    clientRoutes?: {
+        /**
+         * The proxies to read routes for. At least one is required.
+         */
+        proxies: Array<ClientRoutesProxy>;
+    };
+    /**
+     * The local data center to use.
+     *
+     * If using DCAwareRoundRobinPolicy (default), this option is required and only hosts from this data center are
+     * connected to and used in query plans.
+     *
+     * [TODO: Add support for this field]
+     */
+    localDataCenter?: string;
+    /**
+     * The logged keyspace for all the connections created within the {@link Client} instance.
+     */
+    keyspace?: string;
+    /**
+     * An object containing the username and password for plain-text authentication.
+     * It configures the authentication provider to be used against Apache Cassandra's PasswordAuthenticator or DSE's
+     * DseAuthenticator, when default auth scheme is plain-text.
+     *
+     * Note that you should configure either `credentials` or `authProvider` to connect to an
+     * auth-enabled cluster, but not both.
+     */
+    credentials?: {
+        /**
+         * The username to use for plain-text authentication.
+         */
+        username: string;
+        /**
+         * The password to use for plain-text authentication.
+         */
+        password: string;
+    };
+    /**
+     * A unique identifier assigned to a {@link Client} object, that will be communicated to the
+     * server to identify the client instance created with this options. When not defined, the driver will
+     * generate a random identifier.
+     */
+    id?: types.Uuid | string;
+    /**
+     * An optional setting identifying the name of the application using
+     * the {@link Client} instance.
+     *
+     * This value is passed to database and is useful as metadata for describing a client connection on the server side.
+     */
+    applicationName?: string;
+    /**
+     * An optional setting identifying the version of the application using
+     * the {@link Client} instance.
+     *
+     * This value is passed to database and is useful as metadata for describing a client connection on the server side.
+     */
+    applicationVersion?: string;
+    /**
+     * The default window size in milliseconds used to debounce node list and schema
+     * refresh metadata requests. Default: 1000.
+     * [TODO: Add support for this field]
+     */
+    refreshSchemaDelay?: number;
+    /**
+     * Determines if the driver should prepare queries on all hosts in the cluster.
+     * Default: `true`.
+     * [TODO: Add support for this field]
+     */
+    prepareOnAllHosts?: boolean;
+    /**
+     * Determines if the driver should re-prepare all cached prepared queries on a
+     * host when it marks it back up.
+     * Default: `true`.
+     * [TODO: Add support for this field]
+     */
+    rePrepareOnUp?: boolean;
+    /**
+     * Determines the maximum amount of different prepared queries before evicting items
+     * from the internal cache. Reaching a high threshold hints that the queries are not being reused, like when
+     * hard-coding parameter values inside the queries.
+     * Default: `512`.
+     */
+    maxPrepared?: number | null;
+    policies?: {
+        /**
+         * The load balancing policy instance to be used to determine
+         * the coordinator per query.
+         */
+        loadBalancing?: policies.loadBalancing.LoadBalancingPolicy;
+        /**
+         * The retry policy.
+         */
+        retry?: policies.retry.RetryPolicy;
+        /**
+         * The reconnection policy to be used.
+         * [TODO: Add support for this field]
+         */
+        reconnection?: policies.reconnection.ReconnectionPolicy;
+        /**
+         * The address resolution policy.
+         * [TODO: Add support for this field]
+         */
+        addressResolution?: policies.addressResolution.AddressTranslator;
+        /**
+         * The `SpeculativeExecutionPolicy`
+         * instance to be used to determine if the client should send speculative queries when the selected host takes more
+         * time than expected.
+         *
+         * Default: `[NoSpeculativeExecutionPolicy]{@link
+         * module:policies/speculativeExecution~NoSpeculativeExecutionPolicy}`
+         *
+         * [TODO: Add support for this field]
+         */
+        speculativeExecution?: policies.speculativeExecution.SpeculativeExecutionPolicy;
+        /**
+         * The client-side
+         * [query timestamp generator]{@link module:policies/timestampGeneration~TimestampGenerator}.
+         *
+         * Default: `[MonotonicTimestampGenerator]{@link module:policies/timestampGeneration~MonotonicTimestampGenerator}`
+         *
+         * Use `null` to disable client-side timestamp generation.
+         *
+         * [TODO: Add support for this field]
+         */
+        timestampGeneration?: policies.timestampGeneration.TimestampGenerator;
+    };
+    /**
+     * Default options for all queries.
+     * [TODO: Add support for this field]
+     */
+    queryOptions?: QueryOptions;
+    /**
+     * Pooling options.
+     * [TODO: Add support for this field]
+     */
+    pooling?: {
+        /**
+         * The amount of idle time in milliseconds that has to pass before the
+         * driver issues a request on an active connection to avoid idle time disconnections. Default: 30000.
+         * [TODO: Add support for this field]
+         */
+        heartBeatInterval?: number;
+        /**
+         * Associative array containing amount of connections per host
+         * distance.
+         * [TODO: Add support for this field]
+         */
+        coreConnectionsPerHost?: { [key: string]: any };
+        /**
+         * The maximum number of requests per connection. The default
+         * value is:
+         * - For modern protocol versions (v3 and above): 2048
+         * - For older protocol versions (v1 and v2): 128
+         *
+         * [TODO: Add support for this field]
+         */
+        maxRequestsPerConnection?: number;
+        /**
+         * Determines if all connections to hosts in the local datacenter must be opened on
+         * connect. Default: true.
+         * [TODO: Add support for this field]
+         */
+        warmup?: boolean;
+    };
+    protocolOptions?: {
+        /**
+         * The port to use to connect to the Cassandra host. It applies to every
+         * contact point that does not carry its own `ipAddress:port` suffix. If not set through this method, the default port
+         * (9042) will be used instead.
+         */
+        port?: number;
+        /**
+         * The maximum time in seconds to wait for schema
+         * agreement between nodes before returning from a DDL query. Default: 10.
+         */
+        maxSchemaAgreementWaitSeconds?: number;
+        /**
+         * Determines whether the driver automatically waits
+         * for schema agreement after a DDL statement, retrying for up to `maxSchemaAgreementWaitSeconds`. When `false`, DDL
+         * queries return as soon as the coordinator acknowledges them, without waiting for the rest of the cluster to
+         * catch up. Default: true.
+         */
+        autoAwaitSchemaAgreement?: boolean;
+        /**
+         * Server-side timeout applied to schema
+         * and topology metadata queries, appended to them as a ScyllaDB-only `USING TIMEOUT` clause so that a tight timeout
+         * configured elsewhere cannot cause metadata fetches to fail on a large schema. Has no effect against a non-ScyllaDB
+         * cluster. Default: 30.
+         */
+        metadataRequestServersideTimeoutSecs?: number;
+        /**
+         * Client-side timeout applied to each page
+         * fetch of a metadata query, guarding against a node that stops responding without closing the connection. When not
+         * set, it is derived as `metadataRequestServersideTimeoutSecs` + 1, or 30 if that is not set either. Setting it below
+         * `metadataRequestServersideTimeoutSecs` is discouraged, as the driver would then abort the request before the
+         * server can report its own, more informative timeout error.
+         */
+        metadataRequestClientsideTimeoutSecs?: number;
+        /**
+         * When set, it limits the maximum protocol version used to connect to
+         * the nodes.
+         * Useful for using the driver against a cluster that contains nodes with different major/minor versions of Cassandra.
+         * [TODO: Add support for this field]
+         */
+        maxVersion?: number;
+    };
+    /**
+     * [TODO: Add support for this field]
+     */
+    socketOptions?: {
+        /**
+         * Connection timeout in milliseconds. Default: 5000.
+         * [TODO: Add support for this field]
+         */
+        connectTimeout?: number;
+        /**
+         * Determines the amount of requests that simultaneously
+         * have to timeout before closing the connection. Default: 64.
+         * [TODO: Add support for this field]
+         */
+        defunctReadTimeoutThreshold?: number;
+        /**
+         * Whether to enable TCP keep-alive on the socket. Default: true.
+         * [TODO: Add support for this field]
+         */
+        keepAlive?: boolean;
+        /**
+         * TCP keep-alive delay in milliseconds. Default: 0.
+         * [TODO: Add support for this field]
+         */
+        keepAliveDelay?: number;
+        /**
+         * Per-host read timeout in milliseconds.
+         *
+         * Please note that this is not the maximum time a call to {@link Client#execute} may have to wait;
+         * this is the maximum time that call will wait for one particular Cassandra host, but other hosts will be tried if
+         * one of them timeout. In other words, a {@link Client#execute} call may theoretically wait up to
+         * `readTimeout * number_of_cassandra_hosts` (though the total number of hosts tried for a given query also
+         * depends on the LoadBalancingPolicy in use).
+         *
+         * When setting this value, keep in mind the following:
+         * - the timeout settings used on the Cassandra side (*_request_timeout_in_ms in cassandra.yaml) should be taken
+         * into account when picking a value for this read timeout. You should pick a value a couple of seconds greater than
+         * the Cassandra timeout settings.
+         * - the read timeout is only approximate and only control the timeout to one Cassandra host, not the full query.
+         *
+         * Setting a value of 0 disables read timeouts. Default: `12000`.
+         * [TODO: Add support for this field]
+         */
+        readTimeout?: number;
+        /**
+         * When set to true, it disables the Nagle algorithm. Default: true.
+         * [TODO: Add support for this field]
+         */
+        tcpNoDelay?: boolean;
+        /**
+         * Buffer length in bytes use by the write queue before flushing
+         * the frames. Default: 8000.
+         * [TODO: Add support for this field]
+         */
+        coalescingThreshold?: number;
+    };
+    /**
+     * Provider to be used to authenticate to an auth-enabled cluster.
+     * [TODO: Add support for this field]
+     */
+    authProvider?: auth.AuthProvider | null;
+    /**
+     * The instance of RequestTracker used to monitor or log requests executed
+     * with this instance.
+     * [TODO: Add support for this field]
+     */
+    requestTracker?: tracker.RequestTracker | null;
+    /**
+     * Client-to-node ssl options. When set the driver will use the secure layer.
+     * You can specify cert, ca, ... options named after the Node.js `tls.connect()` options.
+     *
+     * It uses the same default values as Node.js `tls.connect()`
+     * [TODO: For now, only limited subset of ssl options is supported]
+     */
+    sslOptions?: SslOptions;
+    /**
+     * Encoding options.
+     * [TODO: Add support for this field]
+     */
+    encoding?: {
+        /**
+         * Map constructor to use for Cassandra map<k,v> type encoding and decoding.
+         * If not set, it will default to Javascript Object with map keys as property names.
+         * [TODO: Add support for this field]
+         */
+        map?: Function;
+        /**
+         * Set constructor to use for Cassandra set<k> type encoding and decoding.
+         * If not set, it will default to Javascript Array.
+         * [TODO: Add support for this field]
+         */
+        set?: Function;
+        /**
+         * Determines if the network buffer should be copied for buffer based data
+         * types (blob, uuid, timeuuid and inet).
+         *
+         * Setting it to true will cause that the network buffer is copied for each row value of those types,
+         * causing additional allocations but freeing the network buffer to be reused.
+         * Setting it to true is a good choice for cases where the Row and ResultSet returned by the queries are long-lived
+         * objects.
+         *
+         * Setting it to false will cause less overhead and the reference of the network buffer to be maintained until the row
+         * / result set are de-referenced.
+         * Default: true.
+         *
+         * [TODO: Add support for this field]
+         */
+        copyBuffer?: boolean;
+        /**
+         * Valid for Cassandra 2.2 and above. Determines that, if a parameter
+         * is set to `undefined` it should be encoded as `unset`.
+         *
+         * By default, ECMAScript `undefined` is encoded as `null` in the driver. Cassandra 2.2
+         * introduced the concept of unset.
+         * At driver level, you can set a parameter to unset using the field `types.unset`. Setting this flag to
+         * true allows you to use ECMAScript undefined as Cassandra `unset`.
+         *
+         * Default: true.
+         */
+        useUndefinedAsUnset?: boolean;
+        /**
+         * Use [BigInt type](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/BigInt)
+         * to represent CQL bigint and counter data types. Defaults to true.
+         */
+        useBigIntAsLong?: boolean;
+        /**
+         * Use [BigInt type](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/BigInt)
+         * to represent CQL varint data type. Defaults to true.
+         *
+         * Note, that using Integer as Varint (`useBigIntAsVarint == false`) is deprecated.
+         */
+        useBigIntAsVarint?: boolean;
+    };
+    /**
+     * The minimum severity of log events emitted by the driver.
+     *
+     * **WARNING:** While you can configure different log levels for different clients, each client will receive
+     * log messages from all clients at the specified severity.
+     *
+     * Valid values are defined in the {@link module:types~logLevels} enum.
+     * We recommend using the enum values (e.g. `types.logLevels.info`) rather than raw strings.
+     *
+     * When set to a value other than `'off'`, additional driver log messages (connection events, query routing,
+     * retries, etc.) will be emitted as `'log'` events on the {@link Client} instance.
+     *
+     * When not set, events at `warning` level and above are captured. Set to `'off'` to disable logging.
+     */
+    logLevel?: string;
+    /**
+     * The array of [execution profiles]{@link ExecutionProfile}.
+     */
+    profiles?: Array<ExecutionProfile>;
+    /**
+     * Function to be used to create a `Promise` from a
+     * callback-style function.
+     *
+     * Promise libraries often provide different methods to create a promise. For example, you can use Bluebird's
+     * `Promise.fromCallback()` method.
+     *
+     * By default, the driver will use the
+     * [Promise constructor]{@link https://developer.mozilla.org/en/docs/Web/JavaScript/Reference/Global_Objects/Promise}.
+     *
+     * [TODO: Add support for this field]
+     */
+    promiseFactory?: Function;
+
+    /**
+     * The [ClientMetrics]{@link module:metrics~ClientMetrics} instance used to expose measurements of the driver's
+     * internal behavior.
+     */
+    metrics?: metrics.ClientMetrics;
+
+    /**
+     * Internal hook the {@link Client} installs so that the driver can emit its `log` events.
+     * @internal
+     * @ignore
+     */
+    logEmitter?: Function;
+
+    /**
+     * @internal
+     * @ignore
+     */
+    sni?: any;
+
+    /**
+     * Not supported by this driver; providing it raises an error.
+     */
+    cloud?: any;
+
+    /**
+     * Not supported by this driver; providing it raises an error.
+     */
+    monitorReporting?: any;
+}
 
 /**
  * SSL/TLS options for secure connections.
@@ -279,9 +480,8 @@ class SslOptions {
      * Corresponds to [SSL_CTX_set_cert_store](https://docs.openssl.org/master/man3/SSL_CTX_set_cert_store/)
      *
      * **Warning:** Behavior when this option is unset differs from Node.js defaults.
-     * @type {(string | Buffer | Array<string | Buffer>)?}
      */
-    ca;
+    ca?: string | Buffer | Array<string | Buffer>;
 
     /**
      * Cert chains in PEM format. One cert chain should be provided per private key.
@@ -297,9 +497,8 @@ class SslOptions {
      * for the first certificate in the chain and
      * [SSL_CTX_add_extra_chain_cert](https://docs.openssl.org/master/man3/SSL_CTX_add_extra_chain_cert/)
      * for the subsequent certificates in the chain.
-     * @type {(string | Buffer)?}
      */
-    cert;
+    cert?: string | Buffer;
 
     /**
      * Colon-separated list of supported signature algorithms.
@@ -308,9 +507,8 @@ class SslOptions {
      * or TLS v1.3 scheme names (e.g. rsa_pss_pss_sha512).
      *
      * Corresponds to [SSL_CTX_set1_sigalgs](https://docs.openssl.org/master/man3/SSL_CTX_set1_sigalgs/)
-     * @type {string?}
      */
-    sigalgs;
+    sigalgs?: string;
 
     /**
      * Cipher suite specification, replacing the default.
@@ -319,9 +517,8 @@ class SslOptions {
      * Cipher names must be uppercased in order for OpenSSL to accept them.
      *
      * Corresponds to [SSL_set_ciphersuites](https://docs.openssl.org/master/man3/SSL_CTX_set_cipher_list/) for ciphers with `TLS_` prefix [SSL_CTX_set_cipher_list](https://docs.openssl.org/master/man3/SSL_CTX_set_cipher_list/) for remaining ciphers.
-     * @type {string?}
      */
-    ciphers;
+    ciphers?: string;
 
     /**
      * A string describing a named curve or a colon separated list of curve
@@ -333,16 +530,14 @@ class SslOptions {
      * tls.DEFAULT_ECDH_CURVE.
      *
      * corresponds to [SSL_CTX_set1_curves](https://docs.openssl.org/master/man3/SSL_CTX_set1_curves/)
-     * @type {string?}
      */
-    ecdhCurve;
+    ecdhCurve?: string;
 
     /**
      * Attempt to use the server's cipher suite preferences instead of the client's.
      * When true, causes SSL_OP_CIPHER_SERVER_PREFERENCE to be set in secureOptions.
-     * @type {boolean?}
      */
-    honorCipherOrder;
+    honorCipherOrder?: boolean;
 
     /**
      * Private keys in PEM format. PEM allows the option of private keys being encrypted.
@@ -352,9 +547,8 @@ class SslOptions {
      * is currently supported by the driver.
      *
      * Corresponds to [SSL_CTX_use_PrivateKey](https://docs.openssl.org/master/man3/SSL_CTX_use_PrivateKey/)
-     * @type {(string | Buffer)?}
      */
-    key;
+    key?: string | Buffer;
 
     /**
      * Optionally set the maximum TLS version to allow. One
@@ -364,9 +558,8 @@ class SslOptions {
      *
      * **Warning:** In Node.js it was possible to modify default values using CLI options.
      * This is not possible here.
-     * @type {('TLSv1.3' | 'TLSv1.2' | 'TLSv1.1' | 'TLSv1')?}
      */
-    maxVersion;
+    maxVersion?: SecureVersion;
 
     /**
      * Optionally set the minimum TLS version to allow. One
@@ -376,15 +569,13 @@ class SslOptions {
      * **Default:** `'TLSv1.2'`
      *
      * **Warning:** In Node.js it was possible to modify default values using CLI options.
-     * @type {('TLSv1.3' | 'TLSv1.2' | 'TLSv1.1' | 'TLSv1')?}
      */
-    minVersion;
+    minVersion?: SecureVersion;
 
     /**
      * Shared passphrase used for a single private key and/or a PFX.
-     * @type {string?}
      */
-    passphrase;
+    passphrase?: string;
 
     /**
      * PFX or PKCS12 encoded private key and certificate chain.
@@ -394,9 +585,8 @@ class SslOptions {
      * Only a single cert chain is currently supported by the driver.
      *
      * This is equivalent to setting both `cert` and `key` fields
-     * @type {(string | Buffer)?}
      */
-    pfx;
+    pfx?: string | Buffer;
 
     /**
      * Optionally affect the OpenSSL protocol behavior, which is not usually necessary.
@@ -406,30 +596,28 @@ class SslOptions {
      * Value is a numeric bitmask of the SSL_OP_* options from OpenSSL Options.
      *
      * Corresponds to the options parameter in [SSL_CTX_set_options](https://docs.openssl.org/master/man3/SSL_CTX_set_options/)
-     * @type {number?}
      */
-    secureOptions;
+    secureOptions?: number;
 
     /**
      * If true the server will reject any connection which is not authorized
      * with the list of supplied CAs. This option only has an effect if requestCert is true.
      *
      * Corresponds to [SSL_CTX_set_verify](https://docs.openssl.org/master/man3/SSL_CTX_set_verify/)
-     * @type {boolean?}
      * @default true
      */
-    rejectUnauthorized;
+    rejectUnauthorized?: boolean;
 }
 
 /** Core connections per host for protocol versions 1 and 2 */
-const coreConnectionsPerHostV2 = {
+const coreConnectionsPerHostV2: { [distance: number]: number } = {
     [types.distance.local]: 2,
     [types.distance.remote]: 1,
     [types.distance.ignored]: 0,
 };
 
 /** Core connections per host for protocol version 3 and above */
-const coreConnectionsPerHostV3 = {
+const coreConnectionsPerHostV3: { [distance: number]: number } = {
     [types.distance.local]: 1,
     [types.distance.remote]: 1,
     [types.distance.ignored]: 0,
@@ -445,10 +633,7 @@ const continuousPageUnitBytes = "bytes";
 const continuousPageDefaultSize = 5000;
 const continuousPageDefaultHighWaterMark = 10000;
 
-/**
- * @returns {ClientOptions}
- */
-function defaultOptions() {
+function defaultOptions(): ClientOptions {
     return {
         policies: {
             addressResolution: policies.defaultAddressTranslator(),
@@ -502,11 +687,9 @@ function defaultOptions() {
 
 /**
  * Extends and validates the user options
- * @param {Object} [baseOptions] The source object instance that will be overridden
- * @param {Object} userOptions
- * @returns {ClientOptions}
+ * @param baseOptions The source object instance that will be overridden
  */
-function extend(baseOptions, userOptions) {
+function extend(baseOptions?: any, userOptions?: any): ClientOptions {
     if (arguments.length === 1) {
         userOptions = arguments[0];
         baseOptions = {};
@@ -549,14 +732,14 @@ function extend(baseOptions, userOptions) {
 
     if (
         options.requestTracker !== null &&
-        !(options.requestTracker instanceof tracker.RequestTracker)
+        !(options.requestTracker instanceof (tracker as any).RequestTracker)
     ) {
         throw new TypeError(
             "requestTracker must be an instance of RequestTracker",
         );
     }
 
-    if (!(options.metrics instanceof metrics.ClientMetrics)) {
+    if (!(options.metrics instanceof (metrics as any).ClientMetrics)) {
         throw new TypeError("metrics must be an instance of ClientMetrics");
     }
 
@@ -587,10 +770,11 @@ function extend(baseOptions, userOptions) {
 
 /**
  * Validates the policies from the client options.
- * @param {ClientOptions.policies} policiesOptions
  * @private
  */
-function validatePoliciesOptions(policiesOptions) {
+function validatePoliciesOptions(
+    policiesOptions: ClientOptions["policies"],
+): void {
     if (!policiesOptions) {
         throw new TypeError("policies not defined in options");
     }
@@ -642,10 +826,11 @@ function validatePoliciesOptions(policiesOptions) {
 
 /**
  * Validates the protocol options.
- * @param {ClientOptions.protocolOptions} protocolOptions
  * @private
  */
-function validateProtocolOptions(protocolOptions) {
+function validateProtocolOptions(
+    protocolOptions: ClientOptions["protocolOptions"],
+): void {
     if (!protocolOptions) {
         throw new TypeError("protocolOptions not defined in options");
     }
@@ -716,10 +901,11 @@ function validateProtocolOptions(protocolOptions) {
 
 /**
  * Validates the socket options.
- * @param {ClientOptions.socketOptions} socketOptions
  * @private
  */
-function validateSocketOptions(socketOptions) {
+function validateSocketOptions(
+    socketOptions: ClientOptions["socketOptions"],
+): void {
     if (!socketOptions) {
         throw new TypeError("socketOptions not defined in options");
     }
@@ -738,10 +924,9 @@ function validateSocketOptions(socketOptions) {
 
 /**
  * Validates authentication provider and credentials.
- * @param {ClientOptions} options
  * @private
  */
-function validateAuthenticationOptions(options) {
+function validateAuthenticationOptions(options: ClientOptions): void {
     if (!options.authProvider) {
         const credentials = options.credentials;
         if (credentials) {
@@ -765,10 +950,11 @@ function validateAuthenticationOptions(options) {
 
 /**
  * Validates the encoding options.
- * @param {ClientOptions.encoding} encodingOptions
  * @private
  */
-function validateEncodingOptions(encodingOptions) {
+function validateEncodingOptions(
+    encodingOptions: NonNullable<ClientOptions["encoding"]>,
+): void {
     if (encodingOptions.map) {
         const mapConstructor = encodingOptions.map;
         if (
@@ -792,14 +978,13 @@ function validateEncodingOptions(encodingOptions) {
     }
 }
 
-const validLogLevels = Object.values(types.logLevels);
+const validLogLevels: Array<string> = Object.values(types.logLevels);
 
 /**
  * Validates the logLevel option.
- * @param {string} logLevel
  * @private
  */
-function validateLogLevel(logLevel) {
+function validateLogLevel(logLevel?: string): void {
     if (
         !(
             logLevel === undefined ||
@@ -812,8 +997,8 @@ function validateLogLevel(logLevel) {
     }
 }
 
-function validateApplicationInfo(options) {
-    function validateString(key) {
+function validateApplicationInfo(options: ClientOptions): void {
+    function validateString(key: "applicationName" | "applicationVersion") {
         const str = options[key];
 
         if (str !== null && str !== undefined && typeof str !== "string") {
@@ -837,11 +1022,9 @@ function validateApplicationInfo(options) {
 
 /**
  * Normalizes a key that can be either a string or a buffer into a string.
- * @param {string | Buffer} value
- * @param {string} name Name of the option being normalized, used for error messages
- * @returns {string}
+ * @param name Name of the option being normalized, used for error messages
  */
-function normalizeKey(value, name) {
+function normalizeKey(value: string | Buffer, name: string): string {
     if (typeof value === "string") {
         return value;
     }
@@ -857,10 +1040,8 @@ function normalizeKey(value, name) {
  * According to the TS type definition, SecureVersion (the value we are handling here),
  * can be one of the following:
  * type SecureVersion = "TLSv1.3" | "TLSv1.2" | "TLSv1.1" | "TLSv1";
- * @param {'TLSv1.3' | 'TLSv1.2' | 'TLSv1.1' | 'TLSv1'} value
- * @returns {rust.TlsVersion}
  */
-function convertTlsVersion(value) {
+function convertTlsVersion(value: SecureVersion): rust.TlsVersion {
     if (typeof value !== "string") {
         throw new TypeError("TLS version must be a string");
     }
@@ -886,24 +1067,26 @@ function convertTlsVersion(value) {
  * while the Rust code expects a specific format.
  * We could do this at the napi layer by trying all accepted types
  * until we successfully convert it, but we can also convert it here.
- * @param {SslOptions} sslOptions
- * @returns {rust.SslOptions}
  */
-function normalizeSslOptions(sslOptions) {
+function normalizeSslOptions(
+    sslOptions?: SslOptions,
+): rust.SslOptions | undefined {
     if (!sslOptions) {
         return sslOptions;
     }
 
-    /**
-     * @type {rust.SslOptions}
-     */
-    const normalized = { ...sslOptions };
+    // The object starts out holding what the user provided and is rewritten
+    // field by field into what the Rust layer wants, so it holds both shapes
+    // while the function runs.
+    const normalized: any = { ...sslOptions };
 
     if (normalized.ca) {
         const caList = Array.isArray(normalized.ca)
             ? normalized.ca
             : [normalized.ca];
-        normalized.ca = caList.map((entry) => normalizeKey(entry, "ca"));
+        normalized.ca = caList.map((entry: string | Buffer) =>
+            normalizeKey(entry, "ca"),
+        );
     }
 
     if (normalized.cert) {
@@ -938,7 +1121,7 @@ function normalizeSslOptions(sslOptions) {
     // While we only support a single cert and key for now, we need check for situations
     // where only one of them is provided.
     // We double negate the values, to convert them to booleans
-    if (!!normalized.cert ^ !!normalized.key) {
+    if ((normalized.cert ? 1 : 0) ^ (normalized.key ? 1 : 0)) {
         throw new errors.ArgumentError(
             "Both cert and key must be provided together in sslOptions.",
         );
@@ -956,9 +1139,8 @@ function normalizeSslOptions(sslOptions) {
 
 /**
  * Sets the default options that depend on the protocol version and other metadata.
- * @param {Client} client
  */
-function setMetadataDependent(client) {
+function setMetadataDependent(client: any): void {
     const version = client.controlConnection.protocolVersion;
     let coreConnectionsPerHost = coreConnectionsPerHostV3;
     let maxRequestsPerConnection = maxRequestsPerConnectionV3;
@@ -983,12 +1165,10 @@ function setMetadataDependent(client) {
 
 /**
  * Appends the port to a contact point that does not already specify one.
- * @param {String} contactPoint ipAddress, hostName, ipAddress:port or [ipv6Address]:port
- * @param {Number} port
- * @returns {String}
+ * @param contactPoint ipAddress, hostName, ipAddress:port or [ipv6Address]:port
  * @private
  */
-function withPort(contactPoint, port) {
+function withPort(contactPoint: string, port: number): string {
     if (contactPoint.startsWith("[")) {
         return /]:\d+$/.test(contactPoint)
             ? contactPoint
@@ -1006,15 +1186,13 @@ function withPort(contactPoint, port) {
 
 /**
  * Create rust options using js Client options
- * @param {ClientOptions} options
- * @returns {rust.SessionOptions}
  * @private
  */
-function setRustOptions(options) {
-    /**
-     * @type {rust.SessionOptions}
-     */
-    let rustOptions = Object();
+function setRustOptions(options: ClientOptions): rust.SessionOptions {
+    const rustOptions: rust.SessionOptions = Object();
+    // `src/custom-types.d.ts` does not declare these five options, although
+    // `src/session/config.rs` accepts them.
+    const undeclared = rustOptions as any;
     const port = options.protocolOptions && options.protocolOptions.port;
     rustOptions.connectPoints =
         options.contactPoints && port
@@ -1058,7 +1236,7 @@ function setRustOptions(options) {
                 //  - The policy implements getRustConfiguration but throws "Currently this policy is not supported by the driver"
                 //  - Some other obscure error, like node deciding it has a bad day and just wants to crash
                 throw new Error(
-                    `This load balancing policy (${options.policies.loadBalancing.constructor.name}) does not appear to be supported by the driver. Root cause: ${e.message}`,
+                    `This load balancing policy (${options.policies.loadBalancing.constructor.name}) does not appear to be supported by the driver. Root cause: ${(e as Error).message}`,
                 );
             }
         }
@@ -1070,7 +1248,7 @@ function setRustOptions(options) {
                 // Compared to load balancing policy, retry policies do not have "empty" base class. For this reason, we check there for derived classes,
                 // to ensure that we do not accept custom policies, instead of treating them as a base class quietly causing unexpected behavior.
                 throw new Error(
-                    `This retry policy (${options.policies.retry.constructor.name}) does not appear to be supported by the driver. Root cause: ${e.message}`,
+                    `This retry policy (${options.policies.retry.constructor.name}) does not appear to be supported by the driver. Root cause: ${(e as Error).message}`,
                 );
             }
         }
@@ -1078,12 +1256,14 @@ function setRustOptions(options) {
             switch (options.policies.addressResolution.constructor) {
                 case AddressTranslator:
                     // The default policy. This policy does not translate any address, so this is equivalent to not setting any address translator.
-                    rustOptions.addressTranslatorConfig = undefined;
+                    undeclared.addressTranslatorConfig = undefined;
                     break;
                 case MappingAddressTranslator:
-                    rustOptions.addressTranslatorConfig = {
-                        addressMapping:
-                            options.policies.addressResolution.getRustConfiguration(),
+                    undeclared.addressTranslatorConfig = {
+                        addressMapping: (
+                            options.policies
+                                .addressResolution as MappingAddressTranslator
+                        ).getRustConfiguration(),
                     };
                     break;
                 default:
@@ -1105,7 +1285,7 @@ function setRustOptions(options) {
     }
 
     if (options.protocolOptions) {
-        if (options.protocolOptions.noCompact !== undefined) {
+        if ((options.protocolOptions as any).noCompact !== undefined) {
             // This option was present in the DSx driver, but is no longer relevant.
             // We explicitly check for it to inform users using this options,
             // to avoid any confusion if the user code depends on this configuration.
@@ -1114,25 +1294,25 @@ function setRustOptions(options) {
         if (
             options.protocolOptions.maxSchemaAgreementWaitSeconds !== undefined
         ) {
-            rustOptions.schemaAgreementTimeoutSecs =
+            undeclared.schemaAgreementTimeoutSecs =
                 options.protocolOptions.maxSchemaAgreementWaitSeconds;
         }
         if (options.protocolOptions.autoAwaitSchemaAgreement !== undefined) {
-            rustOptions.autoAwaitSchemaAgreement =
+            undeclared.autoAwaitSchemaAgreement =
                 options.protocolOptions.autoAwaitSchemaAgreement;
         }
         if (
             options.protocolOptions.metadataRequestServersideTimeoutSecs !==
             undefined
         ) {
-            rustOptions.metadataRequestServersideTimeoutSecs =
+            undeclared.metadataRequestServersideTimeoutSecs =
                 options.protocolOptions.metadataRequestServersideTimeoutSecs;
         }
         if (
             options.protocolOptions.metadataRequestClientsideTimeoutSecs !==
             undefined
         ) {
-            rustOptions.metadataRequestClientsideTimeoutSecs =
+            undeclared.metadataRequestClientsideTimeoutSecs =
                 options.protocolOptions.metadataRequestClientsideTimeoutSecs;
         }
     }
@@ -1148,15 +1328,17 @@ function setRustOptions(options) {
     return rustOptions;
 }
 
-exports.extend = extend;
-exports.setRustOptions = setRustOptions;
-exports.defaultOptions = defaultOptions;
-exports.coreConnectionsPerHostV2 = coreConnectionsPerHostV2;
-exports.coreConnectionsPerHostV3 = coreConnectionsPerHostV3;
-exports.maxRequestsPerConnectionV2 = maxRequestsPerConnectionV2;
-exports.maxRequestsPerConnectionV3 = maxRequestsPerConnectionV3;
-exports.setMetadataDependent = setMetadataDependent;
-exports.continuousPageUnitBytes = continuousPageUnitBytes;
-exports.continuousPageDefaultSize = continuousPageDefaultSize;
-exports.continuousPageDefaultHighWaterMark = continuousPageDefaultHighWaterMark;
-exports.SslOptions = SslOptions;
+export {
+    extend,
+    setRustOptions,
+    defaultOptions,
+    coreConnectionsPerHostV2,
+    coreConnectionsPerHostV3,
+    maxRequestsPerConnectionV2,
+    maxRequestsPerConnectionV3,
+    setMetadataDependent,
+    continuousPageUnitBytes,
+    continuousPageDefaultSize,
+    continuousPageDefaultHighWaterMark,
+    SslOptions,
+};
