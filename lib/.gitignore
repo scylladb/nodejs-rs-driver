@@ -23,3 +23,5 @@ client-options.js
 client-options.d.ts
 reader.js
 reader.d.ts
+cache.js
+cache.d.ts
