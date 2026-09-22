@@ -11,6 +11,7 @@ export default [
   // Ignore JS files emitted in-place by tsc (listed in per-directory .gitignore files)
   includeIgnoreFile(path.join(__dirname, "lib", ".gitignore")),
   includeIgnoreFile(path.join(__dirname, "lib", "auth", ".gitignore")),
+  includeIgnoreFile(path.join(__dirname, "lib", "concurrent", ".gitignore")),
   includeIgnoreFile(path.join(__dirname, "lib", "metadata", ".gitignore")),
   includeIgnoreFile(path.join(__dirname, "lib", "policies", ".gitignore")),
   includeIgnoreFile(path.join(__dirname, "lib", "types", ".gitignore")),

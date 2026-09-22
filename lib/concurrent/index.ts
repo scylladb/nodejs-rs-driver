@@ -1,9 +1,20 @@
 "use strict";
 
-const _Client = require("../client");
-const utils = require("../utils");
-const { Stream } = require("stream");
-const { PreparedCache } = require("../cache");
+import utils = require("../utils");
+import { Readable, Stream } from "stream";
+import { PreparedCache } from "../cache";
+import type { Client } from "../../";
+
+/**
+ * The execution options {@link executeConcurrent} accepts.
+ */
+export type Options = {
+    collectResults?: boolean;
+    concurrencyLevel?: number;
+    executionProfile?: string;
+    maxErrors?: number;
+    raiseOnFirstError?: boolean;
+};
 
 /**
  * Utilities for concurrent query execution with the DataStax Node.js Driver.
@@ -13,22 +24,22 @@ const { PreparedCache } = require("../cache");
 /**
  * Executes multiple queries concurrently at the defined concurrency level.
  * @static
- * @param {Client} client The {@link Client} instance.
- * @param {String|Array<{query, params}>} query The query to execute per each parameter item.
- * @param {Array<Array<any>>|Stream|Object} parameters An {@link Array} or a readable {@link Stream} composed of {@link Array}
+ * @param client The {@link Client} instance.
+ * @param query The query to execute per each parameter item.
+ * @param parameters An {@link Array} or a readable {@link Stream} composed of {@link Array}
  * items representing each individual set of parameters. Per each item in the {@link Array} or {@link Stream}, an
  * execution is going to be made.
- * @param {Object} [options] The execution options.
- * @param {String} [options.executionProfile] The execution profile to be used.
- * @param {Number} [options.concurrencyLevel=100] The concurrency level to determine the maximum amount of in-flight
+ * @param options The execution options.
+ * @param options.executionProfile The execution profile to be used.
+ * @param options.concurrencyLevel The concurrency level to determine the maximum amount of in-flight
  * operations at any given time
- * @param {Boolean} [options.raiseOnFirstError=true] Determines whether execution should stop after the first failed
+ * @param options.raiseOnFirstError Determines whether execution should stop after the first failed
  * execution and the corresponding exception will be raised.
- * @param {Boolean} [options.collectResults=false] Determines whether each individual
+ * @param options.collectResults Determines whether each individual
  * [ResultSet]{@link module:types~ResultSet} instance should be collected in the grouped result.
- * @param {Number} [options.maxErrors=100] The maximum amount of errors to be collected before ignoring the rest of
+ * @param options.maxErrors The maximum amount of errors to be collected before ignoring the rest of
  * the error results.
- * @returns {Promise<ResultSetGroup>} A `Promise` of {@link ResultSetGroup} that is resolved when all the
+ * @returns A `Promise` of {@link ResultSetGroup} that is resolved when all the
  * executions completed and it's rejected when `raiseOnFirstError` is `true` and there is one
  * or more failures.
  * @example <caption>Using a fixed query and an Array of Arrays as parameters</caption>
@@ -50,7 +61,23 @@ const { PreparedCache } = require("../cache");
  *
  * const result = await executeConcurrent(client, queryAndParameters);
  */
-function executeConcurrent(client, query, parameters, options) {
+function executeConcurrent(
+    client: Client,
+    query: string,
+    parameters: Array<Array<any>> | Readable,
+    options?: Options,
+): Promise<ResultSetGroup>;
+function executeConcurrent(
+    client: Client,
+    queries: Array<{ query: string; params?: any[] }>,
+    options?: Options,
+): Promise<ResultSetGroup>;
+function executeConcurrent(
+    client: Client,
+    query: string | Array<{ query: string; params?: any[] }>,
+    parameters?: Array<Array<any>> | Readable | Options,
+    options?: Options,
+): Promise<ResultSetGroup> {
     if (!client) {
         throw new TypeError("Client instance is not defined");
     }
@@ -80,7 +107,7 @@ function executeConcurrent(client, query, parameters, options) {
     }
 
     if (Array.isArray(query)) {
-        options = parameters;
+        options = parameters as Options | undefined;
         return new ArrayBasedExecutor(client, null, query, options).execute();
     }
 
@@ -94,24 +121,26 @@ function executeConcurrent(client, query, parameters, options) {
  * @ignore
  */
 class ArrayBasedExecutor {
-    #client;
-    #query;
-    #parameters;
-    #raiseOnFirstError;
-    #concurrencyLevel;
-    #queryOptions;
-    #result;
-    #stop;
-    #cache;
+    #client: any;
+    #query: string | null;
+    #parameters: Array<any>;
+    #raiseOnFirstError: boolean;
+    #concurrencyLevel: number;
+    #queryOptions: any;
+    #result: ResultSetGroup;
+    #stop: boolean;
+    #cache: any;
 
     /**
-     * @param {_Client} client
-     * @param {String} query
-     * @param {Array<Array<any>>|Array<{query, params}>} parameters
-     * @param {Object} [options] The execution options.
+     * @param options The execution options.
      * @private
      */
-    constructor(client, query, parameters, options) {
+    constructor(
+        client: any,
+        query: string | null,
+        parameters: Array<any>,
+        options?: Options,
+    ) {
         this.#client = client;
         this.#query = query;
         this.#parameters = parameters;
@@ -132,7 +161,7 @@ class ArrayBasedExecutor {
         this.#cache = new PreparedCache();
     }
 
-    async execute() {
+    async execute(): Promise<ResultSetGroup> {
         const promises = new Array(this.#concurrencyLevel);
 
         for (let i = 0; i < this.#concurrencyLevel; i++) {
@@ -143,7 +172,10 @@ class ArrayBasedExecutor {
         return this.#result;
     }
 
-    async #executeOneAtATime(initialIndex, iteration) {
+    async #executeOneAtATime(
+        initialIndex: number,
+        iteration: number,
+    ): Promise<void> {
         const index = initialIndex + this.#concurrencyLevel * iteration;
 
         if (index >= this.#parameters.length || this.#stop) {
@@ -165,19 +197,19 @@ class ArrayBasedExecutor {
         try {
             let prepared = this.#cache.getElement(query);
             if (!prepared) {
-                prepared = await (this.#client.prepareStatement(query));
+                prepared = await this.#client.prepareStatement(query);
                 this.#cache.storeElement(query, prepared);
             }
             await this.#client
                 .rustyExecute(prepared, params || [], this.#queryOptions)
-                .then((rs) => this.#result.setResultItem(index, rs));
+                .then((rs: any) => this.#result.setResultItem(index, rs));
         } catch (err) {
-            this.#setError(index, err);
+            this.#setError(index, err as Error);
         }
         return this.#executeOneAtATime(initialIndex, iteration + 1);
     }
 
-    #setError(index, err) {
+    #setError(index: number, err: Error): void {
         this.#result.setError(index, err);
 
         if (this.#raiseOnFirstError) {
@@ -192,34 +224,36 @@ class ArrayBasedExecutor {
  * @ignore
  */
 class StreamBasedExecutor {
-    #client;
-    #query;
-    #stream;
-    #raiseOnFirstError;
-    #concurrencyLevel;
-    #queryOptions;
-    #inFlight;
-    #index;
-    #result;
-    #resolveCallback;
-    #rejectCallback;
-    #readEnded;
+    #client: any;
+    #query: string;
+    #stream: Readable;
+    #raiseOnFirstError: boolean;
+    #concurrencyLevel: number;
+    #queryOptions: any;
+    #inFlight: number;
+    #index: number;
+    #result: ResultSetGroup;
+    #resolveCallback: ((group: ResultSetGroup) => void) | null;
+    #rejectCallback: ((reason?: any) => void) | null;
+    #readEnded: boolean;
 
     /**
-     * @param {_Client} client
-     * @param {String} query
-     * @param {Stream} stream
-     * @param {Object} [options] The execution options.
+     * @param options The execution options.
      * @private
      */
-    constructor(client, query, stream, options) {
+    constructor(
+        client: any,
+        query: string,
+        stream: Readable,
+        options?: Options,
+    ) {
         this.#client = client;
         this.#query = query;
         this.#stream = stream;
         options = options || utils.emptyObject;
         this.#raiseOnFirstError = options.raiseOnFirstError !== false;
         this.#concurrencyLevel = options.concurrencyLevel || 100;
-        // Create ExecutionOptions here, to avoid creation of new 
+        // Create ExecutionOptions here, to avoid creation of new
         // rust QueryOptionsWrapper for each of the executed queries.
         this.#queryOptions = client.createOptions({
             prepare: true,
@@ -233,19 +267,19 @@ class StreamBasedExecutor {
         this.#readEnded = false;
     }
 
-    execute() {
-        return new Promise((resolve, reject) => {
+    execute(): Promise<ResultSetGroup> {
+        return new Promise<ResultSetGroup>((resolve, reject) => {
             this.#resolveCallback = resolve;
             this.#rejectCallback = reject;
 
             this.#stream
-                .on("data", (params) => this.#executeOne(params))
-                .on("error", (err) => this.#setReadEnded(err))
+                .on("data", (params: any) => this.#executeOne(params))
+                .on("error", (err: Error) => this.#setReadEnded(err))
                 .on("end", () => this.#setReadEnded());
         });
     }
 
-    async #executeOne(params) {
+    async #executeOne(params: any): Promise<void> {
         if (!Array.isArray(params)) {
             return this.#setReadEnded(
                 new TypeError(
@@ -265,11 +299,11 @@ class StreamBasedExecutor {
 
         this.#client
             .execute(this.#query, params, this.#queryOptions)
-            .then((rs) => {
+            .then((rs: any) => {
                 this.#result.setResultItem(index, rs);
                 this.#inFlight--;
             })
-            .catch((err) => {
+            .catch((err: Error) => {
                 this.#inFlight--;
                 this.#setError(index, err);
             })
@@ -284,7 +318,7 @@ class StreamBasedExecutor {
                     // It could have ended prematurely when there is a read error
                     // or there was an execution error and raiseOnFirstError is true
                     // In that case, calling the resolve callback has no effect
-                    this.#resolveCallback(this.#result);
+                    this.#resolveCallback!(this.#result);
                 }
             });
 
@@ -295,30 +329,30 @@ class StreamBasedExecutor {
 
     /**
      * Marks the stream read process as ended.
-     * @param {Error} [err] The stream read error.
+     * @param err The stream read error.
      * @private
      */
-    #setReadEnded(err) {
+    #setReadEnded(err?: Error): void {
         if (!this.#readEnded) {
             this.#readEnded = true;
 
             if (err) {
                 // There was an error while reading from the input stream.
                 // This should be surfaced as a failure
-                this.#rejectCallback(err);
+                this.#rejectCallback!(err);
             } else if (this.#inFlight === 0) {
                 // Ended signaled and there are no more pending messages.
-                this.#resolveCallback(this.#result);
+                this.#resolveCallback!(this.#result);
             }
         }
     }
 
-    #setError(index, err) {
+    #setError(index: number, err: Error): void {
         this.#result.setError(index, err);
 
         if (this.#raiseOnFirstError) {
             this.#readEnded = true;
-            this.#rejectCallback(err);
+            this.#rejectCallback!(err);
         }
     }
 }
@@ -327,27 +361,29 @@ class StreamBasedExecutor {
  * Represents results from different related executions.
  */
 class ResultSetGroup {
-    #collectResults;
-    #maxErrors;
+    #collectResults: boolean | undefined;
+    #maxErrors: number;
+    totalExecuted: number;
+    errors: Array<Error>;
+    /**
+     * Gets an {@link Array} containing the [ResultSet]{@link module:types~ResultSet} instances from each execution.
+     *
+     * Note that when `collectResults` is set to `false`, accessing this property will
+     * throw an error.
+     */
+    declare resultItems: Array<any>;
 
     /**
      * Creates a new instance of {@link ResultSetGroup}.
      * @ignore
      */
-    constructor(options) {
+    constructor(options: Options) {
         this.#collectResults = options.collectResults;
         this.#maxErrors = options.maxErrors || 100;
         this.totalExecuted = 0;
         this.errors = [];
 
         if (this.#collectResults) {
-            /**
-             * Gets an {@link Array} containing the [ResultSet]{@link module:types~ResultSet} instances from each execution.
-             *
-             * Note that when `collectResults` is set to `false`, accessing this property will
-             * throw an error.
-             * @type {Array<any>}
-             */
             this.resultItems = [];
         } else {
             Object.defineProperty(this, "resultItems", {
@@ -362,7 +398,7 @@ class ResultSetGroup {
     }
 
     /** @ignore */
-    setResultItem(index, rs) {
+    setResultItem(index: number, rs: any): void {
         this.totalExecuted++;
 
         if (this.#collectResults) {
@@ -374,7 +410,7 @@ class ResultSetGroup {
      * Internal method to set the error of an execution.
      * @ignore
      */
-    setError(index, err) {
+    setError(index: number, err: Error): void {
         this.totalExecuted++;
 
         if (this.errors.length < this.#maxErrors) {
@@ -387,5 +423,4 @@ class ResultSetGroup {
     }
 }
 
-exports.executeConcurrent = executeConcurrent;
-exports.ResultSetGroup = ResultSetGroup;
+export { executeConcurrent, ResultSetGroup };
