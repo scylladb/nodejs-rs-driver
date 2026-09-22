@@ -25,3 +25,5 @@ reader.js
 reader.d.ts
 cache.js
 cache.d.ts
+encoder.js
+encoder.d.ts

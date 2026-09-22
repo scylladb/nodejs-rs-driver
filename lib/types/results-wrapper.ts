@@ -2,8 +2,6 @@
 
 import Row = require("./row");
 import { ColumnInfo, convertComplexType } from "./cql-utils";
-// TODO: Remove once lib/encoder.js is converted to TypeScript.
-// @ts-ignore - untyped JS module
 import Encoder = require("../encoder");
 import rust = require("../../index");
 

@@ -7,8 +7,6 @@ import resultsWrapper = require("./results-wrapper");
 import { ColumnMetadata } from "./results-wrapper";
 import Uuid = require("./uuid");
 import Row = require("./row");
-// TODO: Remove once lib/encoder.js is converted to TypeScript.
-// @ts-ignore - untyped JS module
 import Encoder = require("../encoder");
 
 const asyncIteratorSymbol = (Symbol.asyncIterator ||

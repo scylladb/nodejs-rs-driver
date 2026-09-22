@@ -1,25 +1,24 @@
-// @ts-nocheck
 "use strict";
-const util = require("util");
+import util = require("util");
 
-const types = require("./types");
+import types = require("./types");
 const dataTypes = types.dataTypes;
 const Long = types.Long;
 /**
- * @deprecated Integer is deprecated. See `./types/integer.js`
+ * @deprecated Integer is deprecated. See `./types/integer.ts`
  */
 const Integer = types.Integer;
 const BigDecimal = types.BigDecimal;
-const utils = require("./utils");
-const token = require("./token");
-const { DateRange } = require("./datastax/search");
-const Vector = require("./types/vector");
-const { throwNotSupported } = require("./new-utils");
-const { FrameReader } = require("./reader");
-
-// Used for JS doc
-// eslint-disable-next-line no-unused-vars
-const { ColumnInfo } = require("./types/cql-utils");
+import utils = require("./utils");
+import token = require("./token");
+// TODO: Remove after lib/datastax/search is converted to Typescript.
+// @ts-ignore
+import { DateRange } from "./datastax/search";
+import Vector = require("./types/vector");
+import { throwNotSupported } from "./new-utils";
+import { FrameReader } from "./reader";
+import { ColumnInfo, UdtInfo } from "./types/cql-utils";
+import type { ExecutionOptions } from "./execution-options";
 
 const uuidRegex =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -32,8 +31,12 @@ const buffers = {
     int8MaxValue: utils.allocBufferFromArray([0xff]),
 };
 
-const bigInt32BitsOn = 0xffffffffn;
-const bigInt8BitsOn = 0xffn;
+const bigInt32BitsOn = BigInt(0xffffffff);
+const bigInt8BitsOn = BigInt(0xff);
+const bigIntZero = BigInt(0);
+const bigIntMinusOne = BigInt(-1);
+const bigIntEight = BigInt(8);
+const bigIntThirtyTwo = BigInt(32);
 
 const complexTypeNames = Object.freeze({
     list: "org.apache.cassandra.db.marshal.ListType",
@@ -99,7 +102,6 @@ const unsetValueBuffer = utils.allocBufferFromArray([255, 255, 255, 254]);
  * For backwards compatibility, empty buffers as text/blob/custom values are supported.
  * In the case of other types, they are going to be decoded as a `null` value.
  * @private
- * @type {Set}
  */
 const zeroLengthTypesSupported = new Set([
     dataTypes.text,
@@ -109,11 +111,11 @@ const zeroLengthTypesSupported = new Set([
     dataTypes.blob,
 ]);
 
-const customDecoders = {
+const customDecoders: { [typeName: string]: (bytes: Buffer) => any } = {
     [customTypeNames.duration]: decodeDuration,
 };
 
-const customEncoders = {
+const customEncoders: { [typeName: string]: (value: any) => Buffer } = {
     [customTypeNames.duration]: encodeDuration,
 };
 
@@ -129,11 +131,38 @@ const customEncoders = {
  * @abstract
  */
 class EncoderMembers {
-    /**
-     *
-     * @param {*} encodingOptions
-     */
-    constructor(encodingOptions) {
+    encodingOptions: any;
+    protocolVersion!: number;
+
+    /** Selected from the encoding options, once, in the constructor. */
+    decodeLong: (bytes: Buffer) => types.Long | bigint;
+    decodeVarint: (bytes: Buffer) => types.Integer | bigint;
+    encodeLong: (value: any) => Buffer;
+    encodeVarint: (value: any) => Buffer;
+
+    decoders: {
+        [code: number]: (bytes: Buffer, columnInfo: ColumnInfo) => any;
+    };
+    encoders: {
+        [code: number]: (value: any, columnInfo: ColumnInfo) => Buffer | null;
+    };
+
+    /** Selected from the protocol version by {@link setProtocolVersion}. */
+    decodeCollectionLength!: (bytes: Buffer, offset: number) => number;
+    getLengthBuffer!: (value: any) => Buffer;
+    collectionLengthSize!: number;
+
+    /** Selected from the encoding options by the {@link Encoder} constructor. */
+    handleBuffer!: (buffer: Buffer) => Buffer;
+
+    /** Implemented by {@link Encoder}, which is the only way to reach this class. */
+    encode(value: any, typeInfo?: any): Buffer | null | undefined {
+        throw new SyntaxError(
+            "Internal driver error: EncoderMembers cannot encode on its own",
+        );
+    }
+
+    constructor(encodingOptions: any) {
         if (new.target === EncoderMembers) {
             throw new SyntaxError(
                 "Internal driver error: EncoderMembers cannot be instantiated directly",
@@ -220,11 +249,10 @@ class EncoderMembers {
 
     /**
      * Sets the protocol version and the encoding/decoding methods depending on the protocol version
-     * @param {Number} value
      * @ignore
      * @internal
      */
-    setProtocolVersion(value) {
+    setProtocolVersion(value: number): void {
         this.protocolVersion = value;
         // Set the collection serialization based on the protocol version
         this.decodeCollectionLength = decodeCollectionLengthV3;
@@ -242,28 +270,23 @@ class EncoderMembers {
     }
 
     /* Stub for decode method. Proper decode will be provided by the Encoder. */
-    decode(bytes, columnInfo) {
+    decode(bytes: Buffer | null, columnInfo: ColumnInfo): any {
         throw new Error(
             "Using stub of decoder. This is an internal driver error.",
         );
     }
 
     /**
-     * @param {Buffer} bytes
-     * @returns {Buffer}
      * @private
      */
-    decodeBlob(bytes) {
+    decodeBlob(bytes: Buffer): Buffer {
         return this.handleBuffer(bytes);
     }
 
     /**
-     * @param {Buffer} bytes
-     * @param {OtherCustomColumnInfo | VectorColumnInfo} columnInfo
-     * @returns {Buffer | Vector | *}
      * @private
      */
-    decodeCustom(bytes, columnInfo) {
+    decodeCustom(bytes: Buffer, columnInfo: ColumnInfo): any {
         // Make sure we actually have something to process in typeName before we go any further
         if (!columnInfo) {
             return this.handleBuffer(bytes);
@@ -281,13 +304,11 @@ class EncoderMembers {
             typeof columnInfo.info === "string" &&
             columnInfo.info.startsWith(customTypeNames.vector)
         ) {
-            const vectorColumnInfo = /** @type {VectorColumnInfo} */ (
-                this.parseFqTypeName(columnInfo.info)
-            );
+            const vectorColumnInfo = this.parseFqTypeName(columnInfo.info);
             return this.decodeVector(bytes, vectorColumnInfo);
         }
 
-        const handler = customDecoders[columnInfo.info];
+        const handler = customDecoders[columnInfo.info as string];
         if (handler) {
             return handler.call(this, bytes);
         }
@@ -295,115 +316,91 @@ class EncoderMembers {
     }
 
     /**
-     * @param {Buffer} bytes
-     * @returns {string}
      * @private
      */
-    decodeUtf8String(bytes) {
+    decodeUtf8String(bytes: Buffer): string {
         return bytes.toString("utf8");
     }
 
     /**
-     * @param {Buffer} bytes
-     * @returns {string}
      * @private
      */
-    decodeAsciiString(bytes) {
+    decodeAsciiString(bytes: Buffer): string {
         return bytes.toString("ascii");
     }
 
     /**
-     * @param {Buffer} bytes
-     * @returns {boolean}
      * @private
      */
-    decodeBoolean(bytes) {
+    decodeBoolean(bytes: Buffer): boolean {
         return !!bytes.readUInt8(0);
     }
 
     /**
-     * @param {Buffer} bytes
-     * @returns {number}
      * @private
      */
-    decodeDouble(bytes) {
+    decodeDouble(bytes: Buffer): number {
         return bytes.readDoubleBE(0);
     }
 
     /**
-     * @param {Buffer} bytes
-     * @returns {number}
      * @private
      */
-    decodeFloat(bytes) {
+    decodeFloat(bytes: Buffer): number {
         return bytes.readFloatBE(0);
     }
 
     /**
-     * @param {Buffer} bytes
-     * @returns {number}
      * @private
      */
-    decodeInt(bytes) {
+    decodeInt(bytes: Buffer): number {
         return bytes.readInt32BE(0);
     }
 
     /**
-     * @param {Buffer} bytes
-     * @returns {number}
      * @private
      */
-    decodeSmallint(bytes) {
+    decodeSmallint(bytes: Buffer): number {
         return bytes.readInt16BE(0);
     }
 
     /**
-     * @param {Buffer} bytes
-     * @returns {number}
      * @private
      */
-    decodeTinyint(bytes) {
+    decodeTinyint(bytes: Buffer): number {
         return bytes.readInt8(0);
     }
 
     /**
-     * @param {Buffer} bytes
-     * @returns {Long}
      * @private
      */
-    #decodeCqlLongAsLong(bytes) {
-        return Long.fromBuffer(bytes);
+    #decodeCqlLongAsLong(bytes: Buffer): types.Long {
+        return (Long as any).fromBuffer(bytes);
     }
 
     /**
-     * @param {Buffer} bytes
-     * @returns {bigint}
      * @private
      */
-    #decodeCqlLongAsBigInt(bytes) {
+    #decodeCqlLongAsBigInt(bytes: Buffer): bigint {
         return BigInt.asIntN(
             64,
-            (BigInt(bytes.readUInt32BE(0)) << 32n) |
+            (BigInt(bytes.readUInt32BE(0)) << bigIntThirtyTwo) |
                 BigInt(bytes.readUInt32BE(4)),
         );
     }
 
     /**
-     * @param {Buffer} bytes
-     * @returns {Integer}
      * @private
      */
-    #decodeVarintAsInteger(bytes) {
+    #decodeVarintAsInteger(bytes: Buffer): types.Integer {
         return Integer.fromBuffer(bytes);
     }
 
     /**
-     * @param {Buffer} bytes
-     * @returns {bigint}
      * @private
      */
-    #decodeVarintAsBigInt(bytes) {
-        let result = 0n;
+    #decodeVarintAsBigInt(bytes: Buffer): bigint {
+        let result = bigIntZero;
         if (bytes[0] <= 0x7f) {
             for (let i = 0; i < bytes.length; i++) {
                 const b = BigInt(bytes[bytes.length - 1 - i]);
@@ -421,50 +418,39 @@ class EncoderMembers {
     }
 
     /**
-     * @param {Buffer} bytes
-     * @returns {BigDecimal}
      * @private
      */
-    decodeDecimal(bytes) {
+    decodeDecimal(bytes: Buffer): types.BigDecimal {
         return BigDecimal.fromBuffer(bytes);
     }
 
     /**
-     * @param {Buffer} bytes
-     * @returns {Date}
      * @private
      */
-    decodeTimestamp(bytes) {
+    decodeTimestamp(bytes: Buffer): Date {
         return new Date(this.#decodeCqlLongAsLong(bytes).toNumber());
     }
 
     /**
-     * @param {Buffer} bytes
-     * @returns {types.LocalDate}
      * @private
      */
-    decodeDate(bytes) {
+    decodeDate(bytes: Buffer): types.LocalDate {
         return types.LocalDate.fromBuffer(bytes);
     }
 
     /**
-     * @param {Buffer} bytes
-     * @returns {types.LocalTime}
      * @private
      */
-    decodeTime(bytes) {
+    decodeTime(bytes: Buffer): types.LocalTime {
         return types.LocalTime.fromBuffer(bytes);
     }
 
     /**
      * Reads a list from bytes
-     * @param {Buffer} bytes
-     * @param {ListSetColumnInfo} columnInfo
-     * @returns {Array<*>}
      * @private
      */
-    decodeList(bytes, columnInfo) {
-        const subtype = columnInfo.info;
+    decodeList(bytes: Buffer, columnInfo: ColumnInfo): Array<any> {
+        const subtype = columnInfo.info as ColumnInfo;
         const totalItems = this.decodeCollectionLength(bytes, 0);
         let offset = this.collectionLengthSize;
         const list = new Array(totalItems);
@@ -484,12 +470,9 @@ class EncoderMembers {
 
     /**
      * Reads a Set from bytes
-     * @param {Buffer} bytes
-     * @param {ListSetColumnInfo} columnInfo
-     * @returns {Array<*> | Set<*>}
      * @private
      */
-    decodeSet(bytes, columnInfo) {
+    decodeSet(bytes: Buffer, columnInfo: ColumnInfo): any {
         const arr = this.decodeList(bytes, columnInfo);
         if (this.encodingOptions.set) {
             const setConstructor = this.encodingOptions.set;
@@ -500,17 +483,17 @@ class EncoderMembers {
 
     /**
      * Reads a map (key / value) from bytes
-     * @param {Buffer} bytes
-     * @param {MapColumnInfo} columnInfo
-     * @returns {Object | Map<*, *>}
      * @private
      */
-    decodeMap(bytes, columnInfo) {
-        const subtypes = columnInfo.info;
-        let map;
+    decodeMap(bytes: Buffer, columnInfo: ColumnInfo): any {
+        const subtypes = columnInfo.info as [ColumnInfo, ColumnInfo];
+        let map: any;
         const totalItems = this.decodeCollectionLength(bytes, 0);
         let offset = this.collectionLengthSize;
-        const readValues = (callback, thisArg) => {
+        const readValues = (
+            callback: (key: any, value: any) => void,
+            thisArg?: any,
+        ) => {
             for (let i = 0; i < totalItems; i++) {
                 const keyLength = this.decodeCollectionLength(bytes, offset);
                 offset += this.collectionLengthSize;
@@ -539,7 +522,7 @@ class EncoderMembers {
             readValues(map.set, map);
         } else {
             map = {};
-            readValues(function (key, value) {
+            readValues(function (key: any, value: any) {
                 map[key] = value;
             });
         }
@@ -547,42 +530,33 @@ class EncoderMembers {
     }
 
     /**
-     * @param {Buffer} bytes
-     * @returns {types.Uuid}
      * @private
      */
-    decodeUuid(bytes) {
+    decodeUuid(bytes: Buffer): types.Uuid {
         return new types.Uuid(this.handleBuffer(bytes));
     }
 
     /**
-     * @param {Buffer} bytes
-     * @returns {types.TimeUuid}
      * @private
      */
-    decodeTimeUuid(bytes) {
+    decodeTimeUuid(bytes: Buffer): types.TimeUuid {
         return new types.TimeUuid(this.handleBuffer(bytes));
     }
 
     /**
-     * @param {Buffer} bytes
-     * @returns {types.InetAddress}
      * @private
      */
-    decodeInet(bytes) {
+    decodeInet(bytes: Buffer): types.InetAddress {
         return new types.InetAddress(this.handleBuffer(bytes));
     }
 
     /**
      * Decodes a user defined type into an object
-     * @param {Buffer} bytes
-     * @param {UdtColumnInfo} columnInfo
-     * @returns {Object}
      * @private
      */
-    decodeUdt(bytes, columnInfo) {
-        const udtInfo = columnInfo.info;
-        const result = {};
+    decodeUdt(bytes: Buffer, columnInfo: ColumnInfo): any {
+        const udtInfo = columnInfo.info as UdtInfo;
+        const result: { [field: string]: any } = {};
         let offset = 0;
         for (
             let i = 0;
@@ -608,13 +582,10 @@ class EncoderMembers {
     }
 
     /**
-     * @param {Buffer} bytes
-     * @param {TupleColumnInfo} columnInfo
-     * @returns {types.Tuple}
      * @private
      */
-    decodeTuple(bytes, columnInfo) {
-        const tupleInfo = columnInfo.info;
+    decodeTuple(bytes: Buffer, columnInfo: ColumnInfo): types.Tuple {
+        const tupleInfo = columnInfo.info as Array<ColumnInfo>;
         const elements = new Array(tupleInfo.length);
         let offset = 0;
 
@@ -638,11 +609,9 @@ class EncoderMembers {
     }
 
     /**
-     * @param {Number|String} value
-     * @returns {Buffer}
      * @private
      */
-    encodeFloat(value) {
+    encodeFloat(value: any): Buffer {
         if (typeof value === "string") {
             // All numeric types are supported as strings for historical reasons
             value = parseFloat(value);
@@ -666,11 +635,9 @@ class EncoderMembers {
     }
 
     /**
-     * @param {Number|String} value
-     * @returns {Buffer}
      * @private
      */
-    encodeDouble(value) {
+    encodeDouble(value: any): Buffer {
         if (typeof value === "string") {
             // All numeric types are supported as strings for historical reasons
             value = parseFloat(value);
@@ -694,11 +661,9 @@ class EncoderMembers {
     }
 
     /**
-     * @param {Date|String|Long|Number} value
-     * @returns {Buffer}
      * @private
      */
-    encodeTimestamp(value) {
+    encodeTimestamp(value: any): Buffer {
         const originalValue = value;
         if (typeof value === "string") {
             value = new Date(value);
@@ -717,11 +682,9 @@ class EncoderMembers {
     }
 
     /**
-     * @param {Date|String|LocalDate} value
-     * @returns {Buffer}
      * @private
      */
-    encodeDate(value) {
+    encodeDate(value: any): Buffer {
         const originalValue = value;
         try {
             if (typeof value === "string") {
@@ -744,11 +707,9 @@ class EncoderMembers {
     }
 
     /**
-     * @param {String|LocalDate} value
-     * @returns {Buffer}
      * @private
      */
-    encodeTime(value) {
+    encodeTime(value: any): Buffer {
         const originalValue = value;
         try {
             if (typeof value === "string") {
@@ -768,16 +729,14 @@ class EncoderMembers {
     }
 
     /**
-     * @param {Uuid|String|Buffer} value
-     * @returns {Buffer}
      * @private
      */
-    encodeUuid(value) {
+    encodeUuid(value: any): Buffer {
         if (typeof value === "string") {
             try {
                 value = types.Uuid.fromString(value).getBuffer();
             } catch (err) {
-                throw new TypeError(err.message);
+                throw new TypeError((err as Error).message);
             }
         } else if (value instanceof types.Uuid) {
             value = value.getBuffer();
@@ -792,11 +751,9 @@ class EncoderMembers {
     }
 
     /**
-     * @param {String|InetAddress|Buffer} value
-     * @returns {Buffer}
      * @private
      */
-    encodeInet(value) {
+    encodeInet(value: any): Buffer {
         if (typeof value === "string") {
             value = types.InetAddress.fromString(value);
         }
@@ -813,11 +770,9 @@ class EncoderMembers {
     }
 
     /**
-     * @param {Long|Buffer|String|Number} value
-     * @returns {Buffer}
      * @private
      */
-    #encodeBigIntFromLong(value) {
+    #encodeBigIntFromLong(value: any): Buffer {
         if (typeof value === "number") {
             value = Long.fromNumber(value);
         } else if (typeof value === "string") {
@@ -827,7 +782,7 @@ class EncoderMembers {
         let buf = null;
 
         if (value instanceof Long) {
-            buf = Long.toBuffer(value);
+            buf = (Long as any).toBuffer(value);
         }
 
         if (buf === null) {
@@ -841,11 +796,9 @@ class EncoderMembers {
     }
 
     /**
-     * @param {BigInt|String} value
-     * @returns {Buffer}
      * @private
      */
-    #encodeBigIntFromBigInt(value) {
+    #encodeBigIntFromBigInt(value: any): Buffer {
         if (typeof value === "string") {
             // All numeric types are supported as strings for historical reasons
             value = BigInt(value);
@@ -859,24 +812,22 @@ class EncoderMembers {
         }
 
         const buffer = utils.allocBufferUnsafe(8);
-        buffer.writeUInt32BE(Number(value >> 32n) >>> 0, 0);
+        buffer.writeUInt32BE(Number(value >> bigIntThirtyTwo) >>> 0, 0);
         buffer.writeUInt32BE(Number(value & bigInt32BitsOn), 4);
         return buffer;
     }
 
     /**
-     * @param {Integer|Buffer|String|Number} value
-     * @returns {Buffer}
      * @private
      */
-    #encodeVarintFromInteger(value) {
+    #encodeVarintFromInteger(value: any): Buffer {
         if (typeof value === "number") {
             value = Integer.fromNumber(value);
         }
         if (typeof value === "string") {
             value = Integer.fromString(value);
         }
-        let buf = null;
+        let buf: Buffer | null = null;
         if (value instanceof Buffer) {
             buf = value;
         }
@@ -893,11 +844,9 @@ class EncoderMembers {
     }
 
     /**
-     * @param {BigInt|String} value
-     * @returns {Buffer}
      * @private
      */
-    #encodeVarintFromBigInt(value) {
+    #encodeVarintFromBigInt(value: any): Buffer {
         if (typeof value === "string") {
             // All numeric types are supported as strings for historical reasons
             value = BigInt(value);
@@ -910,18 +859,18 @@ class EncoderMembers {
             );
         }
 
-        if (value === 0n) {
+        if (value === bigIntZero) {
             return buffers.int8Zero;
-        } else if (value === -1n) {
+        } else if (value === bigIntMinusOne) {
             return buffers.int8MaxValue;
         }
 
-        const parts = [];
+        const parts: Array<number> = [];
 
-        if (value > 0n) {
-            while (value !== 0n) {
+        if (value > bigIntZero) {
+            while (value !== bigIntZero) {
                 parts.unshift(Number(value & bigInt8BitsOn));
-                value = value >> 8n;
+                value = value >> bigIntEight;
             }
 
             if (parts[0] > 0x7f) {
@@ -929,9 +878,9 @@ class EncoderMembers {
                 parts.unshift(0);
             }
         } else {
-            while (value !== -1n) {
+            while (value !== bigIntMinusOne) {
                 parts.unshift(Number(value & bigInt8BitsOn));
-                value = value >> 8n;
+                value = value >> bigIntEight;
             }
 
             if (parts[0] <= 0x7f) {
@@ -944,11 +893,9 @@ class EncoderMembers {
     }
 
     /**
-     * @param {BigDecimal|Buffer|String|Number} value
-     * @returns {Buffer}
      * @private
      */
-    encodeDecimal(value) {
+    encodeDecimal(value: any): Buffer {
         if (typeof value === "number") {
             value = BigDecimal.fromNumber(value);
         } else if (typeof value === "string") {
@@ -966,12 +913,9 @@ class EncoderMembers {
     }
 
     /**
-     * @param {string} value
-     * @param {BufferEncoding} [encoding]
-     * @returns {Buffer}
      * @private
      */
-    encodeString(value, encoding) {
+    encodeString(value: any, encoding?: BufferEncoding): Buffer {
         if (typeof value !== "string") {
             throw new TypeError(
                 "Not a valid text value, expected String obtained " +
@@ -982,29 +926,23 @@ class EncoderMembers {
     }
 
     /**
-     * @param {string} value
-     * @returns {Buffer}
      * @private
      */
-    encodeUtf8String(value) {
+    encodeUtf8String(value: any): Buffer {
         return this.encodeString(value, "utf8");
     }
 
     /**
-     * @param {string} value
-     * @returns {Buffer}
      * @private
      */
-    encodeAsciiString(value) {
+    encodeAsciiString(value: any): Buffer {
         return this.encodeString(value, "ascii");
     }
 
     /**
-     * @param {Buffer} value
-     * @returns {Buffer}
      * @private
      */
-    encodeBlob(value) {
+    encodeBlob(value: any): Buffer {
         if (!(value instanceof Buffer)) {
             throw new TypeError(
                 "Not a valid blob, expected Buffer obtained " +
@@ -1014,12 +952,7 @@ class EncoderMembers {
         return value;
     }
 
-    /**
-     * @param {any} value
-     * @param {OtherCustomColumnInfo | VectorColumnInfo} columnInfo
-     * @returns {Buffer}
-     */
-    encodeCustom(value, columnInfo) {
+    encodeCustom(value: any, columnInfo: ColumnInfo): Buffer {
         if (
             "customTypeName" in columnInfo &&
             columnInfo.customTypeName === "vector"
@@ -1031,13 +964,11 @@ class EncoderMembers {
             typeof columnInfo.info === "string" &&
             columnInfo.info.startsWith(customTypeNames.vector)
         ) {
-            const vectorColumnInfo = /** @type {VectorColumnInfo} */ (
-                this.parseFqTypeName(columnInfo.info)
-            );
+            const vectorColumnInfo = this.parseFqTypeName(columnInfo.info);
             return this.encodeVector(value, vectorColumnInfo);
         }
 
-        const handler = customEncoders[columnInfo.info];
+        const handler = customEncoders[columnInfo.info as string];
         if (handler) {
             return handler.call(this, value);
         }
@@ -1045,20 +976,16 @@ class EncoderMembers {
     }
 
     /**
-     * @param {Boolean} value
-     * @returns {Buffer}
      * @private
      */
-    encodeBoolean(value) {
+    encodeBoolean(value: any): Buffer {
         return value ? buffers.int8One : buffers.int8Zero;
     }
 
     /**
-     * @param {Number|String} value
-     * @returns {Buffer}
      * @private
      */
-    encodeInt(value) {
+    encodeInt(value: any): Buffer {
         if (isNaN(value)) {
             throw new TypeError(
                 "Expected Number, obtained " + util.inspect(value),
@@ -1070,11 +997,9 @@ class EncoderMembers {
     }
 
     /**
-     * @param {Number} value
-     * @returns {Buffer}
      * @private
      */
-    encodeSmallint(value) {
+    encodeSmallint(value: any): Buffer {
         if (isNaN(value)) {
             throw new TypeError(
                 "Expected Number, obtained " + util.inspect(value),
@@ -1086,11 +1011,9 @@ class EncoderMembers {
     }
 
     /**
-     * @param {Number} value
-     * @returns {Buffer}
      * @private
      */
-    encodeTinyint(value) {
+    encodeTinyint(value: any): Buffer {
         if (isNaN(value)) {
             throw new TypeError(
                 "Expected Number, obtained " + util.inspect(value),
@@ -1102,13 +1025,10 @@ class EncoderMembers {
     }
 
     /**
-     * @param {Array<any>} value
-     * @param {*} columnInfo
-     * @returns {Buffer}
      * @private
      */
-    encodeList(value, columnInfo) {
-        const subtype = columnInfo.info;
+    encodeList(value: any, columnInfo: ColumnInfo): Buffer | null {
+        const subtype = columnInfo.info as ColumnInfo;
         if (!Array.isArray(value)) {
             throw new TypeError(
                 "Not a valid list value, expected Array obtained " +
@@ -1118,7 +1038,7 @@ class EncoderMembers {
         if (value.length === 0) {
             return null;
         }
-        const parts = [];
+        const parts: Array<Buffer> = [];
         parts.push(this.getLengthBuffer(value));
         for (let i = 0; i < value.length; i++) {
             const val = value[i];
@@ -1131,7 +1051,7 @@ class EncoderMembers {
                     "A collection can't contain null or unset values",
                 );
             }
-            const bytes = this.encode(val, subtype);
+            const bytes = this.encode(val, subtype) as Buffer;
             // include item byte length
             parts.push(this.getLengthBuffer(bytes));
             // include item
@@ -1140,18 +1060,13 @@ class EncoderMembers {
         return Buffer.concat(parts);
     }
 
-    /**
-     * @param {Array<any>|Object} value
-     * @param {*} columnInfo
-     * @returns {Buffer}
-     */
-    encodeSet(value, columnInfo) {
+    encodeSet(value: any, columnInfo: ColumnInfo): Buffer | null {
         if (
             this.encodingOptions.set &&
             value instanceof this.encodingOptions.set
         ) {
-            const arr = [];
-            value.forEach(function (x) {
+            const arr: Array<any> = [];
+            value.forEach(function (x: any) {
                 arr.push(x);
             });
             return this.encodeList(arr, columnInfo);
@@ -1162,21 +1077,19 @@ class EncoderMembers {
     /**
      * Serializes a map into a Buffer
      * @param value
-     * @param {MapColumnInfo} columnInfo
-     * @returns {Buffer}
      * @private
      */
-    encodeMap(value, columnInfo) {
-        const subtypes = columnInfo.info;
-        const parts = [];
+    encodeMap(value: any, columnInfo: ColumnInfo): Buffer | null {
+        const subtypes = columnInfo.info as [ColumnInfo, ColumnInfo];
+        const parts: Array<Buffer> = [];
         let propCounter = 0;
-        let keySubtype = null;
-        let valueSubtype = null;
+        let keySubtype: ColumnInfo | null = null;
+        let valueSubtype: ColumnInfo | null = null;
         if (subtypes) {
             keySubtype = subtypes[0];
             valueSubtype = subtypes[1];
         }
-        const addItem = (val, key) => {
+        const addItem = (val: any, key: any) => {
             if (
                 key === null ||
                 typeof key === "undefined" ||
@@ -1191,13 +1104,13 @@ class EncoderMembers {
             ) {
                 throw new TypeError("A map can't contain null or unset values");
             }
-            const keyBuffer = this.encode(key, keySubtype);
+            const keyBuffer = this.encode(key, keySubtype) as Buffer;
             // include item byte length
             parts.push(this.getLengthBuffer(keyBuffer));
             // include item
             parts.push(keyBuffer);
             // value
-            const valueBuffer = this.encode(val, valueSubtype);
+            const valueBuffer = this.encode(val, valueSubtype) as Buffer;
             // include item byte length
             parts.push(this.getLengthBuffer(valueBuffer));
             // include item
@@ -1227,18 +1140,13 @@ class EncoderMembers {
         return Buffer.concat(parts);
     }
 
-    /**
-     * @param {any} value
-     * @param {UdtColumnInfo} columnInfo
-     * @returns {Buffer}
-     */
-    encodeUdt(value, columnInfo) {
-        const udtInfo = columnInfo.info;
-        const parts = [];
+    encodeUdt(value: any, columnInfo: ColumnInfo): Buffer | null {
+        const udtInfo = columnInfo.info as UdtInfo;
+        const parts: Array<Buffer> = [];
         let totalLength = 0;
         for (let i = 0; i < udtInfo.fields.length; i++) {
             const field = udtInfo.fields[i];
-            const item = this.encode(value[field.name], field.type);
+            const item: any = this.encode(value[field.name], field.type);
             if (!item) {
                 parts.push(nullValueBuffer);
                 totalLength += 4;
@@ -1259,20 +1167,17 @@ class EncoderMembers {
     }
 
     /**
-     * @param {any} value
-     * @param {TupleColumnInfo} columnInfo
-     * @returns {Buffer}
      * @private
      */
-    encodeTuple(value, columnInfo) {
-        const tupleInfo = columnInfo.info;
-        const parts = [];
+    encodeTuple(value: any, columnInfo: ColumnInfo): Buffer | null {
+        const tupleInfo = columnInfo.info as Array<ColumnInfo>;
+        const parts: Array<Buffer> = [];
         let totalLength = 0;
         const length = Math.min(tupleInfo.length, value.length);
 
         for (let i = 0; i < length; i++) {
             const type = tupleInfo[i];
-            const item = this.encode(value.get(i), type);
+            const item: any = this.encode(value.get(i), type);
 
             if (!item) {
                 parts.push(nullValueBuffer);
@@ -1297,17 +1202,14 @@ class EncoderMembers {
     }
 
     /**
-     * @param {Buffer} buffer
-     * @param {VectorColumnInfo} params
-     * @returns {Vector}
      * @private
      */
-    decodeVector(buffer, params) {
+    decodeVector(buffer: Buffer, params: any): Vector {
         const subtype = params.info[0];
         const dimension = params.info[1];
         const elemLength = this.serializationSizeIfFixed(subtype);
 
-        const rv = [];
+        const rv: Array<any> = [];
         let offset = 0;
         for (let i = 0; i < dimension; i++) {
             if (elemLength === -1) {
@@ -1346,11 +1248,7 @@ class EncoderMembers {
         return new Vector(rv, typeInfo);
     }
 
-    /**
-     * @param {ColumnInfo} cqlType
-     * @returns {Number}
-     */
-    serializationSizeIfFixed(cqlType) {
+    serializationSizeIfFixed(cqlType: any): number {
         switch (cqlType.code) {
             case dataTypes.bigint:
                 return 8;
@@ -1387,12 +1285,7 @@ class EncoderMembers {
         }
     }
 
-    /**
-     * @param {Vector} value
-     * @param {VectorColumnInfo} params
-     * @returns {Buffer}
-     */
-    encodeVector(value, params) {
+    encodeVector(value: any, params: any): Buffer {
         if (!(value instanceof Vector)) {
             throw new TypeError(
                 "Driver only supports Vector type when encoding a vector",
@@ -1411,9 +1304,9 @@ class EncoderMembers {
         }
 
         const serializationSize = this.serializationSizeIfFixed(params.info[0]);
-        const encoded = [];
+        const encoded: Array<Buffer> = [];
         for (const elem of value) {
-            const elemBuffer = this.encode(elem, params.info[0]);
+            const elemBuffer = this.encode(elem, params.info[0]) as Buffer;
             if (serializationSize === -1) {
                 encoded.push(utils.VIntCoding.uvintPack(elemBuffer.length));
             }
@@ -1425,19 +1318,20 @@ class EncoderMembers {
     /**
      * Extract the (typed) arguments from a vector type
      *
-     * @param {String} typeName
-     * @param {String} stringToExclude Leading string indicating this is a vector type (to be excluded when eval'ing args)
-     * @param {Function} subtypeResolveFn Function used to resolve subtype type; varies depending on type naming convention
-     * @returns {VectorColumnInfo}
+     * @param stringToExclude Leading string indicating this is a vector type (to be excluded when eval'ing args)
+     * @param subtypeResolveFn Function used to resolve subtype type; varies depending on type naming convention
      * @internal
      * @ignore
      */
-    parseVectorTypeArgs(typeName, stringToExclude, subtypeResolveFn) {
+    parseVectorTypeArgs(
+        typeName: string,
+        stringToExclude: string,
+        subtypeResolveFn: (name: string) => any,
+    ): any {
         const argsStartIndex = stringToExclude.length + 1;
         const argsLength = typeName.length - (stringToExclude.length + 2);
         const params = parseParams(typeName, argsStartIndex, argsLength);
         if (params.length === 2) {
-            /** @type {VectorColumnInfo} */
             const columnInfo = {
                 code: dataTypes.custom,
                 info: [
@@ -1454,14 +1348,16 @@ class EncoderMembers {
 
     /**
      * If not provided, it uses the array of buffers or the parameters and hints to build the routingKey
-     * @param {Array<any>} params
-     * @param {ExecutionOptions} execOptions
      * @param [keys] parameter keys and positions in the params array
      * @throws TypeError
      * @internal
      * @ignore
      */
-    setRoutingKeyFromUser(params, execOptions, keys) {
+    setRoutingKeyFromUser(
+        params: Array<any>,
+        execOptions: ExecutionOptions,
+        keys?: any,
+    ): void {
         let totalLength = 0;
         const userRoutingKey = execOptions.getRoutingKey();
         if (Array.isArray(userRoutingKey)) {
@@ -1510,18 +1406,20 @@ class EncoderMembers {
 
         let routingIndexes = execOptions.getRoutingIndexes();
         if (execOptions.getRoutingNames()) {
-            routingIndexes = execOptions.getRoutingNames().map((k) => keys[k]);
+            routingIndexes = execOptions
+                .getRoutingNames()!
+                .map((k: string) => keys[k]);
         }
         if (!routingIndexes) {
             return;
         }
 
-        const parts = [];
+        const parts: Array<Buffer> = [];
         const hints = execOptions.getHints() || utils.emptyArray;
 
         const encodeParam = !keys
-            ? (i) => this.encode(params[i], hints[i])
-            : (i) => this.encode(params[i].value, hints[i]);
+            ? (i: number) => this.encode(params[i], hints[i])
+            : (i: number) => this.encode(params[i].value, hints[i]);
 
         try {
             totalLength = this.#encodeRoutingKeyParts(
@@ -1543,20 +1441,23 @@ class EncoderMembers {
 
     /**
      * Sets the routing key in the options based on the prepared statement metadata.
-     * @param {Object} meta Prepared metadata
-     * @param {Array<any>} params Array of parameters
-     * @param {ExecutionOptions} execOptions
+     * @param meta Prepared metadata
+     * @param params Array of parameters
      * @throws TypeError
      * @internal
      * @ignore
      */
-    setRoutingKeyFromMeta(meta, params, execOptions) {
+    setRoutingKeyFromMeta(
+        meta: any,
+        params: Array<any>,
+        execOptions: ExecutionOptions,
+    ): void {
         const routingIndexes = execOptions.getRoutingIndexes();
         if (!routingIndexes) {
             return;
         }
         const parts = new Array(routingIndexes.length);
-        const encodeParam = (i) => {
+        const encodeParam = (i: number) => {
             const columnInfo = meta.columns[i];
             return this.encode(params[i], columnInfo ? columnInfo.type : null);
         };
@@ -1582,13 +1483,14 @@ class EncoderMembers {
     }
 
     /**
-     * @param {Array<any>} parts
-     * @param {Array<any>} routingIndexes
-     * @param {Function} encodeParam
-     * @returns {Number} The total length
+     * @returns The total length
      * @private
      */
-    #encodeRoutingKeyParts(parts, routingIndexes, encodeParam) {
+    #encodeRoutingKeyParts(
+        parts: Array<Buffer>,
+        routingIndexes: Array<number>,
+        encodeParam: (index: number) => any,
+    ): number {
         let totalLength = 0;
         for (let i = 0; i < routingIndexes.length; i++) {
             const paramIndex = routingIndexes[i];
@@ -1613,18 +1515,19 @@ class EncoderMembers {
 
     /**
      * Parses a CQL name string into data type information
-     * @param {String} keyspace
-     * @param {String} typeName
-     * @param {Number} startIndex
-     * @param {Number|null} length
-     * @param {Function} udtResolver
      * @async
-     * @returns {Promise.<ColumnInfo>} callback Callback invoked with err and  {{code: number, info: Object|Array<any>|null, options: {frozen: Boolean}}}
+     * @returns callback Callback invoked with err and  {{code: number, info: Object|Array<any>|null, options: {frozen: Boolean}}}
      * @internal
      * @throws {Error}
      * @ignore
      */
-    async parseTypeName(keyspace, typeName, startIndex, length, udtResolver) {
+    async parseTypeName(
+        keyspace: string,
+        typeName: string,
+        startIndex?: number,
+        length?: number,
+        udtResolver?: any,
+    ): Promise<any> {
         startIndex = startIndex || 0;
         if (!length) {
             length = typeName.length;
@@ -1667,7 +1570,7 @@ class EncoderMembers {
                 keyspace,
                 innerTypes[0],
                 0,
-                null,
+                undefined,
                 udtResolver,
             );
             return {
@@ -1693,7 +1596,7 @@ class EncoderMembers {
                 keyspace,
                 innerTypes[0],
                 0,
-                null,
+                undefined,
                 udtResolver,
             );
             return {
@@ -1786,7 +1689,7 @@ class EncoderMembers {
             typeName = typeName.replace('""', '"');
         }
 
-        const typeCode = dataTypes[typeName];
+        const typeCode = (dataTypes as { [name: string]: any })[typeName];
         if (typeof typeCode === "number") {
             return { code: typeCode, info: null };
         }
@@ -1815,31 +1718,37 @@ class EncoderMembers {
     }
 
     /**
-     * @param {String} keyspace
-     * @param {Array<any>} typeNames
-     * @param {Function} udtResolver
-     * @returns {Promise}
      * @private
      */
-    #parseChildTypes(keyspace, typeNames, udtResolver) {
+    #parseChildTypes(
+        keyspace: string,
+        typeNames: Array<string>,
+        udtResolver: any,
+    ): any {
         return Promise.all(
-            typeNames.map((name) =>
-                this.parseTypeName(keyspace, name.trim(), 0, null, udtResolver),
+            typeNames.map((name: string) =>
+                this.parseTypeName(
+                    keyspace,
+                    name.trim(),
+                    0,
+                    undefined,
+                    udtResolver,
+                ),
             ),
         );
     }
 
     /**
      * Parses a Cassandra fully-qualified class name string into data type information
-     * @param {String} typeName
-     * @param {Number} [startIndex]
-     * @param {Number} [length]
      * @throws {TypeError}
-     * @returns {ColumnInfo}
      * @internal
      * @ignore
      */
-    parseFqTypeName(typeName, startIndex, length) {
+    parseFqTypeName(
+        typeName: string,
+        startIndex?: number,
+        length?: number,
+    ): any {
         let frozen = false;
         let reversed = false;
         startIndex = startIndex || 0;
@@ -1882,7 +1791,9 @@ class EncoderMembers {
             if (startIndex > 0) {
                 typeName = typeName.substr(startIndex, length);
             }
-            const typeCode = singleTypeNames[typeName];
+            const typeCode = (singleTypeNames as { [name: string]: any })[
+                typeName
+            ];
             if (typeof typeCode === "number") {
                 return { code: typeCode, info: null, options: options };
             }
@@ -1996,12 +1907,10 @@ class EncoderMembers {
 
     /**
      * Parses type names with composites
-     * @param {String} typesString
-     * @returns {{types: Array, isComposite: Boolean, hasCollections: Boolean}}
      * @internal
      * @ignore
      */
-    parseKeyTypes(typesString) {
+    parseKeyTypes(typesString: string): any {
         let i = 0;
         let length = typesString.length;
         const isComposite =
@@ -2010,7 +1919,7 @@ class EncoderMembers {
             i = complexTypeNames.composite.length + 1;
             length--;
         }
-        const types = [];
+        const types: Array<string> = [];
         let startIndex = i;
         let nested = 0;
         let inCollectionType = false;
@@ -2073,25 +1982,21 @@ class EncoderMembers {
 
     /**
      *
-     * @param {string} typeName
-     * @param {number} startIndex
-     * @param {number} length
-     * @returns {UdtColumnInfo}
      */
-    #parseUdtName(typeName, startIndex, length) {
+    #parseUdtName(typeName: string, startIndex: number, length: number): any {
         const udtParams = parseParams(typeName, startIndex, length);
         if (udtParams.length < 2) {
             // It should contain at least the keyspace, name of the udt and a type
             throw new TypeError("Not a valid type " + typeName);
         }
-        /**
-         * @type {{keyspace: String, name: String, fields: Array<any>}}
-         */
-        const udtInfo = {
-            keyspace: udtParams[0],
-            name: utils.allocBufferFromString(udtParams[1], "hex").toString(),
-            fields: [],
-        };
+        const udtInfo: { keyspace: string; name: string; fields: Array<any> } =
+            {
+                keyspace: udtParams[0],
+                name: utils
+                    .allocBufferFromString(udtParams[1], "hex")
+                    .toString(),
+                fields: [],
+            };
         for (let i = 2; i < udtParams.length; i++) {
             const p = udtParams[i];
             const separatorIndex = p.indexOf(":");
@@ -2118,11 +2023,7 @@ class EncoderMembers {
  * Serializes and deserializes to and from a CQL type and a Javascript Type.
  */
 class Encoder extends EncoderMembers {
-    /**
-     * @param {Number} protocolVersion
-     * @param {ClientOptions} options
-     */
-    constructor(protocolVersion, options) {
+    constructor(protocolVersion: number, options: any) {
         super(options.encoding || utils.emptyObject);
         this.setProtocolVersion(protocolVersion);
         if (this.encodingOptions.copyBuffer) {
@@ -2134,11 +2035,10 @@ class Encoder extends EncoderMembers {
     /**
      * Try to guess the Cassandra type to be stored, based on the javascript value type
      * @param value
-     * @returns {ColumnInfo | null}
      * @ignore
      * @internal
      */
-    static guessDataType(value) {
+    static guessDataType(value: any): any {
         const esTypeName = typeof value;
         if (esTypeName === "number") {
             return { code: dataTypes.double };
@@ -2187,8 +2087,7 @@ class Encoder extends EncoderMembers {
                     };
                 }
 
-                /** @type {ColumnInfo?} */
-                let subtypeColumnInfo = null;
+                let subtypeColumnInfo: any = null;
                 // try to fetch the subtype from the Vector, or else guess
                 if (value.subtype) {
                     try {
@@ -2198,7 +2097,7 @@ class Encoder extends EncoderMembers {
                     }
                 }
                 if (subtypeColumnInfo == null) {
-                    subtypeColumnInfo = this.guessDataType(value[0]);
+                    subtypeColumnInfo = this.guessDataType((value as any)[0]);
                 }
                 if (subtypeColumnInfo != null) {
                     return {
@@ -2208,7 +2107,7 @@ class Encoder extends EncoderMembers {
                     };
                 }
                 throw new TypeError(
-                    "Cannot guess subtype from element " + value[0],
+                    "Cannot guess subtype from element " + (value as any)[0],
                 );
             } else {
                 throw new TypeError("Cannot guess subtype of empty vector");
@@ -2221,7 +2120,7 @@ class Encoder extends EncoderMembers {
 
         return null;
     }
-    static isTypedArray(arg) {
+    static isTypedArray(arg: any): boolean {
         // The TypedArray superclass isn't available directly so to detect an instance of a TypedArray
         // subclass we have to access the prototype of a concrete instance.  There's nothing magical about
         // Uint8Array here; we could just as easily use any of the other TypedArray subclasses.
@@ -2229,18 +2128,15 @@ class Encoder extends EncoderMembers {
     }
     /**
      * Decodes a whole page of results.
-     * @param {Buffer} data
-     * @param {number} rowsNumber
-     * @param {Array<string>} columnNames
-     * @param {Array<{code: number}>} columnTypes
-     * @returns {Array<Row>}
      */
-    decodeRows(data, rowsNumber, columnNames, columnTypes) {
-        /**
-         * @type {Array<Row>}
-         */
-        let res = [];
-        let reader = new FrameReader(data);
+    decodeRows(
+        data: Buffer,
+        rowsNumber: number,
+        columnNames: Array<string>,
+        columnTypes: Array<ColumnInfo>,
+    ): Array<types.Row> {
+        const res: Array<types.Row> = [];
+        const reader = new FrameReader(data);
 
         for (let i = 0; i < rowsNumber; i++) {
             const row = new types.Row(columnNames);
@@ -2254,13 +2150,15 @@ class Encoder extends EncoderMembers {
     }
     /**
      * Decodes Cassandra bytes into Javascript values.
-     * @param {Buffer} buffer Raw buffer to be decoded.
-     * @param {ColumnInfo} type
+     * @param buffer Raw buffer to be decoded.
      */
-    decode(buffer, type) {
+    decode(buffer: Buffer | null, type: ColumnInfo): any {
         if (
             buffer === null ||
-            (buffer.length === 0 && !zeroLengthTypesSupported.has(type.code))
+            (buffer.length === 0 &&
+                !zeroLengthTypesSupported.has(
+                    type.code as unknown as types.dataTypes,
+                ))
         ) {
             return null;
         }
@@ -2275,19 +2173,18 @@ class Encoder extends EncoderMembers {
     }
     /**
      * Encodes Javascript types into Buffer according to the Cassandra protocol.
-     * @param {*} value The value to be converted.
-     * @param {ColumnInfo | String | Number | null} typeInfo The type information.
+     * @param value The value to be converted.
+     * @param typeInfo The type information.
      *
      * It can be either a:
      * - A `String` representing the data type.
      * - A `Number` with one of the values of {@link module:types~dataTypes dataTypes}.
      * - An `Object` containing the `type.code` as one of the values of
      *   {@link module:types~dataTypes dataTypes} and `type.info`.
-     * @returns {Buffer | null | undefined}
      * Returns `null` for null values, `undefined` for unset values and buffer for all other values.
      * @throws {TypeError} When there is an encoding error
      */
-    encode(value, typeInfo) {
+    encode(value: any, typeInfo?: any): Buffer | null | undefined {
         // Here, we parse the user provided value. This can be:
         // - null which represents a CQL null value.
         // - types.unset which represents an unset value
@@ -2318,8 +2215,7 @@ class Encoder extends EncoderMembers {
             return value;
         }
 
-        /** @type {ColumnInfo | null} */
-        let type = null;
+        let type: any = null;
 
         if (typeInfo) {
             if (typeof typeInfo === "number") {
@@ -2359,11 +2255,9 @@ class Encoder extends EncoderMembers {
 
 /**
  * Gets a buffer containing with the bytes (BE) representing the collection length for protocol v2 and below
- * @param {Buffer|Number} value
- * @returns {Buffer}
  * @private
  */
-function getLengthBufferV2(value) {
+function getLengthBufferV2(value: any): Buffer {
     if (!value) {
         return buffers.int16Zero;
     }
@@ -2378,11 +2272,9 @@ function getLengthBufferV2(value) {
 
 /**
  * Gets a buffer containing with the bytes (BE) representing the collection length for protocol v3 and above
- * @param {Buffer|Number} value
- * @returns {Buffer}
  * @private
  */
-function getLengthBufferV3(value) {
+function getLengthBufferV3(value: any): Buffer {
     if (!value) {
         return buffers.int32Zero;
     }
@@ -2396,49 +2288,45 @@ function getLengthBufferV3(value) {
 }
 
 /**
- * @param {Buffer} buffer
  * @private
  */
-function handleBufferCopy(buffer) {
+function handleBufferCopy(buffer: Buffer): Buffer {
     if (buffer === null) {
-        return null;
+        return buffer;
     }
     return utils.copyBuffer(buffer);
 }
 
 /**
- * @param {Buffer} buffer
  * @private
  */
-function handleBufferRef(buffer) {
+function handleBufferRef(buffer: Buffer): Buffer {
     return buffer;
 }
 /**
  * Decodes collection length for protocol v3 and above
  * @param bytes
  * @param offset
- * @returns {Number}
  * @private
  */
-function decodeCollectionLengthV3(bytes, offset) {
+function decodeCollectionLengthV3(bytes: Buffer, offset: number): number {
     return bytes.readInt32BE(offset);
 }
 /**
  * Decodes collection length for protocol v2 and below
  * @param bytes
  * @param offset
- * @returns {Number}
  * @private
  */
-function decodeCollectionLengthV2(bytes, offset) {
+function decodeCollectionLengthV2(bytes: Buffer, offset: number): number {
     return bytes.readUInt16BE(offset);
 }
 
-function decodeDuration(bytes) {
+function decodeDuration(bytes: Buffer): types.Duration {
     return types.Duration.fromBuffer(bytes);
 }
 
-function encodeDuration(value) {
+function encodeDuration(value: any): Buffer {
     if (!(value instanceof types.Duration)) {
         throw new TypeError(
             "Not a valid duration, expected Duration/Buffer obtained " +
@@ -2449,18 +2337,18 @@ function encodeDuration(value) {
 }
 
 /**
- * @param {String} value
- * @param {Number} startIndex
- * @param {Number} length
- * @param {String} [open]
- * @param {String} [close]
- * @returns {Array<String>}
  * @private
  */
-function parseParams(value, startIndex, length, open, close) {
+function parseParams(
+    value: string,
+    startIndex: number,
+    length: number,
+    open?: string,
+    close?: string,
+): Array<string> {
     open = open || "(";
     close = close || ")";
-    const types = [];
+    const types: Array<string> = [];
     let paramStart = startIndex;
     let level = 0;
     for (let i = startIndex; i < startIndex + length; i++) {
@@ -2482,12 +2370,12 @@ function parseParams(value, startIndex, length, open, close) {
 }
 
 /**
- * @param {Array.<Buffer>} parts
- * @param {Number} totalLength
- * @returns {Buffer}
  * @private
  */
-function concatRoutingKey(parts, totalLength) {
+function concatRoutingKey(
+    parts: Array<Buffer>,
+    totalLength: number,
+): Buffer | null {
     if (totalLength === 0) {
         return null;
     }
@@ -2508,4 +2396,4 @@ function concatRoutingKey(parts, totalLength) {
     return routingKey;
 }
 
-module.exports = Encoder;
+export = Encoder;

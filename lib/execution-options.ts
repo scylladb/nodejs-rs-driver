@@ -272,7 +272,7 @@ class ExecutionOptions {
      * Gets the partition key(s) to determine which coordinator should be used for the query.
      * @abstract
      */
-    getRoutingKey(): Buffer | Array<Buffer> | undefined {
+    getRoutingKey(): Buffer | Array<Buffer> | null | undefined {
         return undefined;
     }
 
@@ -349,7 +349,7 @@ class ExecutionOptions {
      * @internal
      * @ignore
      */
-    setRoutingKey(value?: Buffer | Array<Buffer>): void {}
+    setRoutingKey(value?: Buffer | Array<Buffer> | null): void {}
 }
 
 /**
@@ -360,7 +360,7 @@ class ExecutionOptions {
 class DefaultExecutionOptions extends ExecutionOptions {
     #queryOptions: QueryOptions;
     #rowCallback: Function | null | undefined;
-    #routingKey: Buffer | Array<Buffer> | undefined;
+    #routingKey: Buffer | Array<Buffer> | null | undefined;
     #hints: Array<any> | undefined;
     #keyspace: string | undefined;
     #routingIndexes: Array<number> | undefined;
@@ -618,7 +618,7 @@ class DefaultExecutionOptions extends ExecutionOptions {
         return this.#routingIndexes;
     }
 
-    getRoutingKey(): Buffer | Array<Buffer> | undefined {
+    getRoutingKey(): Buffer | Array<Buffer> | null | undefined {
         return this.#routingKey;
     }
 
@@ -678,7 +678,7 @@ class DefaultExecutionOptions extends ExecutionOptions {
     }
 
     /** @internal */
-    setRoutingKey(value?: Buffer | Array<Buffer>): void {
+    setRoutingKey(value?: Buffer | Array<Buffer> | null): void {
         this.#routingKey = value;
     }
 }
