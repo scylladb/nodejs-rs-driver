@@ -4,8 +4,6 @@ import utils = require("./utils");
 import types = require("./types");
 import errors = require("./errors");
 import _rust = require("../index");
-// TODO: Remove after lib/query-options.js is converted to Typescript.
-// @ts-ignore
 import { queryOptionsIntoWrapper } from "./query-options";
 import type { ExecutionProfile } from "./execution-profile";
 import type { Host, QueryOptions, policies as policiesModule } from "../";

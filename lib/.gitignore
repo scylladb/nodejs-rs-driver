@@ -17,3 +17,5 @@ utils.js
 utils.d.ts
 execution-options.js
 execution-options.d.ts
+query-options.js
+query-options.d.ts

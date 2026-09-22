@@ -11,6 +11,7 @@ import * as metadata from "./lib/metadata";
 import { Host, HostMap } from "./lib/host";
 import { Token, TokenRange } from "./lib/token";
 import { ExecutionOptions } from "./lib/execution-options";
+import { QueryOptions } from "./lib/query-options";
 import { ExecutionProfile } from "./lib/execution-profile";
 import Long = types.Long;
 import Uuid = types.Uuid;
@@ -22,6 +23,7 @@ export * as errors from "./lib/errors";
 export { auth, metadata, metrics, policies, tracker, types };
 export { Host, HostMap };
 export { ExecutionOptions };
+export { QueryOptions };
 export { ExecutionProfile };
 
 export const version: number;
@@ -252,31 +254,6 @@ export interface SslOptions {
   minVersion?: tls.SecureVersion;
   secureOptions?: number;
   rejectUnauthorized?: boolean;
-}
-
-export interface QueryOptions {
-  autoPage?: boolean;
-  captureStackTrace?: boolean;
-  consistency?: number;
-  counter?: boolean;
-  customPayload?: any;
-  executionProfile?: string | ExecutionProfile;
-  fetchSize?: number;
-  hints?: string[] | string[][];
-  host?: Host;
-  isIdempotent?: boolean;
-  keyspace?: string;
-  logged?: boolean;
-  pageState?: Buffer | string;
-  prepare?: boolean;
-  readTimeout?: number;
-  retry?: policies.retry.RetryPolicy;
-  routingIndexes?: number[];
-  routingKey?: Buffer | Buffer[];
-  routingNames?: string[];
-  serialConsistency?: number;
-  timestamp?: number | Long;
-  traceQuery?: boolean;
 }
 
 export namespace token {
