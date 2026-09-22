@@ -10,6 +10,7 @@ import * as tracker from "./lib/tracker";
 import * as metadata from "./lib/metadata";
 import { Host, HostMap } from "./lib/host";
 import { Token, TokenRange } from "./lib/token";
+import { ExecutionOptions } from "./lib/execution-options";
 import { ExecutionProfile } from "./lib/execution-profile";
 import Long = types.Long;
 import Uuid = types.Uuid;
@@ -20,6 +21,7 @@ export * as mapping from "./lib/mapping";
 export * as errors from "./lib/errors";
 export { auth, metadata, metrics, policies, tracker, types };
 export { Host, HostMap };
+export { ExecutionOptions };
 export { ExecutionProfile };
 
 export const version: number;
@@ -157,52 +159,6 @@ export class Client extends events.EventEmitter {
   getReplicas(keyspace: string, token: Buffer): Host[];
 
   getState(): metadata.ClientState;
-}
-
-export interface ExecutionOptions {
-  getCaptureStackTrace(): boolean;
-
-  getConsistency(): types.consistencies;
-
-  getCustomPayload(): { [key: string]: any };
-
-  getFetchSize(): number;
-
-  getFixedHost(): Host;
-
-  getHints(): string[] | string[][];
-
-  isAutoPage(): boolean;
-
-  isBatchCounter(): boolean;
-
-  isBatchLogged(): boolean;
-
-  isIdempotent(): boolean;
-
-  isPrepared(): boolean;
-
-  isQueryTracing(): boolean;
-
-  getKeyspace(): string;
-
-  getLoadBalancingPolicy(): policies.loadBalancing.LoadBalancingPolicy;
-
-  getPageState(): Buffer;
-
-  getRawQueryOptions(): QueryOptions;
-
-  getReadTimeout(): number;
-
-  getRetryPolicy(): policies.retry.RetryPolicy;
-
-  getRoutingKey(): Buffer | Buffer[];
-
-  getSerialConsistency(): types.consistencies;
-
-  getTimestamp(): number | Long | undefined | null;
-
-  setHints(hints: string[]): void;
 }
 
 /** A single client routes proxy the driver should read `system.client_routes` for. */

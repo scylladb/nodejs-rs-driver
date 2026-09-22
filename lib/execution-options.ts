@@ -1,11 +1,18 @@
-// @ts-nocheck
 "use strict";
 
-const utils = require("./utils");
-const types = require("./types");
-const errors = require("./errors");
-const _rust = require("../index");
-const { queryOptionsIntoWrapper } = require("./query-options");
+import utils = require("./utils");
+import types = require("./types");
+import errors = require("./errors");
+import _rust = require("../index");
+// TODO: Remove after lib/query-options.js is converted to Typescript.
+// @ts-ignore
+import { queryOptionsIntoWrapper } from "./query-options";
+import type { ExecutionProfile } from "./execution-profile";
+import type { Host, QueryOptions, policies as policiesModule } from "../";
+
+type LoadBalancingPolicy = policiesModule.loadBalancing.LoadBalancingPolicy;
+type RetryPolicy = policiesModule.retry.RetryPolicy;
+type CustomPayload = { [key: string]: any };
 
 const proxyExecuteKey = "ProxyExecute";
 
@@ -17,10 +24,7 @@ const proxyExecuteKey = "ProxyExecute";
  * {@link Client} options.
  */
 class ExecutionOptions {
-    /**
-     * @type {_rust.QueryOptionsWrapper?}
-     */
-    #rustWrapper;
+    #rustWrapper?: _rust.QueryOptionsWrapper;
 
     /**
      * Creates a new instance of {@link ExecutionOptions}.
@@ -33,7 +37,7 @@ class ExecutionOptions {
      * @internal
      * @ignore
      */
-    wrapOptionsIfNotWrappedYet() {
+    wrapOptionsIfNotWrappedYet(): void {
         if (!this.#rustWrapper) {
             this.#rustWrapper = queryOptionsIntoWrapper(this);
         }
@@ -41,113 +45,127 @@ class ExecutionOptions {
 
     /**
      * Get this options as rust wrapper.
-     * @returns {_rust.QueryOptionsWrapper}
      * @internal
      * @ignore
      */
-    getRustOptions() {
+    getRustOptions(): _rust.QueryOptionsWrapper {
         this.wrapOptionsIfNotWrappedYet();
-        return this.#rustWrapper;
+        return this.#rustWrapper!;
     }
 
     /**
      * Creates an empty instance, where all methods return undefined, used internally.
+     * @internal
      * @ignore
-     * @return {ExecutionOptions}
      */
-    static empty() {
+    static empty(): ExecutionOptions {
         return new ExecutionOptions();
     }
 
     /**
      * Determines if the stack trace before the query execution should be maintained.
      * @abstract
-     * @returns {Boolean}
      */
-    getCaptureStackTrace() {}
+    getCaptureStackTrace(): boolean | undefined {
+        return undefined;
+    }
 
     /**
      * Gets the [Consistency level]{@link module:types~consistencies} to be used for the execution.
      * @abstract
-     * @returns {Number}
      */
-    getConsistency() {}
+    getConsistency(): types.consistencies | undefined {
+        return undefined;
+    }
 
     /**
      * Key-value payload to be passed to the server. On the server side, implementations of QueryHandler can use
      * this data.
      * @abstract
-     * @returns {Object}
      */
-    getCustomPayload() {}
+    getCustomPayload(): CustomPayload | undefined {
+        return undefined;
+    }
 
     /**
      * Gets the amount of rows to retrieve per page.
      * @abstract
-     * @returns {Number}
      */
-    getFetchSize() {}
+    getFetchSize(): number | undefined {
+        return undefined;
+    }
 
     /**
      * When a fixed host is set on the query options and the query plan for the load-balancing policy is not used, it
      * gets the host that should handle the query.
-     * @returns {Host}
      */
-    getFixedHost() {}
+    getFixedHost(): Host | undefined {
+        return undefined;
+    }
 
     /**
      * Gets the type hints for parameters given in the query, ordered as for the parameters.
      * @abstract
-     * @returns {Array<ColumnInfo>|Array<Array<ColumnInfo>>|undefined}
      */
-    getHints() {}
+    getHints(): Array<any> | undefined {
+        return undefined;
+    }
 
     /**
      * Determines whether the driver must retrieve the following result pages automatically.
      *
      * This setting is only considered by the [Client#eachRow()]{@link Client#eachRow} method.
      * @abstract
-     * @returns {Boolean}
      */
-    isAutoPage() {}
+    isAutoPage(): boolean | undefined {
+        return undefined;
+    }
 
     /**
      * Determines whether its a counter batch. Only valid for [Client#batch()]{@link Client#batch}, it will be ignored by
      * other methods.
      * @abstract
-     * @returns {Boolean} A `Boolean` value, it can't be `undefined`.
+     * @returns A `Boolean` value, it can't be `undefined`.
      */
-    isBatchCounter() {}
+    isBatchCounter(): boolean | undefined {
+        return undefined;
+    }
 
     /**
      * Determines whether the batch should be written to the batchlog. Only valid for
      * [Client#batch()]{@link Client#batch}, it will be ignored by other methods.
      * @abstract
-     * @returns {Boolean} A `Boolean` value, it can't be `undefined`.
+     * @returns A `Boolean` value, it can't be `undefined`.
      */
-    isBatchLogged() {}
+    isBatchLogged(): boolean | undefined {
+        return undefined;
+    }
 
     /**
      * Determines whether the query can be applied multiple times without changing the result beyond the initial
      * application.
      * @abstract
-     * @returns {Boolean}
      */
-    isIdempotent() {}
+    isIdempotent(): boolean | undefined {
+        return undefined;
+    }
 
     /**
      * Determines whether the query must be prepared beforehand.
      * @abstract
-     * @returns {Boolean} A `Boolean` value, it can't be `undefined`.
+     * @returns A `Boolean` value, it can't be `undefined`.
      */
-    isPrepared() {}
+    isPrepared(): boolean | undefined {
+        return undefined;
+    }
 
     /**
      * Determines whether query tracing is enabled for the execution.
      * @abstract
-     * @returns {Boolean}
      */
-    isQueryTracing() {}
+    isQueryTracing(): boolean | undefined {
+        return undefined;
+    }
 
     /**
      * Gets the keyspace for the query when set at query options level.
@@ -156,154 +174,184 @@ class ExecutionOptions {
      * It will only return the keyspace name when the user provided a different keyspace than the current
      * {@link Client} keyspace.
      * @abstract
-     * @returns {String}
      */
-    getKeyspace() {}
+    getKeyspace(): string | undefined {
+        return undefined;
+    }
 
     /**
      * Gets the load balancing policy used for this execution.
-     * @returns {LoadBalancingPolicy} A `LoadBalancingPolicy` instance, it can't be `undefined`.
+     * @returns A `LoadBalancingPolicy` instance, it can't be `undefined`.
      */
-    getLoadBalancingPolicy() {}
+    getLoadBalancingPolicy(): LoadBalancingPolicy | undefined {
+        return undefined;
+    }
 
     /**
      * Determines if the query should be paged.
      * @abstract
-     * @returns {boolean}
+     * @internal
+     * @ignore
      */
-    isPaged() {}
+    isPaged(): boolean | undefined {
+        return undefined;
+    }
 
     /**
      * Gets the Buffer representing the paging state.
      * @abstract
-     * @returns {Buffer}
      */
-    getPageState() {}
+    getPageState(): Buffer | undefined {
+        return undefined;
+    }
 
     /**
      * Internal method that gets the preferred host.
      * @abstract
+     * @internal
      * @ignore
      */
-    getPreferredHost() {}
+    getPreferredHost(): any {
+        return undefined;
+    }
 
     /**
      * Gets the query options as provided to the execution method without setting the default values.
-     * @returns {QueryOptions}
      */
-    getRawQueryOptions() {}
+    getRawQueryOptions(): QueryOptions | undefined {
+        return undefined;
+    }
 
     /**
      * Gets the timeout in milliseconds to be used for the execution per coordinator.
      *
      * A value of `0` disables client side read timeout for the execution. Default: `undefined`.
      * @abstract
-     * @returns {Number}
      */
-    getReadTimeout() {}
+    getReadTimeout(): number | undefined {
+        return undefined;
+    }
 
     /**
      * Gets the [retry policy]{@link module:policies/retry} to be used.
      * @abstract
-     * @returns {RetryPolicy} A `RetryPolicy` instance, it can't be `undefined`.
+     * @returns A `RetryPolicy` instance, it can't be `undefined`.
      */
-    getRetryPolicy() {}
+    getRetryPolicy(): RetryPolicy | undefined {
+        return undefined;
+    }
 
     /**
      * Internal method to obtain the row callback, for "by row" results.
      * @abstract
+     * @internal
      * @ignore
      */
-    getRowCallback() {}
+    getRowCallback(): Function | undefined | null {
+        return undefined;
+    }
 
     /**
      * Internal method to get or generate a timestamp for the request execution.
+     * @internal
      * @ignore
-     * @returns {Long|null}
      */
-    getOrGenerateTimestamp() {}
+    getOrGenerateTimestamp(): types.Long | null | undefined {
+        return undefined;
+    }
 
     /**
      * Gets the index of the parameters that are part of the partition key to determine the routing.
      * @abstract
+     * @internal
      * @ignore
-     * @returns {Array<any>}
      */
-    getRoutingIndexes() {}
+    getRoutingIndexes(): Array<number> | undefined {
+        return undefined;
+    }
 
     /**
      * Gets the partition key(s) to determine which coordinator should be used for the query.
      * @abstract
-     * @returns {Buffer|Array<Buffer>}
      */
-    getRoutingKey() {}
+    getRoutingKey(): Buffer | Array<Buffer> | undefined {
+        return undefined;
+    }
 
     /**
      * Gets the array of the parameters names that are part of the partition key to determine the
      * routing. Only valid for non-prepared requests.
      * @abstract
+     * @internal
      * @ignore
      */
-    getRoutingNames() {}
+    getRoutingNames(): Array<string> | undefined {
+        return undefined;
+    }
 
     /**
      * Gets the the consistency level to be used for the serial phase of conditional updates.
      * @abstract
-     * @returns {Number}
      */
-    getSerialConsistency() {}
+    getSerialConsistency(): types.consistencies | undefined {
+        return undefined;
+    }
 
     /**
      * Gets the provided timestamp for the execution in microseconds from the unix epoch (00:00:00, January 1st, 1970).
      *
      * When a timestamp generator is used, this method returns `undefined`.
      * @abstract
-     * @returns {Number|Long|undefined|null}
      */
-    getTimestamp() {}
+    getTimestamp(): number | types.Long | undefined | null {
+        return undefined;
+    }
 
     /**
-     * @param {Array<any>} hints
      * @abstract
+     * @internal
      * @ignore
      */
-    setHints(hints) {}
+    setHints(hints: Array<any>): void {}
 
     /**
      * Sets the keyspace for the execution.
      * @ignore
+     * @internal
      * @abstract
-     * @param {String} keyspace
      */
-    setKeyspace(keyspace) {}
+    setKeyspace(keyspace: string): void {}
 
     /**
      * @abstract
+     * @internal
      * @ignore
      */
-    setPageState() {}
+    setPageState(pageState?: Buffer): void {}
 
     /**
      * Internal method that sets the preferred host.
      * @abstract
+     * @internal
      * @ignore
      */
-    setPreferredHost() {}
+    setPreferredHost(host?: Host): void {}
 
     /**
      * Sets the index of the parameters that are part of the partition key to determine the routing.
-     * @param {Array<any>} routingIndexes
      * @abstract
+     * @internal
      * @ignore
      */
-    setRoutingIndexes(routingIndexes) {}
+    setRoutingIndexes(routingIndexes: Array<number>): void {}
 
     /**
      * Sets the routing key.
      * @abstract
+     * @internal
      * @ignore
      */
-    setRoutingKey(value) {}
+    setRoutingKey(value?: Buffer | Array<Buffer>): void {}
 }
 
 /**
@@ -312,25 +360,26 @@ class ExecutionOptions {
  * @ignore
  */
 class DefaultExecutionOptions extends ExecutionOptions {
-    #queryOptions;
-    #rowCallback;
-    #routingKey;
-    #hints;
-    #keyspace;
-    #routingIndexes;
-    #pageState;
-    #client;
-    #defaultQueryOptions;
-    #profile;
-    #customPayload;
+    #queryOptions: QueryOptions;
+    #rowCallback: Function | null | undefined;
+    #routingKey: Buffer | Array<Buffer> | undefined;
+    #hints: Array<any> | undefined;
+    #keyspace: string | undefined;
+    #routingIndexes: Array<number> | undefined;
+    #pageState: Buffer | undefined;
+    #client: any;
+    #defaultQueryOptions: QueryOptions;
+    #profile: ExecutionProfile;
+    #customPayload: CustomPayload | undefined;
 
     /**
      * Creates a new instance of {@link ExecutionOptions}.
-     * @param {QueryOptions} queryOptions
-     * @param {Client} client
-     * @param {Function|null} rowCallback
      */
-    constructor(queryOptions, client, rowCallback) {
+    constructor(
+        queryOptions: QueryOptions,
+        client: any,
+        rowCallback?: Function | null,
+    ) {
         super();
 
         this.#queryOptions = queryOptions;
@@ -348,10 +397,10 @@ class DefaultExecutionOptions extends ExecutionOptions {
                 : this.#queryOptions.pageState;
 
         this.#client = client;
-        this.#defaultQueryOptions = client.options.queryOptions;
+        this.#defaultQueryOptions = client.options.queryOptions!;
         this.#profile = client.profileManager.getProfile(
             this.#queryOptions.executionProfile,
-        );
+        )!;
 
         // Build a custom payload object designed for DSE-specific functionality
         this.#customPayload = DefaultExecutionOptions.createCustomPayload(
@@ -368,15 +417,17 @@ class DefaultExecutionOptions extends ExecutionOptions {
 
     /**
      * Creates a payload for given user.
-     * @param {QueryOptions} userOptions
-     * @param {QueryOptions} defaultQueryOptions
      * @private
      */
-    static createCustomPayload(userOptions, defaultQueryOptions) {
-        let customPayload =
+    static createCustomPayload(
+        userOptions: QueryOptions,
+        defaultQueryOptions: QueryOptions,
+    ): CustomPayload | undefined {
+        let customPayload: CustomPayload | undefined =
             userOptions.customPayload || defaultQueryOptions.customPayload;
         const executeAs =
-            userOptions.executeAs || defaultQueryOptions.executeAs;
+            (userOptions as any).executeAs ||
+            (defaultQueryOptions as any).executeAs;
 
         if (executeAs) {
             if (!customPayload) {
@@ -385,7 +436,10 @@ class DefaultExecutionOptions extends ExecutionOptions {
                     utils.allocBufferFromString(executeAs);
             } else if (!customPayload[proxyExecuteKey]) {
                 // Avoid appending to the existing payload object
-                customPayload = utils.extend({}, customPayload);
+                customPayload = utils.extend(
+                    {},
+                    customPayload,
+                ) as CustomPayload;
                 customPayload[proxyExecuteKey] =
                     utils.allocBufferFromString(executeAs);
             }
@@ -396,13 +450,13 @@ class DefaultExecutionOptions extends ExecutionOptions {
 
     /**
      * Creates a new instance {@link ExecutionOptions}, based on the query options.
-     * @param {QueryOptions|null} queryOptions
-     * @param {Client} client
-     * @param {Function|null} [rowCallback]
      * @ignore
-     * @return {ExecutionOptions}
      */
-    static create(queryOptions, client, rowCallback) {
+    static create(
+        queryOptions: QueryOptions | Function | null | undefined,
+        client: any,
+        rowCallback?: Function | null,
+    ): DefaultExecutionOptions {
         if (!queryOptions || typeof queryOptions === "function") {
             // queryOptions can be null/undefined and could be of type function when is an optional parameter
             queryOptions = utils.emptyObject;
@@ -410,14 +464,14 @@ class DefaultExecutionOptions extends ExecutionOptions {
         return new DefaultExecutionOptions(queryOptions, client, rowCallback);
     }
 
-    getCaptureStackTrace() {
+    getCaptureStackTrace(): boolean | undefined {
         return ifUndefined(
             this.#queryOptions.captureStackTrace,
             this.#defaultQueryOptions.captureStackTrace,
         );
     }
 
-    getConsistency() {
+    getConsistency(): types.consistencies | undefined {
         return ifUndefined3(
             this.#queryOptions.consistency,
             this.#profile.consistency,
@@ -425,37 +479,37 @@ class DefaultExecutionOptions extends ExecutionOptions {
         );
     }
 
-    getCustomPayload() {
+    getCustomPayload(): CustomPayload | undefined {
         return this.#customPayload;
     }
 
-    getFetchSize() {
+    getFetchSize(): number | undefined {
         return ifUndefined(
             this.#queryOptions.fetchSize,
             this.#defaultQueryOptions.fetchSize,
         );
     }
 
-    getFixedHost() {
+    getFixedHost(): Host | undefined {
         return this.#queryOptions.host;
     }
 
-    getHints() {
+    getHints(): Array<any> | undefined {
         return this.#hints;
     }
 
-    isAutoPage() {
+    isAutoPage(): boolean | undefined {
         return ifUndefined(
             this.#queryOptions.autoPage,
             this.#defaultQueryOptions.autoPage,
         );
     }
 
-    isBatchCounter() {
+    isBatchCounter(): boolean | undefined {
         return ifUndefined(this.#queryOptions.counter, false);
     }
 
-    isBatchLogged() {
+    isBatchLogged(): boolean | undefined {
         return ifUndefined3(
             this.#queryOptions.logged,
             this.#defaultQueryOptions.logged,
@@ -463,7 +517,7 @@ class DefaultExecutionOptions extends ExecutionOptions {
         );
     }
 
-    isIdempotent() {
+    isIdempotent(): boolean | undefined {
         return ifUndefined(
             this.#queryOptions.isIdempotent,
             this.#defaultQueryOptions.isIdempotent,
@@ -472,35 +526,36 @@ class DefaultExecutionOptions extends ExecutionOptions {
 
     /**
      * Determines if the query execution must be prepared beforehand.
-     * @return {Boolean}
      */
-    isPrepared() {
+    isPrepared(): boolean | undefined {
         return ifUndefined(
             this.#queryOptions.prepare,
             this.#defaultQueryOptions.prepare,
         );
     }
 
-    isQueryTracing() {
+    isQueryTracing(): boolean | undefined {
         return ifUndefined(
             this.#queryOptions.traceQuery,
             this.#defaultQueryOptions.traceQuery,
         );
     }
 
-    getKeyspace() {
+    getKeyspace(): string | undefined {
         return this.#keyspace;
     }
 
-    getLoadBalancingPolicy() {
+    getLoadBalancingPolicy(): LoadBalancingPolicy | undefined {
         return this.#profile.loadBalancing;
     }
 
-    getOrGenerateTimestamp() {
+    /** @internal */
+    getOrGenerateTimestamp(): types.Long | null | undefined {
         let result = this.getTimestamp();
 
         if (result === undefined) {
-            const generator = this.#client.options.policies.timestampGeneration;
+            const generator =
+                this.#client.options.policies!.timestampGeneration;
 
             if (
                 types.protocolVersion.supportsTimestamp(
@@ -519,14 +574,15 @@ class DefaultExecutionOptions extends ExecutionOptions {
             : result;
     }
 
-    isPaged() {
+    /** @internal */
+    isPaged(): boolean | undefined {
         return ifUndefined(
-            this.#queryOptions.paged,
-            this.#defaultQueryOptions.paged,
+            (this.#queryOptions as any).paged,
+            (this.#defaultQueryOptions as any).paged,
         );
     }
 
-    getPageState() {
+    getPageState(): Buffer | undefined {
         return this.#pageState;
     }
 
@@ -535,51 +591,54 @@ class DefaultExecutionOptions extends ExecutionOptions {
      * @internal
      * @ignore
      */
-    getProfile() {
+    getProfile(): ExecutionProfile {
         return this.#profile;
     }
 
-    getRawQueryOptions() {
+    getRawQueryOptions(): QueryOptions | undefined {
         return this.#queryOptions;
     }
 
-    getReadTimeout() {
+    getReadTimeout(): number | undefined {
         return ifUndefined3(
             this.#queryOptions.readTimeout,
             this.#profile.readTimeout,
-            this.#client.options.socketOptions.readTimeout,
+            this.#client.options.socketOptions!.readTimeout,
         );
     }
 
-    getRetryPolicy() {
+    getRetryPolicy(): RetryPolicy | undefined {
         return ifUndefined3(
             this.#queryOptions.retry,
             this.#profile.retry,
-            this.#client.options.policies.retry,
+            this.#client.options.policies!.retry,
         );
     }
 
-    getRoutingIndexes() {
+    /** @internal */
+    getRoutingIndexes(): Array<number> | undefined {
         return this.#routingIndexes;
     }
 
-    getRoutingKey() {
+    getRoutingKey(): Buffer | Array<Buffer> | undefined {
         return this.#routingKey;
     }
 
-    getRoutingNames() {
+    /** @internal */
+    getRoutingNames(): Array<string> | undefined {
         return this.#queryOptions.routingNames;
     }
 
     /**
      * Internal method to obtain the row callback, for "by row" results.
+     * @internal
      * @ignore
      */
-    getRowCallback() {
+    getRowCallback(): Function | undefined | null {
         return this.#rowCallback;
     }
 
-    getSerialConsistency() {
+    getSerialConsistency(): types.consistencies | undefined {
         return ifUndefined3(
             this.#queryOptions.serialConsistency,
             this.#profile.serialConsistency,
@@ -587,7 +646,7 @@ class DefaultExecutionOptions extends ExecutionOptions {
         );
     }
 
-    getTimestamp() {
+    getTimestamp(): number | types.Long | undefined | null {
         return this.#queryOptions.timestamp;
     }
 
@@ -595,54 +654,46 @@ class DefaultExecutionOptions extends ExecutionOptions {
      * Internal property to set the custom payload.
      * @ignore
      * @internal
-     * @param {Object} payload
      */
-    setCustomPayload(payload) {
+    setCustomPayload(payload: CustomPayload): void {
         this.#customPayload = payload;
     }
 
-    /**
-     * @param {Array<any>} hints
-     */
-    setHints(hints) {
+    /** @internal */
+    setHints(hints: Array<any>): void {
         this.#hints = hints;
     }
 
-    /**
-     * @param {String} keyspace
-     */
-    setKeyspace(keyspace) {
+    /** @internal */
+    setKeyspace(keyspace: string): void {
         this.#keyspace = keyspace;
     }
 
-    /**
-     * @param {Buffer} pageState
-     */
-    setPageState(pageState) {
+    /** @internal */
+    setPageState(pageState?: Buffer): void {
         this.#pageState = pageState;
     }
 
-    /**
-     * @param {Array<any>} routingIndexes
-     */
-    setRoutingIndexes(routingIndexes) {
+    /** @internal */
+    setRoutingIndexes(routingIndexes: Array<number>): void {
         this.#routingIndexes = routingIndexes;
     }
 
-    setRoutingKey(value) {
+    /** @internal */
+    setRoutingKey(value?: Buffer | Array<Buffer>): void {
         this.#routingKey = value;
     }
 }
 
-function ifUndefined(v1, v2) {
+function ifUndefined(v1: any, v2: any): any {
     return v1 !== undefined ? v1 : v2;
 }
 
-function ifUndefined3(v1, v2, v3) {
+function ifUndefined3(v1: any, v2: any, v3: any): any {
     if (v1 !== undefined) {
         return v1;
     }
     return v2 !== undefined ? v2 : v3;
 }
 
-module.exports = { ExecutionOptions, DefaultExecutionOptions, proxyExecuteKey };
+export { ExecutionOptions, DefaultExecutionOptions, proxyExecuteKey };

@@ -1,8 +1,6 @@
 "use strict";
 
 import { EventEmitter } from "events";
-// TODO: remove once `lib/execution-options.js` is converted to typescript.
-// @ts-ignore
 import { ExecutionOptions } from "./execution-options";
 import type { Host } from "../";
 import type { loadBalancing } from "./policies";

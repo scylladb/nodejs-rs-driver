@@ -6,8 +6,6 @@ import errors = require("../errors");
 import { throwNotSupported } from "../new-utils";
 import _rust = require("../../index");
 import type { Host, HostMap } from "../host";
-// TODO: Remove after lib/execution-options is converted to Typescript.
-// @ts-ignore
 import type { ExecutionOptions } from "../execution-options";
 import type { Client, EmptyCallback } from "../..";
 
@@ -443,8 +441,7 @@ class LegacyDefaultLoadBalancingPolicy extends LoadBalancingPolicy {
                 keyspace = executionKeyspace;
             }
 
-            // Public `ExecutionOptions` interface does not carry `getPreferredHost()`.
-            preferredHost = (executionOptions as any).getPreferredHost();
+            preferredHost = executionOptions.getPreferredHost();
         }
 
         let iterable;

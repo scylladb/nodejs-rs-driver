@@ -3,6 +3,8 @@ import promiseUtils = require("./promise-utils");
 import newUtils = require("./new-utils");
 import type { loadBalancing, retry } from "./policies";
 import type { Client, EmptyCallback, HostMap } from "../";
+// TODO: Remove after lib/client-options.js is converted to Typescript.
+// @ts-ignore
 import type { ClientOptions } from "./client-options";
 
 type LoadBalancingPolicy = loadBalancing.LoadBalancingPolicy;

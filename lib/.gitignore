@@ -15,3 +15,5 @@ promise-utils.js
 promise-utils.d.ts
 utils.js
 utils.d.ts
+execution-options.js
+execution-options.d.ts
