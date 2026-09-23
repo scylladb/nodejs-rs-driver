@@ -10,6 +10,7 @@ import * as tracker from "./lib/tracker";
 import * as metadata from "./lib/metadata";
 import { Host, HostMap } from "./lib/host";
 import { Token, TokenRange } from "./lib/token";
+import { ExecutionProfile } from "./lib/execution-profile";
 import Long = types.Long;
 import Uuid = types.Uuid;
 
@@ -19,6 +20,7 @@ export * as mapping from "./lib/mapping";
 export * as errors from "./lib/errors";
 export { auth, metadata, metrics, policies, tracker, types };
 export { Host, HostMap };
+export { ExecutionProfile };
 
 export const version: number;
 
@@ -319,26 +321,6 @@ export interface QueryOptions {
   serialConsistency?: number;
   timestamp?: number | Long;
   traceQuery?: boolean;
-}
-
-export class ExecutionProfile {
-  consistency?: types.consistencies;
-  loadBalancing?: policies.loadBalancing.LoadBalancingPolicy;
-  name: string;
-  readTimeout?: number;
-  retry?: policies.retry.RetryPolicy;
-  serialConsistency?: types.consistencies;
-
-  constructor(
-    name: string,
-    options: {
-      consistency?: types.consistencies;
-      loadBalancing?: policies.loadBalancing.LoadBalancingPolicy;
-      readTimeout?: number;
-      retry?: policies.retry.RetryPolicy;
-      serialConsistency?: types.consistencies;
-    },
-  );
 }
 
 export namespace token {
