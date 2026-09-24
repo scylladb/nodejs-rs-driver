@@ -10,9 +10,9 @@ sys.path.insert(0, os.path.abspath("../_extensions"))
 # -- General configuration ------------------------------------------
 
 # Build documentation for the following tags and branches
-TAGS = ["v0.6.1"]
+TAGS = ["v0.7.0"]
 BRANCHES = ["main"]
-LATEST_VERSION = "v0.6.1"
+LATEST_VERSION = "v0.7.0"
 UNSTABLE_VERSIONS = ["main"]
 DEPRECATED_VERSIONS = []
 
@@ -137,4 +137,3 @@ html_baseurl = "https://nodejs-rs-driver.docs.scylladb.com"
 
 # Dictionary of values to pass into the template engine's context for all pages
 html_context = {"html_baseurl": html_baseurl}
-
