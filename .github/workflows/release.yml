@@ -233,14 +233,22 @@ jobs:
             # The examples lockfile links the driver from the repository root for local development.
             # Passing an explicit package spec forces npm to replace that link with the published package.
             (for i in 1 2 3 4 5; do
-              if npm install --prefer-online --save-exact "@scylladb/driver@$VERSION" &&
-                test ! -L node_modules/@scylladb/driver &&
-                test "$(node -p 'require("./node_modules/@scylladb/driver/package.json").version')" = "$VERSION" &&
-                node -e 'require("@scylladb/driver")'; then
-                exit 0
+              if npm install --prefer-online --save-exact "@scylladb/driver@$VERSION"; then
+                if [ -L node_modules/@scylladb/driver ]; then
+                  echo "::error::npm kept the local @scylladb/driver link instead of installing the published package."
+                  exit 1
+                fi
+                RESOLVED=$(node -p 'require("./package-lock.json").packages["node_modules/@scylladb/driver"]?.resolved || ""') || RESOLVED=
+                if [[ "$RESOLVED" != https://registry.npmjs.org/* ]]; then
+                  echo "::error::@scylladb/driver did not resolve from the public npm registry: ${RESOLVED:-missing}"
+                  exit 1
+                fi
+                node -e 'require("@scylladb/driver")' && exit 0
               fi
-              echo "Attempt $i failed, retrying in 15s (waiting for npm propagation)..."
-              sleep 15
+              if [ "$i" -lt 5 ]; then
+                echo "Attempt $i failed, retrying in 15s (waiting for npm propagation)..."
+                sleep 15
+              fi
             done
-            echo "Giving up. Couldn't download newly released package."
+            echo "::error::Giving up. Couldn't download or load newly released package."
             exit 1)
