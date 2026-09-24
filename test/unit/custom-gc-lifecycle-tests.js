@@ -1,0 +1,185 @@
+"use strict";
+const { assert } = require("chai");
+const asyncHooks = require("async_hooks");
+const proxyquire = require("proxyquire");
+
+const rustStub = {
+  removeLogging: () => { },
+  setupLogging: () => 1,
+  SessionWrapper: { createSession: async () => ({}) },
+  "@global": true,
+  "@noCallThru": true,
+};
+
+const Client = proxyquire("../../lib/client", { "../index": rustStub });
+
+function te() {
+  return Client._testExports;
+}
+
+describe("CustomGC — FinalizationRegistry lazy init and ref-count", function () {
+  afterEach(function () {
+    te().reset();
+  });
+
+  describe("module import", function () {
+    it("should not hold a FinalizationRegistry before any connect()", function () {
+      assert.isNull(te().registry);
+    });
+
+    it("should not create a CustomGC async resource on require()", function (done) {
+      const gcEvents = [];
+      const hook = asyncHooks.createHook({
+        init(_asyncId, type) {
+          if (type === "FinalizationRegistry" || /CustomGC/i.test(type)) {
+            gcEvents.push(type);
+          }
+        },
+      });
+      hook.enable();
+      proxyquire.noPreserveCache()("../../lib/client", { "../index": rustStub });
+      setImmediate(() => {
+        hook.disable();
+        assert.deepEqual(gcEvents, []);
+        done();
+      });
+    });
+  });
+
+  describe("_acquireLoggingRegistry()", function () {
+    it("should create a FinalizationRegistry on the first call", function () {
+      assert.instanceOf(te().acquire(), FinalizationRegistry);
+    });
+
+    it("should set the active count to 1 on the first call", function () {
+      te().acquire();
+      assert.strictEqual(te().count, 1);
+    });
+
+    it("should return the same instance on repeated calls", function () {
+      const r1 = te().acquire();
+      const r2 = te().acquire();
+      assert.strictEqual(r1, r2);
+      assert.strictEqual(te().count, 2);
+    });
+  });
+
+  describe("_releaseLoggingRegistry()", function () {
+    it("should decrement the active count", function () {
+      te().acquire();
+      te().acquire();
+      te().release();
+      assert.strictEqual(te().count, 1);
+    });
+
+    it("should null the registry when the count reaches zero", function () {
+      te().acquire();
+      te().release();
+      assert.isNull(te().registry);
+    });
+
+    it("should not decrement below zero", function () {
+      te().release();
+      assert.strictEqual(te().count, 0);
+      assert.isNull(te().registry);
+    });
+
+    it("should keep the registry alive while active count is above zero", function () {
+      te().acquire();
+      te().acquire();
+      te().release();
+      assert.isNotNull(te().registry);
+      te().release();
+      assert.isNull(te().registry);
+    });
+  });
+
+  describe("FinalizationRegistry GC callback", function () {
+    it("should release the ref-count when the GC callback fires", function () {
+      let capturedCallback = null;
+      const OrigFR = global.FinalizationRegistry;
+      global.FinalizationRegistry = function (cb) {
+        capturedCallback = cb;
+        return new OrigFR(cb);
+      };
+      global.FinalizationRegistry.prototype = OrigFR.prototype;
+      try {
+        te().reset();
+        te().acquire();
+        assert.isNotNull(capturedCallback);
+        capturedCallback(42);
+        assert.strictEqual(te().count, 0);
+        assert.isNull(te().registry);
+      } finally {
+        global.FinalizationRegistry = OrigFR;
+      }
+    });
+  });
+
+  describe("full lifecycle", function () {
+    it("should create a new registry instance after the previous one was released", function () {
+      const r1 = te().acquire();
+      te().release();
+      assert.isNull(te().registry);
+      const r2 = te().acquire();
+      assert.isNotNull(r2);
+      assert.notStrictEqual(r1, r2);
+    });
+  });
+
+  describe("shutdown-during-connect race", function () {
+    it("should not leak the ref-count when shutdown is called while connecting", function () {
+      te().acquire();
+      te().release();
+
+      assert.strictEqual(te().count, 0);
+      assert.isNull(te().registry);
+    });
+
+    it("should release the ref-count even when connect fails during shutdown wait", function () {
+      te().acquire();
+      te().release();
+      te().release();
+
+      assert.strictEqual(te().count, 0);
+      assert.isNull(te().registry);
+    });
+
+    it("should block re-entrant connect() while shutdown awaits connected", async function () {
+      let resolveCreate;
+      const PausedClient = proxyquire.noPreserveCache()("../../lib/client", {
+        "../index": {
+          removeLogging: () => { },
+          setupLogging: () => 1,
+          getRandomUuidV4: () => Buffer.alloc(16),
+          RetryPolicyKind: { Default: 0, Fallthrough: 1 },
+          SessionWrapper: {
+            createSession: () => new Promise((r) => { resolveCreate = r; }),
+          },
+          "@global": true,
+          "@noCallThru": true,
+        },
+      });
+      const client = new PausedClient({ contactPoints: ["localhost"] });
+
+      const connectPromise = client.connect();
+      await new Promise((r) => setImmediate(r));
+
+      const shutdownPromise = client.shutdown();
+      await new Promise((r) => setImmediate(r));
+
+      let caught;
+      try {
+        await client.connect();
+      } catch (err) {
+        caught = err;
+      }
+      assert.ok(caught, "expected connect() to throw while shutdown is pending");
+      assert.include(caught.message, "Connecting after shutdown");
+
+      resolveCreate({});
+      await connectPromise;
+      await shutdownPromise;
+    });
+  });
+});
