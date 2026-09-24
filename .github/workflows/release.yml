@@ -230,9 +230,15 @@ jobs:
           build-command: |
             cd examples
             VERSION=$(node -p "require('../package.json').version")
-            npm pkg set "dependencies.@scylladb/driver=$VERSION"
+            # The examples lockfile links the driver from the repository root for local development.
+            # Passing an explicit package spec forces npm to replace that link with the published package.
             (for i in 1 2 3 4 5; do
-              npm install && exit 0
+              if npm install --prefer-online --save-exact "@scylladb/driver@$VERSION" &&
+                test ! -L node_modules/@scylladb/driver &&
+                test "$(node -p 'require("./node_modules/@scylladb/driver/package.json").version')" = "$VERSION" &&
+                node -e 'require("@scylladb/driver")'; then
+                exit 0
+              fi
               echo "Attempt $i failed, retrying in 15s (waiting for npm propagation)..."
               sleep 15
             done
