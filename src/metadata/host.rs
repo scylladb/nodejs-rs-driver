@@ -3,13 +3,16 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use napi::Env;
-use napi::bindgen_prelude::FnArgs;
+use napi::bindgen_prelude::{BigInt, FnArgs};
 use scylla::cluster::{ClusterState, Node};
+use scylla::routing::Token;
 
-use crate::errors::{ConvertedError, JsResult, with_custom_error_sync};
-use crate::metadata::state::ClusterSnapshot;
+use crate::errors::{ConvertedError, ConvertedResult, JsResult, with_custom_error_sync};
+use crate::metadata::state::{ClusterSnapshot, ReplicaValue};
 use crate::session::SessionWrapper;
 use crate::types::type_helpers::SocketAddrWrapper;
+use crate::utils::bigint_to_i64;
+use crate::utils::cache::NapiRefCache;
 use crate::utils::js_ctor::{
     HostCtorArgs, build_host, build_host_map, build_socket_address, js_constructible_class,
 };
@@ -17,30 +20,33 @@ use crate::utils::js_instance::JsInstance;
 use crate::utils::napi_ref::NapiRef;
 use crate::utils::to_napi_obj::{CopyableBuffer, NamedMap};
 
-/// Builds a JS `Host` object for every node known via `cluster_state` and collects them into a
-/// single JS `HostMap`, pinning only that map with a `NapiRef`.
+/// Builds a JS `Host` object for every node known via `cluster_state`, pinning each one in
+/// `hosts`, and collects them into a single JS `HostMap`, pinned by the returned `NapiRef`.
 ///
-/// Pinning the `HostMap` alone (rather than each `Host` individually) is enough to keep every
-/// `Host` alive, since the map strongly references all of them. It also means
+/// Keeping the individual hosts in a cache of their own is what lets a single node be looked
+/// up by id later, without going back through the JS map. Pinning the `HostMap` means
 /// `SessionWrapper::get_all_hosts` hands back one already-assembled object instead of rebuilding
 /// a map on the JS side per call, for as long as the cluster state doesn't change.
-pub(crate) fn cache_host_map(
+pub(crate) fn cache_hosts(
     cluster_state: &ClusterState,
     env: &Env,
-) -> napi::Result<NapiRef<js_constructible_class::HostMap>> {
-    let entries = cluster_state
-        .get_nodes_info()
-        .iter()
-        .map(|node| {
-            let host = build_host(env, host_ctor_args(node, env)?)?;
-            let key = node.host_id.simple().to_string();
-            Ok((key, host))
-        })
-        .collect::<napi::Result<HashMap<_, _>>>()?;
+    hosts: &NapiRefCache<js_constructible_class::Host>,
+) -> ConvertedResult<NapiRef<js_constructible_class::HostMap>> {
+    let entries = hosts.get_or_init_all(env, || {
+        cluster_state
+            .get_nodes_info()
+            .iter()
+            .map(|node| {
+                let host = build_host(env, host_ctor_args(node, env)?)?;
+                let key = node.host_id.simple().to_string();
+                Ok((key, host))
+            })
+            .collect::<ConvertedResult<HashMap<_, _>>>()
+    })?;
 
     let items = NamedMap::new(entries);
     let host_map = build_host_map(env, FnArgs::from((items,)))?;
-    NapiRef::new(env, host_map)
+    NapiRef::new(env, host_map).map_err(ConvertedError::from)
 }
 
 /// A live handle to a node of the Rust driver's cluster state.
@@ -95,6 +101,27 @@ impl SessionWrapper {
                     .host_map
                     .get(env)
                     .map_err(ConvertedError::from)
+            })
+        })
+    }
+
+    /// Returns the replicas of the given token of the given table: each the shard of a node the
+    /// partition lives on, paired with that node. Throws if the keyspace or the table is not found.
+    ///
+    /// The hosts are the very same JS objects `get_all_hosts` hands out, so a replica's node can
+    /// be compared against a host of the cluster by identity.
+    #[napi(ts_return_type = "import('../lib/host').Replica[]")]
+    pub fn get_replicas<'env>(
+        &self,
+        env: &'env Env,
+        keyspace: String,
+        table: String,
+        token: BigInt,
+    ) -> JsResult<Vec<JsInstance<'env, ReplicaValue>>> {
+        with_custom_error_sync(|| {
+            self.with_cluster_snapshot(env, |snapshot| {
+                let token = Token::new(bigint_to_i64(token, "Token value must fit in i64")?);
+                snapshot.replicas(env, &keyspace, &table, token)
             })
         })
     }

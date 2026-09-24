@@ -10,7 +10,7 @@ import { EmptyCallback, ValueCallback } from "../..";
 // @ts-ignore
 import promiseUtils = require("../promise-utils");
 import { Token, TokenRange, minTokenRange } from "../token";
-import { Host } from "../host";
+import { Host, Replica } from "../host";
 import types = require("../types");
 import { ColumnInfo } from "../types/cql-utils";
 
@@ -76,20 +76,32 @@ class Metadata {
     }
 
     /**
-     * Gets the host list representing the replicas that contain the given partition key, token or token range.
+     * Gets the replicas that contain the given token or token range.
      *
-     * It uses the pre-loaded keyspace metadata to retrieve the replicas for a token for a given keyspace.
-     * When the keyspace metadata has not been loaded, it returns null.
+     * A replica is the shard of a node the partition lives on, paired with that node.
+     * The hosts returned are the very same objects the {@link Client#hosts} map holds,
+     * so a replica's node can be compared against a host of the cluster by identity.
      * @param {string} keyspaceName Name of the keyspace.
-     * @param {Buffer | Token | TokenRange} token Can be Buffer (serialized partition key),
-     * Token or TokenRange.
-     * @returns {Host[]} The replicas.
+     * @param {string} tableName Name of the table the token belongs to. For tablets,
+     * this field is absolutely necessary. For vnodes, the table is irrelevant, so an
+     * empty string can be passed.
+     * @param {Token | TokenRange} token Token or TokenRange. If a range is passed, the
+     * replicas are calculated for its end token.
+     * @returns {Replica[]} The replicas.
      */
     getReplicas(
         keyspaceName: string,
-        token: Buffer | Token | TokenRange,
-    ): Host[] {
-        throw new Error("TODO: Not implemented");
+        tableName: string,
+        token: Token | TokenRange,
+    ): Replica[] {
+        if (token instanceof TokenRange) {
+            token = token.end;
+        }
+        return this.#rustClient.getReplicas(
+            keyspaceName,
+            tableName,
+            token.getValue(),
+        );
     }
 
     /**

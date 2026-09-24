@@ -29,15 +29,12 @@ import {
 import { PreparedCache } from "./cache";
 import Encoder = require("./encoder");
 import { HostMap } from "./host";
+import type { Replica } from "./host";
+import type { Token, TokenRange } from "./token";
 
 // Imports for the purpose of type hints.
 import type { QueryOptions } from "./query-options";
-import type {
-    ArrayOrObject,
-    CqlValue,
-    Host,
-    metrics as metricsModule,
-} from "../";
+import type { ArrayOrObject, CqlValue, metrics as metricsModule } from "../";
 import * as metadataModule from "./metadata";
 
 const { ProfileManager } = executionProfile;
@@ -911,11 +908,23 @@ class Client extends events.EventEmitter {
     }
 
     /**
-     * Gets the host that are replicas of a given token.
+     * Gets the replicas of a given token, for a keyspace and table.
+     *
+     * A replica is the shard of a node the partition lives on, paired with that node.
+     * The hosts returned are the very same objects the {@link Client#hosts} map holds,
+     * so a replica's node can be compared against a host of the cluster by identity.
+     * @param {string} keyspace Name of the keyspace.
+     * @param {string} table Name of the table the token belongs to. For tablets,
+     * this field is absolutely necessary. For vnodes, the table is irrelevant, so an
+     * empty string can be passed.
+     * @param {Token | TokenRange} token Token or TokenRange.
      */
-    getReplicas(keyspace: string, token: Buffer): Array<Host> {
-        throw new Error(`TODO: Not implemented`);
-        // return this.metadata.getReplicas(keyspace, token);
+    getReplicas(
+        keyspace: string,
+        table: string,
+        token: Token | TokenRange,
+    ): Replica[] {
+        return this.metadata!.getReplicas(keyspace, table, token);
     }
 
     /**

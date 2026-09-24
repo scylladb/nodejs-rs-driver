@@ -305,6 +305,25 @@ const token = client.metadata.newToken(Buffer.from("key"), "ks", "tbl");
 const token = new (require("@scylladb/driver").token.Token)(12345n); // wrap a raw value directly
 ```
 
+### Replicas
+
+`getReplicas(keyspaceName, tableName, token)` returns an array of `Replica` objects (node + shard
+pairs) that replicate a partition, given a keyspace, table, and token. See the
+[Replicas](../metadata/replicas.md) page for the full description of the new API.
+
+```javascript
+const replicas = client.metadata.getReplicas("my_keyspace", "my_table", token);
+
+for (const replica of replicas) {
+  console.log(replica.host.address, "shard", replica.shard);
+}
+```
+
+**Key differences from similar methods in `cassandra-driver`:**
+- The token parameter can be a `Token` or a `TokenRange`.
+- Each replica includes both the host and its shard number.
+- The replica's `host` is the same object instance as `client.hosts.get(hostId)`, so you can compare by identity.
+
 ### Schema
 
 The schema metadata API was rewritten from scratch, and almost nothing carries over unchanged.
