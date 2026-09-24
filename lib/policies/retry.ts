@@ -1,0 +1,65 @@
+"use strict";
+
+import rust = require("../../index");
+
+/** @module policies/retry */
+/**
+ * Base and default RetryPolicy.
+ * Determines what to do when the driver runs into a specific database exception.
+ *
+ * This policy is implemented on the Rust side, see:
+ * https://github.com/scylladb/scylla-rust-driver/blob/main/scylla/src/policies/retry/default.rs
+ * For more information see the DefaultRetryPolicy here:
+ * https://docs.datastax.com/en/developer/java-driver/4.11/manual/core/retries/index.html
+ */
+class RetryPolicy {
+    constructor() {}
+
+    /**
+     * @internal
+     * @ignore
+     */
+    getRustConfiguration(): rust.RetryPolicyKind {
+        if (this.constructor !== RetryPolicy) {
+            throw new TypeError(
+                "Currently only built-in retry policies are supported. Inheriting from RetryPolicy is not supported.",
+            );
+        }
+        return rust.RetryPolicyKind.Default;
+    }
+}
+
+/**
+ * A retry policy that never retries and returns errors straight to the user.
+ *
+ * If this policy is used, retry logic will have to be
+ * implemented in business code.
+ *
+ * This policy is implemented on the Rust side.
+ *
+ * @alias module:policies/retry~FallthroughRetryPolicy
+ * @extends RetryPolicy
+ */
+class FallthroughRetryPolicy extends RetryPolicy {
+    /**
+     * Creates a new instance of FallthroughRetryPolicy.
+     */
+    constructor() {
+        super();
+    }
+
+    /**
+     * @internal
+     * @ignore
+     */
+    getRustConfiguration(): rust.RetryPolicyKind {
+        if (this.constructor !== FallthroughRetryPolicy) {
+            throw new TypeError(
+                "Currently only built-in retry policies are supported. Inheriting from FallthroughRetryPolicy is not supported.",
+            );
+        }
+        return rust.RetryPolicyKind.Fallthrough;
+    }
+}
+
+export { FallthroughRetryPolicy, RetryPolicy };

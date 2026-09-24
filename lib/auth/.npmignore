@@ -1,0 +1,3 @@
+# Empty file to override .gitignore for npm publish.
+# The .gitignore in this directory excludes compiled TypeScript output,
+# but those files need to be included in the published package.

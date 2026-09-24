@@ -1,8 +1,6 @@
 "use strict";
 
 import { Host } from "../host";
-// TODO: Remove after lib/utils.js is converted to Typescript.
-// @ts-ignore
 import utils = require("../utils");
 
 const deprecatedMsg =

@@ -1,5 +1,3 @@
-// TODO: remove once `lib/utils.js` is converted to typescript.
-// @ts-ignore
 import utils = require("../utils");
 
 /** @module types */
