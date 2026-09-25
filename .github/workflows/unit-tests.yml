@@ -12,13 +12,19 @@ env:
   pull_request:
     branches:
       - '**'
+  workflow_call:
+    inputs:
+      ref:
+        description: "Full commit SHA to validate"
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: unit-tests-${{ inputs.ref || github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ inputs.ref == '' }}
 
 jobs:
   build-and-run-tests:
@@ -34,10 +40,13 @@ jobs:
     runs-on: ${{ matrix.settings.host }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.ref || github.sha }}
       - uses: ./.github/common/setup
         with:
           host: ${{ matrix.settings.host }}
           target: ${{ matrix.settings.target }}
+          revision: ${{ inputs.ref || github.sha }}
       - name: Build
         run: npm run build:test -- --target ${{ matrix.settings.target }}
         shell: bash

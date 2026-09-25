@@ -4,41 +4,32 @@ description: "Sets up all of the dependencies used in the CI"
 inputs:
   host:
     required: true
-    type: string
   target:
     required: true
-    type: string
   node-version:
     required: false
-    type: string
     default: "20"
+  revision:
+    description: "Git ref or SHA to check out"
+    required: false
+    default: ""
 
 
 runs:
   using: "composite"
   steps:
     - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      with:
+        ref: ${{ inputs.revision }}
     - name: Setup node
       uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
       with:
         node-version: ${{ inputs.node-version }}
-        cache: npm
     - name: Install
       uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
       with:
         toolchain: stable
         targets: ${{ inputs.target }}
-    - name: Cache cargo
-      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
-      with:
-        path: |
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-          ~/.napi-rs
-          .cargo-cache
-          target/
-        key: ${{ inputs.target }}-cargo-${{ inputs.host }}
     - name: Install dependencies
       shell: bash
       run: npm i

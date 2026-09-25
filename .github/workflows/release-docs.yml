@@ -1,0 +1,118 @@
+name: Validate release docs
+
+on:
+  pull_request:
+    paths:
+      - package.json
+      - package-lock.json
+      - Cargo.toml
+      - Cargo.lock
+      - examples/package-lock.json
+      - docs/version
+  workflow_call:
+    inputs:
+      ref:
+        description: "Full commit SHA to validate"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-docs-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  validate-release:
+    name: Detect release version
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      run-check: ${{ github.event_name != 'pull_request' || steps.version.outputs.changed == 'true' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Verify requested commit
+        if: inputs.ref != ''
+        env:
+          REQUESTED_REF: ${{ inputs.ref }}
+        run: |
+          if [[ ! "$REQUESTED_REF" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::The reusable workflow ref must be a full commit SHA."
+            exit 1
+          fi
+          test "$(git rev-parse HEAD)" = "$REQUESTED_REF"
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+      - name: Validate release versions
+        id: version
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          args=()
+          if [[ -n "$BASE_SHA" ]]; then
+            args+=(--base-ref "$BASE_SHA")
+          fi
+          python .github/scripts/release-version.py "${args[@]}"
+
+  build:
+    if: needs.validate-release.outputs.run-check == 'true'
+    needs: validate-release
+    name: Build prospective release docs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Create temporary release refs
+        env:
+          RELEASE_TAG: ${{ needs.validate-release.outputs.tag }}
+        run: |
+          release_sha=$(git rev-parse HEAD)
+          git branch --force main "$release_sha"
+          if git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"; then
+            existing_sha=$(git rev-list -n 1 "$RELEASE_TAG")
+            if [[ "$existing_sha" != "$release_sha" ]]; then
+              echo "::error::Tag $RELEASE_TAG points to $existing_sha, not $release_sha."
+              exit 1
+            fi
+          else
+            git tag "$RELEASE_TAG" "$release_sha"
+          fi
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+      - name: Set up Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: "20"
+      - name: Install uv
+        run: make -C docs setupenv
+      - name: Build production docs
+        env:
+          LATEST_VERSION: ${{ needs.validate-release.outputs.tag }}
+        run: |
+          make -C docs multiversion
+          make -C docs redirects
+      - name: Verify release docs
+        env:
+          RELEASE_TAG: ${{ needs.validate-release.outputs.tag }}
+        run: |
+          test -f docs/_build/dirhtml/main/index.html
+          test -f docs/_build/dirhtml/stable/index.html
+          test -f "docs/_build/dirhtml/$RELEASE_TAG/index.html"
+          test -f docs/_build/dirhtml/index.html
+          grep -Fq 'url=/stable/' docs/_build/dirhtml/index.html
+          cmp docs/_build/dirhtml/stable/index.html \
+            "docs/_build/dirhtml/$RELEASE_TAG/index.html"
