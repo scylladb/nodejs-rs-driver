@@ -87,19 +87,38 @@ behavior, while the extended x64 matrix verifies compatibility with every suppor
 
 ## Releasing process
 
-1. Update the driver dependencies. When updating / upgrading node dependencies,
-you can either run `npm update` in the main directory, or manually update `package.json` or `package-lock.json` and run `npm i`.
-Remember to run `npm i` in the `examples/` and `benchmark/` directories once you update the packages. See [Updating packages](#updating-packages) for more details.
-2. Bump the package version. Remember to update the version in `package-lock.json` in
-the main directory, `examples/`, and `benchmark/`. You can do this by running `npm i` in all 3 directories
-(see [example commit](https://github.com/scylladb/nodejs-rs-driver/pull/363/changes/41250609737052975129c7514439869324478008) on how to do that).
-3. Add the new tag to the documentation configuration (see #470)
-4. Create a new tag.
-5. Ensure the extended CI passes.
-6. Create release notes on GitHub. The version tag must match version from `package.json` with `v` prefix (for example: `v0.2.0`).
-Once you publish release notes, CI action will trigger automatically. This action will build and publish the npm package.
-7. Once the CI action finishes, check if it succeeded. If it failed, you will have to fix the underlying issue, and re-run the CI action.
-8. Verify that the new release is visible at [npmjs site](https://www.npmjs.com/package/@scylladb/driver).
+All three npm packages must configure `.github/workflows/release.yml` as an npm trusted publisher with direct
+publishing allowed. The release job authenticates with GitHub OIDC and intentionally does not use a long-lived
+npm write token.
+
+1. Open a release PR from an up-to-date `main` branch. Update dependencies as needed and set the same
+   `X.Y.Z` version in `package.json`, the root npm lockfile, `Cargo.toml`, `Cargo.lock`, and the linked driver
+   entry in `examples/package-lock.json`. Set `docs/version` to the matching `vX.Y.Z` tag.
+2. Wait for the release PR checks. A version change automatically runs Extended CI and a production
+   multiversion docs build against a temporary local tag. The docs check verifies the `main`, `stable`, and
+   versioned outputs without creating remote release state.
+3. Merge the release PR. Until the release is published, normal docs deployment continues to build
+   `/stable` from the latest published GitHub Release rather than the not-yet-tagged target version.
+4. From the `main` branch in the Actions UI, run **Release package** with `publish` disabled. This performs
+   every build, test, docs, package-assembly, and npm dry-run gate without changing remote state.
+5. Run **Release package** again from `main` with `publish` enabled. The workflow captures one `main` commit,
+   re-runs all pre-tag gates against that exact commit, and checks for open `release-blocker` issues.
+6. After every gate succeeds, the workflow rechecks release blockers and tag availability, creates the
+   lightweight `vX.Y.Z` tag on the tested commit, publishes and verifies all npm packages, creates the GitHub
+   Release, and promotes the same tag to `/stable` documentation.
+7. Confirm the workflow completed, the tag and GitHub Release point to the captured commit, all three packages
+   are visible on npm, and `/stable` selects the new version.
+
+Do not create or move the release tag manually. A failure before the tag is created has no public release
+state; fix it in another PR and dispatch the workflow again from the new `main` commit.
+
+If npm publication fails after the tag is created, keep the tag fixed and rerun the failed workflow jobs from
+the same workflow run. The publish job checks each package version and skips packages that already reached npm,
+so it can finish a partial multi-package publication before verification and GitHub Release creation. Never
+reuse that version for different contents. If the workflow run or its artifacts have expired, inspect the
+published versions of `@scylladb/driver-linux-x64-gnu`, `@scylladb/driver-linux-arm64-gnu`, and
+`@scylladb/driver`, then reconstruct the packages from the tagged commit and publish only the missing packages
+from a trusted release environment.
 
 ### Updating packages
 

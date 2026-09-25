@@ -4,7 +4,6 @@ description: "Runs all examples on a single architecture and node version"
 inputs:
   build-command:
     required: true
-    type: string
 
 runs:
   using: "composite"

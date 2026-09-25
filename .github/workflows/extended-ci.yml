@@ -1,55 +1,115 @@
-
 name: Extended CI
+
 env:
   DEBUG: napi:*
   PEDANTIC: true
 
 on:
-  push:
-    # Currently we create tags before triggering a release. 
-    # This setup ensures that we run this workflow before the release.
-    tags:
-      - "*"  
+  pull_request:
+    paths:
+      - package.json
+      - package-lock.json
+      - Cargo.toml
+      - Cargo.lock
+      - examples/package-lock.json
+      - docs/version
+  workflow_call:
+    inputs:
+      ref:
+        description: "Full commit SHA to validate"
+        required: true
+        type: string
   workflow_dispatch:
-    
+
+permissions:
+  contents: read
+
+concurrency:
+  group: extended-ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  # The goal of this workflow is to check if examples run without any errors
-  # This is a version that tests the full matrix of supported node versions and driver architectures
-  extended-examples-test:
-    strategy:
-      fail-fast: false
-      matrix:
-        host:
-        - ubuntu-latest
-        - ubuntu-24.04-arm
-        node: [ 20, 22, 24, current ]
-        include:
-          - host: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            build: npm run build -- --target x86_64-unknown-linux-gnu
-          - host: ubuntu-24.04-arm 
-            target: aarch64-unknown-linux-gnu 
-            build: npm run build -- --target aarch64-unknown-linux-gnu
-    name: Build and run examples - ${{ matrix.target }} - node@${{ matrix.node }}
-    runs-on: ${{ matrix.host }}
+  validate-release:
+    name: Detect release version
+    runs-on: ubuntu-latest
+    outputs:
+      run-matrix: ${{ github.event_name != 'pull_request' || steps.version.outputs.changed == 'true' }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/common/setup
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          host: ${{ matrix.host }}
-          target: ${{ matrix.target }}
-          node-version: ${{ matrix.node }}
-      - uses: ./.github/common/example
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Verify requested commit
+        if: inputs.ref != ''
+        env:
+          REQUESTED_REF: ${{ inputs.ref }}
+        run: |
+          if [[ ! "$REQUESTED_REF" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::The reusable workflow ref must be a full commit SHA."
+            exit 1
+          fi
+          test "$(git rev-parse HEAD)" = "$REQUESTED_REF"
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
-          build-command: ${{ matrix.build }}
-  extended-integration-tests:
+          python-version: "3.12"
+      - name: Validate release versions
+        id: version
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          args=()
+          if [[ -n "$BASE_SHA" ]]; then
+            args+=(--base-ref "$BASE_SHA")
+          fi
+          python .github/scripts/release-version.py "${args[@]}"
+
+  # This is the full matrix of supported Node.js versions and driver architectures.
+  extended-examples-test:
+    if: needs.validate-release.outputs.run-matrix == 'true'
+    needs: validate-release
     strategy:
       fail-fast: false
       matrix:
         host:
           - ubuntu-latest
           - ubuntu-24.04-arm
-        node: [ 20, 22, 24, current ]
+        node: [20, 22, 24, current]
+        include:
+          - host: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            build: npm run build -- --target x86_64-unknown-linux-gnu
+          - host: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            build: npm run build -- --target aarch64-unknown-linux-gnu
+    name: Build and run examples - ${{ matrix.target }} - node@${{ matrix.node }}
+    runs-on: ${{ matrix.host }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.sha }}
+      - uses: ./.github/common/setup
+        with:
+          host: ${{ matrix.host }}
+          target: ${{ matrix.target }}
+          node-version: ${{ matrix.node }}
+          revision: ${{ github.sha }}
+      - uses: ./.github/common/example
+        with:
+          build-command: ${{ matrix.build }}
+
+  extended-integration-tests:
+    if: needs.validate-release.outputs.run-matrix == 'true'
+    needs: validate-release
+    strategy:
+      fail-fast: false
+      matrix:
+        host:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+        node: [20, 22, 24, current]
         include:
           - host: ubuntu-latest
             target: x86_64-unknown-linux-gnu
@@ -69,11 +129,14 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.sha }}
       - uses: ./.github/common/setup
         with:
           host: ${{ matrix.host }}
           target: ${{ matrix.target }}
           node-version: ${{ matrix.node }}
+          revision: ${{ github.sha }}
       - uses: ./.github/common/integration
         with:
           build-command: npm run build:test -- --target ${{ matrix.target }}

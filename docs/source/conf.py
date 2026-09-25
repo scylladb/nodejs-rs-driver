@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import os
+from pathlib import Path
 import sys
 from datetime import date
 from sphinx_scylladb_theme.utils import multiversion_regex_builder
@@ -10,9 +11,10 @@ sys.path.insert(0, os.path.abspath("../_extensions"))
 # -- General configuration ------------------------------------------
 
 # Build documentation for the following tags and branches
-TAGS = ["v0.6.1"]
+TARGET_VERSION = (Path(__file__).resolve().parents[1] / "version").read_text().strip()
+LATEST_VERSION = os.environ.get("LATEST_VERSION", TARGET_VERSION).strip()
+TAGS = list(dict.fromkeys((TARGET_VERSION, LATEST_VERSION)))
 BRANCHES = ["main"]
-LATEST_VERSION = "v0.6.1"
 UNSTABLE_VERSIONS = ["main"]
 DEPRECATED_VERSIONS = []
 

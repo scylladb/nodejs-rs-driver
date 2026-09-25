@@ -6,10 +6,23 @@ on:
   push:
     branches:
       - main
-      - 'branch-**'
+      - "branch-**"
     paths:
       - "docs/**"
+  workflow_call:
+    inputs:
+      ref:
+        description: "Release tag to build and publish"
+        required: true
+        type: string
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-pages
+  queue: max
 
 jobs:
   build:
@@ -18,32 +31,57 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ github.event.repository.default_branch }}
+          ref: ${{ github.sha }}
           persist-credentials: false
           fetch-depth: 0
-
+      - name: Resolve stable docs version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_REF: ${{ inputs.ref }}
+        run: |
+          if [[ -n "$REQUESTED_REF" ]]; then
+            latest_version="$REQUESTED_REF"
+            if [[ ! "$latest_version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::Invalid release tag: $latest_version"
+              exit 1
+            fi
+            published_latest=$(gh api \
+              "repos/$GITHUB_REPOSITORY/releases/latest" \
+              --jq .tag_name)
+            if [[ "$published_latest" != "$latest_version" ]]; then
+              echo "::error::Latest published release is $published_latest, not $latest_version."
+              exit 1
+            fi
+            release_sha=$(git rev-list -n 1 "$latest_version")
+            if [[ "$release_sha" != "$(git rev-parse HEAD)" ]]; then
+              echo "::error::Tag $latest_version does not point to the requested release commit."
+              exit 1
+            fi
+            git switch --force-create main refs/remotes/origin/main
+          else
+            latest_version=$(gh api \
+              "repos/$GITHUB_REPOSITORY/releases/latest" \
+              --jq .tag_name)
+          fi
+          if [[ ! "$latest_version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Invalid latest release tag: ${latest_version:-missing}"
+            exit 1
+          fi
+          echo "LATEST_VERSION=$latest_version" >> "$GITHUB_ENV"
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
-          python-version: '3.12'
-
+          python-version: "3.12"
       - name: Set up Node.js
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
-          node-version: '20'
-
+          node-version: "20"
       - name: Install uv
-        uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
-
-      - name: Set up env
         run: make -C docs setupenv
-
       - name: Build docs
         run: make -C docs multiversion
-
       - name: Build redirects
         run: make -C docs redirects
-
       - name: Tar folder
         run: |
           tar \
@@ -51,7 +89,6 @@ jobs:
             --directory docs/_build/dirhtml/ \
             -cvf ${{ runner.temp }}/artifact.tar \
             .
-
       - name: Upload artifact
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
@@ -60,23 +97,29 @@ jobs:
           retention-days: "1"
 
   release:
-    # Add a dependency to the build job
     needs: build
-
-    # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
     permissions:
-      pages: write # to deploy to Pages
-      id-token: write # to verify the deployment originates from an appropriate source
-      contents: read # to read private repo
-
-    # Deploy to the github-pages environment
+      pages: write
+      id-token: write
+      contents: read
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-
-    # Specify runner + deployment step
     runs-on: ubuntu-latest
     steps:
+      - name: Recheck stable docs version
+        if: inputs.ref != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_REF: ${{ inputs.ref }}
+        run: |
+          published_latest=$(gh api \
+            "repos/$GITHUB_REPOSITORY/releases/latest" \
+            --jq .tag_name)
+          if [[ "$published_latest" != "$REQUESTED_REF" ]]; then
+            echo "::error::Latest published release is $published_latest, not $REQUESTED_REF."
+            exit 1
+          fi
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0

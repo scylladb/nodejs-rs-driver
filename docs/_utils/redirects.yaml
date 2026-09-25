@@ -4,3 +4,4 @@
 
 # removing redirection html script files
 # test: /
+/index.html: /stable/
