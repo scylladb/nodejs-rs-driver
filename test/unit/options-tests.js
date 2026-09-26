@@ -9,6 +9,7 @@ const {
 } = require("../../lib/policies/address-resolution");
 const {
     DefaultLoadBalancingPolicy,
+    RoundRobinPolicy,
 } = require("../../lib/policies/load-balancing");
 const { RetryPolicy } = require("../../lib/policies/retry");
 const { Uuid } = require("../../lib/types");
@@ -92,6 +93,111 @@ describe("Client options", function () {
     });
     it("should correctly verify empty client options", function () {
         extend({ contactPoints: ["1.1.1.1"] });
+    });
+
+    describe("localDataCenter", function () {
+        function loadBalancingConfig(localDataCenter, policy) {
+            return setRustOptions({
+                localDataCenter,
+                policies: { loadBalancing: policy },
+            }).loadBalancingConfig;
+        }
+
+        it("should configure the default client policy", function () {
+            const config = setRustOptions(
+                extend({
+                    contactPoints: ["127.0.0.1"],
+                    localDataCenter: "dc1",
+                }),
+            ).loadBalancingConfig;
+
+            assert.strictEqual(config.preferDatacenter, "dc1");
+            assert.strictEqual(config.permitDcFailover, false);
+        });
+
+        it("should configure the default policy when it has no datacenter preference", function () {
+            const policy = new DefaultLoadBalancingPolicy({
+                tokenAware: false,
+            });
+
+            assert.deepStrictEqual(loadBalancingConfig("dc1", policy), {
+                tokenAware: false,
+                preferDatacenter: "dc1",
+                permitDcFailover: false,
+            });
+        });
+
+        it("should preserve an explicit datacenter failover setting", function () {
+            const policy = new DefaultLoadBalancingPolicy({
+                permitDcFailover: true,
+            });
+
+            assert.deepStrictEqual(loadBalancingConfig("dc1", policy), {
+                preferDatacenter: "dc1",
+                permitDcFailover: true,
+            });
+        });
+
+        it("should preserve an explicit policy datacenter preference", function () {
+            const policy = new DefaultLoadBalancingPolicy({
+                preferDatacenter: "policy-dc",
+                permitDcFailover: true,
+            });
+
+            assert.deepStrictEqual(loadBalancingConfig("client-dc", policy), {
+                preferDatacenter: "policy-dc",
+                permitDcFailover: true,
+            });
+        });
+
+        it("should not mutate a policy reused by clients", function () {
+            const policyConfig = Object.freeze({ tokenAware: false });
+            const policy = new DefaultLoadBalancingPolicy(policyConfig);
+
+            assert.deepStrictEqual(loadBalancingConfig("dc1", policy), {
+                tokenAware: false,
+                preferDatacenter: "dc1",
+                permitDcFailover: false,
+            });
+            assert.deepStrictEqual(loadBalancingConfig("dc2", policy), {
+                tokenAware: false,
+                preferDatacenter: "dc2",
+                permitDcFailover: false,
+            });
+            assert.strictEqual(policy.getRustConfiguration(), policyConfig);
+            assert.deepStrictEqual(policyConfig, { tokenAware: false });
+        });
+
+        it("should treat a null policy preference as unset", function () {
+            const policy = new DefaultLoadBalancingPolicy({
+                preferDatacenter: null,
+                tokenAware: false,
+            });
+
+            assert.deepStrictEqual(loadBalancingConfig("dc1", policy), {
+                preferDatacenter: "dc1",
+                tokenAware: false,
+                permitDcFailover: false,
+            });
+        });
+
+        it("should not apply to other load balancing policies", function () {
+            const policy = new RoundRobinPolicy();
+
+            assert.deepStrictEqual(loadBalancingConfig("dc1", policy), {
+                tokenAware: false,
+            });
+        });
+
+        it("should leave the default policy unchanged without localDataCenter", function () {
+            const policyConfig = { tokenAware: false };
+            const policy = new DefaultLoadBalancingPolicy(policyConfig);
+
+            assert.strictEqual(
+                loadBalancingConfig(undefined, policy),
+                policyConfig,
+            );
+        });
     });
 
     describe("protocolOptions.port", function () {

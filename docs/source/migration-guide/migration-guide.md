@@ -174,11 +174,16 @@ let policy = new DefaultLoadBalancingPolicy({
 The policy returned from `defaultLoadBalancingPolicy()` is changed from
 legacy to new `DefaultLoadBalancingPolicy`. When `localDc` option is provided,
 the load balancing will be set to allow connection to the provided datacenter.
-When `localDc` is not provided connections to all nodes will be allowed.
 
-**WARNING**:
-This is a change in behavior. In the `cassandra-driver`, when `localDc` would not be provided,
-`localDataCenter` from client options would be used.
+When `localDc` is not provided, `localDataCenter` from client options is used as
+a fallback. Datacenter failover is disabled unless `permitDcFailover` is set
+explicitly on `DefaultLoadBalancingPolicy`. An explicit `preferDatacenter` takes
+precedence over `localDataCenter`. If neither option is provided, nodes from all
+datacenters are eligible for query plans.
+
+These settings control coordinator selection; they do not restrict topology
+discovery or act as a host allow list. Use `AllowListPolicy` or the `allowList`
+option when connections must be limited to specific hosts.
 
 ## Retry policies
 
