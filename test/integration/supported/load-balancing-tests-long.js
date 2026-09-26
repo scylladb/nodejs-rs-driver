@@ -9,63 +9,83 @@ const loadBalancing = require("../../../lib/policies/load-balancing.js");
 const DCAwareRoundRobinPolicy = loadBalancing.DCAwareRoundRobinPolicy;
 const TokenAwarePolicy = loadBalancing.TokenAwarePolicy;
 
-describe("DCAwareRoundRobinPolicy", function () {
+describe("Datacenter-aware coordinator selection", function () {
     this.timeout(180000);
-    it("should never hit remote dc if not set", function (done) {
-        const countByHost = {};
-        utils.series(
-            [
-                // 1 cluster with 3 dcs with 2 nodes each
-                helper.ccmHelper.start("2:2:2"),
-                function testCase(next) {
-                    const options = utils.deepExtend({}, helper.baseOptions, {
-                        policies: {
-                            // DSx policies took the local DC from the client option (localDataCenter field).
-                            // This is not (yet?) supported in this driver - so we need to explicitly provide
-                            // the keyspace for the DC aware policy.
-                            loadBalancing: new DCAwareRoundRobinPolicy("dc1"),
-                        },
-                    });
-                    const client = new Client(options);
-                    utils.times(
-                        120,
-                        function (n, timesNext) {
-                            client.execute(
-                                helper.queries.basic,
-                                function (err, result) {
-                                    assert.ifError(err);
-                                    assert.ok(result && result.rows);
-                                    const hostId = result.info.queriedHost;
-                                    assert.ok(hostId);
-                                    // Disabled due to #282 - we cannot test the order of hosts
-                                    // const h = client.hosts.get(hostId);
-                                    // assert.ok(h);
-                                    // assert.strictEqual(h.datacenter, "dc1");
-                                    countByHost[hostId] =
-                                        (countByHost[hostId] || 0) + 1;
-                                    timesNext();
-                                },
-                            );
-                        },
-                        next,
-                    );
-                },
-                function assertHosts(next) {
-                    const hostsQueried = Object.keys(countByHost);
-                    assert.strictEqual(hostsQueried.length, 2);
-                    // Round robin implementation in the driver shuffles the hosts
-                    // instead of doing a proper round robin.
-                    // This means that the following check will fail in about 1 in 10^9 runs.
-                    assert.ok(countByHost[hostsQueried[0]] > 10);
-                    assert.ok(countByHost[hostsQueried[1]] > 10);
-                    next();
-                },
-                helper.ccmHelper.remove,
-            ],
-            done,
-        );
+
+    before(helper.ccmHelper.start("2:2:2"));
+    after(helper.ccmHelper.remove);
+
+    it("should never hit remote dc with DCAwareRoundRobinPolicy", async function () {
+        const options = utils.deepExtend({}, helper.baseOptions, {
+            policies: {
+                loadBalancing: new DCAwareRoundRobinPolicy("dc1"),
+            },
+        });
+
+        await assertOnlyLocalCoordinators(options);
+    });
+
+    it("should use localDataCenter with the default policy", async function () {
+        // No load-balancing policy is specified: localDataCenter must configure
+        // the driver's built-in default policy.
+        const options = utils.deepExtend({}, helper.baseOptions);
+
+        await assertOnlyLocalCoordinators(options);
     });
 });
+
+async function assertOnlyLocalCoordinators(options) {
+    const client = new Client(options);
+    try {
+        await client.connect();
+
+        const datacenterByHost = new Map(
+            client.hosts
+                .values()
+                .map((host) => [helper.lastOctetOf(host), host.datacenter]),
+        );
+        assert.deepStrictEqual(
+            Array.from(new Set(datacenterByHost.values())).sort(),
+            ["dc1", "dc2", "dc3"],
+        );
+        const localCoordinators = Array.from(datacenterByHost)
+            .filter(([, datacenter]) => datacenter === "dc1")
+            .map(([host]) => host)
+            .sort();
+        assert.strictEqual(localCoordinators.length, 2);
+
+        const results = await Promise.all(
+            Array.from({ length: 120 }, () =>
+                client.execute(helper.queries.basic),
+            ),
+        );
+        const countByHost = new Map();
+        for (const result of results) {
+            assert.ok(result && result.rows);
+            const coordinator = helper.lastOctetOf(result.info.queriedHost);
+            assert.strictEqual(
+                datacenterByHost.get(coordinator),
+                "dc1",
+                `Expected coordinator ${result.info.queriedHost} to be in dc1`,
+            );
+            countByHost.set(
+                coordinator,
+                (countByHost.get(coordinator) || 0) + 1,
+            );
+        }
+
+        assert.deepStrictEqual(
+            Array.from(countByHost.keys()).sort(),
+            localCoordinators,
+        );
+        // Hosts are shuffled rather than selected in a strict round robin. The
+        // chance of either host receiving at most ten of 120 requests is negligible.
+        countByHost.forEach((count) => assert.ok(count > 10));
+    } finally {
+        await client.shutdown();
+    }
+}
+
 describe("TokenAwarePolicy", function () {
     this.timeout(120000);
     describe("with a 3:3 node topology", function () {

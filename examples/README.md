@@ -14,6 +14,8 @@ npm install
 You also need Cassandra or ScyllaDB running with at least three nodes
 (the examples use a replication factor 3 which can be satisfied by a database containing at least that number of nodes).
 By default, examples assume the entrypoint for the database is ``172.17.0.2:9042`` but you can change it by setting ``SCYLLA_URI`` env variable.
+Set ``DATACENTER`` as well to restrict coordinator selection to a specific
+datacenter. Without it, custom contact points do not assume a datacenter name.
 
 You can run all examples with the following command:
 
