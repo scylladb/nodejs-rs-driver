@@ -173,7 +173,8 @@ let policy = new DefaultLoadBalancingPolicy({
 
 The policy returned from `defaultLoadBalancingPolicy()` is changed from
 legacy to new `DefaultLoadBalancingPolicy`. When `localDc` option is provided,
-the load balancing will be set to allow connection to the provided datacenter.
+the load-balancing policy uses the provided datacenter for coordinator
+selection and excludes remote datacenters from query plans.
 
 When `localDc` is not provided, `localDataCenter` from client options is used as
 a fallback. Datacenter failover is disabled unless `permitDcFailover` is set
