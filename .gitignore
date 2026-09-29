@@ -242,3 +242,8 @@ docs/source/api/
 # Benchmarker files
 *.db
 *.svg
+
+# LLVM coverage profiles. The instrumented addon that `npm run coverage` builds
+# writes one into the working directory of any process that loads it outside
+# the script's own run, such as after a run that was killed outright.
+*.profraw

@@ -1,0 +1,111 @@
+# The goal of this workflow is to measure the code coverage of both layers of
+# the driver -- the JS API (main.js and lib/) and the Rust N-API addon (src/) --
+# as exercised by the test suites. See scripts/coverage.sh for how.
+#
+# It runs the suites the unit and integration workflows run -- unit, unit-gc,
+# unit-not-supported, integration and integration-gc -- once, on one host:
+# x86_64 Linux and node 20, against the ScyllaDB version in scylla_version.env.
+# The aarch64 host in those workflows' matrices runs the same code, so measuring
+# it as well would only repeat this number. The integration workflow's Apache
+# Cassandra leg is not measured either: the lane measures against one server,
+# the one the driver is built for, so lines that only a Cassandra server reaches
+# count as uncovered, alike on every run.
+name: Code coverage
+env:
+  PEDANTIC: true
+  RUST_BACKTRACE: full
+"on":
+  push:
+    branches:
+      - main
+      - "branch-**"
+  pull_request:
+    branches:
+      - '**'
+
+permissions:
+  contents: read
+
+concurrency:
+  # A new push to a pull request supersedes its running measurement, as in the
+  # other workflows. A push to main or a release branch must not supersede
+  # anything: the report of every one of those commits is what pull requests
+  # built on it are compared against. cancel-in-progress: false alone would not
+  # do, as GitHub keeps one waiting run per group and a newer run replaces it,
+  # so those runs get a group of their own, by commit.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  coverage:
+    name: Measure code coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      # Set at job level so that no step can run without them. Without
+      # CCM_IS_SCYLLA the integration suites would run against Cassandra, and
+      # the ScyllaDB-only tests in them would not even be defined.
+      CCM_IS_SCYLLA: "true"
+      CCM_PATH: ./scylla-ccm
+      SCYLLA_ARCH: x86_64
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      # Takes seconds, as every tool coverage.sh runs is stubbed out. A change
+      # that makes the script stop at a failing suite, or exit 0 after one,
+      # fails here rather than going unnoticed until a suite fails.
+      - name: Test the coverage script
+        run: bash scripts/test-coverage.sh
+      - name: Setup node
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 20
+          cache: npm
+      # Not .github/common/setup: its own checkout keeps the job's token
+      # configured for git, within reach of the build and the tests.
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: stable
+          components: llvm-tools-preview
+      # Built from crates.io rather than fetched by an install action, which
+      # would be one more third-party action for the repository's list of
+      # allowed actions to cover. The build takes about a minute.
+      - name: Install cargo-llvm-cov
+        run: cargo install cargo-llvm-cov@0.9.1 --locked
+      # Java and ccm are installed the same way .github/common/integration does.
+      - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          distribution: 'temurin'
+          java-version: '8'
+      - name: Install ccm
+        # The ssl tests need the certificates in scylla-ccm's ssl/ directory
+        # (hence CCM_PATH), which installing ccm as a package does not keep.
+        run: |
+          git clone https://github.com/scylladb/scylla-ccm.git
+          pip install --user --upgrade psutil
+          pip install --user ./scylla-ccm
+      - name: Install dependencies
+        run: npm ci
+      - name: Run tests with coverage
+        run: npm run coverage
+      - name: Publish coverage summary
+        if: always()
+        run: |
+          for layer in js rust; do
+            echo "## Coverage: $layer"
+            echo '```'
+            cat "coverage/$layer/summary.txt" 2>/dev/null || echo "no report: the run stopped before it was written"
+            echo '```'
+          done >> "$GITHUB_STEP_SUMMARY"
+      # The artifact's root is coverage/, the common ancestor of the two paths,
+      # so it holds js/ and rust/, each with an lcov.info and an HTML report.
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: coverage-report
+          path: |
+            coverage/js/
+            coverage/rust/
