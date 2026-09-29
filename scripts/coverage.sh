@@ -6,6 +6,10 @@
 #   coverage/js/lcov.info    HTML report in coverage/js/lcov-report/
 #   coverage/rust/lcov.info  HTML report in coverage/rust/html/
 #
+# and coverage/rust/summary.json, cargo llvm-cov's own count of the lines in
+# each file, which the upload job in .github/workflows/coverage.yml checks the
+# Rust report against.
+#
 # The suites are the ones the unit and integration workflows run: unit, unit-gc
 # and unit-not-supported, then integration and integration-gc against a CCM
 # cluster (see "Test dependencies" in CONTRIBUTING.md for what those need, and
@@ -192,6 +196,7 @@ fi
     # default.
     host=$(rustc -vV | sed -n 's/^host: //p')
     cargo llvm-cov report --target "$host" --lcov --output-path coverage/rust/lcov.info || status=1
+    cargo llvm-cov report --target "$host" --json --summary-only --output-path coverage/rust/summary.json || status=1
     cargo llvm-cov report --target "$host" --html --output-dir coverage/rust || status=1
     cargo llvm-cov report --target "$host" --summary-only | tee coverage/rust/summary.txt || status=1
 

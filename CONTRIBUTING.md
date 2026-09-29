@@ -97,3 +97,13 @@ Only one run at a time can use a checkout: while one holds `target/coverage.lock
 
 CI runs the same script, integration suites included, in `.github/workflows/coverage.yml`,
 on x86_64 Linux with node 20 and against the ScyllaDB version in `scylla_version.env`, and keeps both reports as the `coverage-report` workflow artifact.
+It also uploads both reports, together, to [Codecov](https://codecov.io/gh/scylladb/nodejs-rs-driver),
+which comments the coverage delta on the pull request and reports it as a check; the components in `codecov.yml` split the figure into the JS API and the Rust addon.
+Before the upload, a check in the workflow makes sure that each report names only tracked files and is complete:
+the JS report must list every source in `main.js` and `lib/`, and the Rust report must match, file for file, the line counts that cargo llvm-cov writes to `coverage/rust/summary.json`.
+`scripts/test-report-check.py` runs that check against good and broken reports; CI runs it before the real run too.
+Both of its statuses are `informational` in `codecov.yml`, so a drop annotates the pull request but never blocks merging it.
+Only a successful run uploads: a run with failing tests still keeps its reports as a workflow artifact, but sends nothing to Codecov.
+Codecov then has no report for that commit, and compares the pull requests that build on it against the nearest ancestor that has one.
+Pull requests from forks get no Codecov token and fall back to Codecov's best-effort tokenless upload.
+Dependabot's pull requests get Dependabot's secrets rather than the repository's, so they upload nothing unless `CODECOV_TOKEN` is set as a Dependabot secret too.

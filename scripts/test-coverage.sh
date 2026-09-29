@@ -16,8 +16,8 @@ trap 'rm -rf "$work"' EXIT
 repo=$work/repo
 failures=0
 
-all_steps="version show-env clean build:test tsc unit unit-gc unit-not-supported integration integration-gc c8 rustc report-lcov report-html report-summary"
-unit_steps="version show-env clean build:test tsc unit unit-gc unit-not-supported c8 rustc report-lcov report-html report-summary"
+all_steps="version show-env clean build:test tsc unit unit-gc unit-not-supported integration integration-gc c8 rustc report-lcov report-json report-html report-summary"
+unit_steps="version show-env clean build:test tsc unit unit-gc unit-not-supported c8 rustc report-lcov report-json report-html report-summary"
 
 # The files a build of the driver puts in place, in the copy's lib/ below, and
 # the sources next to them, which no run may touch.
@@ -67,6 +67,10 @@ case "$*" in
 "llvm-cov report --target x86_64-unknown-linux-gnu --lcov --output-path coverage/rust/lcov.info")
     step report-lcov
     : >coverage/rust/lcov.info
+    ;;
+"llvm-cov report --target x86_64-unknown-linux-gnu --json --summary-only --output-path coverage/rust/summary.json")
+    step report-json
+    : >coverage/rust/summary.json
     ;;
 "llvm-cov report --target x86_64-unknown-linux-gnu --html --output-dir coverage/rust") step report-html ;;
 "llvm-cov report --target x86_64-unknown-linux-gnu --summary-only") step report-summary ;;
@@ -329,7 +333,7 @@ STUB_NO_PROFILE=unit-gc run
 expect "a suite that writes no LLVM profile fails the run, after every other step" 1 "$all_steps"
 expect_output "... and says so" "npm run unit-gc wrote no .profraw file"
 
-for report in c8 report-lcov report-html report-summary; do
+for report in c8 report-lcov report-json report-html report-summary; do
     setup
     STUB_FAIL=$report run
     expect "a failing $report step fails the run, after every other report" 1 "$all_steps"
