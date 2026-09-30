@@ -6,7 +6,9 @@ const utils = require("../../../../lib/utils");
 const { StrategyKind } = require("../../../../lib/metadata/strategy");
 
 describe("Metadata#getKeyspace()", function () {
-    this.timeout(60000);
+    // The longest tests below execute four DDL statements in series, each of which may
+    // spend up to 60s awaiting schema agreement, plus the time needed to execute the query.
+    this.timeout(300000);
 
     // Cassandra does not reliably reach schema agreement for some of those tests within
     // the 10s the driver waits by default. 60s is what the underlying Rust driver itself defaults to.
