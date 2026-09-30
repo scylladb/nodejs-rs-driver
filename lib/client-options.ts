@@ -423,7 +423,14 @@ export interface ClientOptions {
      *
      * When not set, events at `warning` level and above are captured. Set to `'off'` to disable logging.
      */
-    logLevel?: string;
+    logLevel?:
+        | types.logLevels
+        | "trace"
+        | "debug"
+        | "info"
+        | "warning"
+        | "error"
+        | "off";
     /**
      * The array of [execution profiles]{@link ExecutionProfile}.
      */

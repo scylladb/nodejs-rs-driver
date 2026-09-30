@@ -108,6 +108,19 @@ async function myTest(): Promise<any> {
         logLevel: types.logLevels.off,
     });
 
+    new Client({
+        contactPoints: ["h1", "h2"],
+        localDataCenter: "dc1",
+        logLevel: "info",
+    });
+
+    new Client({
+        contactPoints: ["h1", "h2"],
+        localDataCenter: "dc1",
+        // @ts-expect-error Unsupported log levels are rejected at runtime.
+        logLevel: "verbose",
+    });
+
     let ep1: ExecutionProfile = new ExecutionProfile("oltp1", {
         consistency: types.consistencies.localOne,
     });
