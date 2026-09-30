@@ -55,7 +55,7 @@ namespace protocolVersion {
      * @ignore
      */
     export function isSupportedCassandra(version: number): boolean {
-        return version <= 0x04 && version >= 0x01;
+        return version === protocolVersion.v4;
     }
     /**
      * Determines whether the protocol version is supported by this driver.
