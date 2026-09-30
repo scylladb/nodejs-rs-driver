@@ -12,7 +12,7 @@ existing policies, see [migration guide](../migration-guide/migration-guide.md#l
 `DefaultLoadBalancingPolicy` is configured only at creation time.
 You can set all or a subset of these options:
 
-- `preferDatacenter` (default: `null` - no preference)
+- `preferDatacenter` (default: `null` - no explicit policy preference)
 - `preferRack` (default: `null` - no preference)
 - `tokenAware` (default: `true`)
 - `permitDcFailover` (default: `false`)
@@ -20,6 +20,29 @@ You can set all or a subset of these options:
 - `allowList` (default: `null` - all hosts are accepted)
 
 You can assume `undefined` is equivalent to `null` for the purpose of all configurations.
+
+`ClientOptions.localDataCenter` sets the session-level preferred datacenter.
+`DefaultLoadBalancingPolicy` uses it when `preferDatacenter` is `null` or
+`undefined`; an explicit `preferDatacenter` takes precedence. The session-level
+preference does not change `permitDcFailover`: failover remains disabled by
+default, and an explicit `permitDcFailover: true` is preserved. If neither
+preference is provided, the policy treats all datacenters as local.
+
+The session-level preference also applies to `RoundRobinPolicy` and to
+`DCAwareRoundRobinPolicy()` constructed without a datacenter. Passing a
+datacenter to `DCAwareRoundRobinPolicy` creates an explicit policy preference,
+which takes precedence over `localDataCenter`. The same rules apply when these
+policies are wrapped in another supported Rust-backed policy.
+
+The driver validates `localDataCenter` after the native session is created. If
+the initial topology contains datacenter metadata, the configured datacenter
+must also contain token-ring nodes; otherwise `connect()` fails. This check
+still runs when an explicit policy preference overrides `localDataCenter`. If
+no node reports a datacenter yet, the driver skips this check so the native
+driver's background metadata refresh can recover from a temporary metadata-read
+failure. In that case, `connect()` succeeds without validating the configured
+name. Validation is not rerun after a metadata refresh, so an incorrect name in
+this rare path can surface later as an empty query plan.
 
 ```js
 const DefaultLoadBalancingPolicy = require("@scylladb/driver").policies.loadBalancing.DefaultLoadBalancingPolicy;

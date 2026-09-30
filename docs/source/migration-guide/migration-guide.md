@@ -224,17 +224,46 @@ let policy = new DefaultLoadBalancingPolicy({
 
 The policy returned from `defaultLoadBalancingPolicy()` is changed from
 legacy to new `DefaultLoadBalancingPolicy`. When `localDc` option is provided,
-the load balancing will be set to allow connection to the provided datacenter.
-When `localDc` is not provided connections to all nodes will be allowed.
+the load-balancing policy uses the provided datacenter for coordinator
+selection and excludes remote datacenters from query plans.
 
-Before this fix, affected releases silently ignored the `localDc` argument and allowed nodes from all
-datacenters. `localDc` is now enforced, and datacenter names are matched case-sensitively. Before upgrading,
-verify that it exactly matches a datacenter reported by the cluster; an unknown or case-mismatched name leaves
-no eligible nodes and causes requests to fail with an empty load-balancing plan.
+Some earlier releases silently ignored the `localDc` argument and allowed
+coordinators from all datacenters. The argument is now enforced. Datacenter
+names are case-sensitive; an unknown or case-mismatched `localDc` leaves no
+eligible nodes and requests fail with an empty load-balancing plan.
 
-**WARNING**:
-This is a change in behavior. In the `cassandra-driver`, when `localDc` would not be provided,
-`localDataCenter` from client options would be used.
+When `localDc` is not provided, the policy has no explicit datacenter
+preference. `ClientOptions.localDataCenter` then supplies the native session's
+preference. This session preference is also honored by `RoundRobinPolicy` and
+by `DCAwareRoundRobinPolicy()` constructed without a datacenter, including
+supported Rust-backed wrappers around these policies. An explicit policy
+preference, such as `preferDatacenter` or the `DCAwareRoundRobinPolicy(localDc)`
+argument, takes precedence over `localDataCenter`. If neither the policy nor
+the session has a preference, nodes from all datacenters are eligible as
+coordinators.
+
+The session preference does not override the policy's datacenter-failover
+setting. Failover remains disabled by default, while an explicit
+`permitDcFailover: true` is preserved.
+
+When provided, `localDataCenter` must be a non-empty string. After creating the
+native session, the driver checks it against the initial topology's token ring
+when at least one node reports datacenter metadata, even when an explicit policy
+preference takes precedence over it. An unknown name, or a datacenter with no
+token-ring nodes, then causes `connect()` to fail. If no node reports a
+datacenter yet, the driver skips validation so a background metadata refresh
+can recover from a temporary metadata-read failure. In that case, `connect()`
+succeeds without validating the configured name. Validation is not rerun after
+a metadata refresh, so an incorrect name in this rare path can surface later as
+an empty query plan.
+
+These settings control coordinator selection; they do not restrict topology
+discovery or act as a host allow list. Use `AllowListPolicy` or the `allowList`
+option when connections must be limited to specific hosts.
+
+For token-aware requests to `SimpleStrategy` keyspaces, a preferred datacenter
+with datacenter failover disabled emits a warning for every query plan. With
+the default `logLevel`, each warning is delivered as a client `'log'` event.
 
 ## Retry policies
 

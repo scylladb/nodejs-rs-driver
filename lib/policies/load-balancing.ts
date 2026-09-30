@@ -224,7 +224,7 @@ class TokenAwarePolicy extends LoadBalancingRustImplemented {
      * @ignore
      */
     getRustConfiguration(): _rust.LoadBalancingConfig {
-        const options = this.childPolicy.getRustConfiguration();
+        const options = { ...this.childPolicy.getRustConfiguration() };
         options.tokenAware = true;
         return options;
     }
@@ -299,7 +299,7 @@ class AllowListPolicy extends LoadBalancingRustImplemented {
      * @ignore
      */
     getRustConfiguration(): _rust.LoadBalancingConfig {
-        const options = this.childPolicy.getRustConfiguration();
+        const options = { ...this.childPolicy.getRustConfiguration() };
         const childAllowList = options.allowList;
         if (childAllowList) {
             // In case some other policy provided allow list, we take an intersection
@@ -788,8 +788,9 @@ class LoadBalancingConfig {
      * When a preferred datacenter is set, the policy will treat nodes in that
      * datacenter as "local" nodes, and nodes in other datacenters as "remote" nodes.
      * This affects the order in which nodes are returned by the policy when
-     * selecting replicas for read or write operations. If no preferred datacenter
-     * is specified, the policy will treat all nodes as local nodes.
+     * selecting replicas for read or write operations. If this policy does not
+     * specify a preferred datacenter, it inherits `ClientOptions.localDataCenter`.
+     * If neither preference is set, the policy treats all nodes as local nodes.
      *
      * When datacenter failover is disabled (`permitDcFailover` is set to false),
      * the default policy will only include local nodes in load balancing plans.

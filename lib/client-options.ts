@@ -69,10 +69,16 @@ export interface ClientOptions {
         proxies: Array<ClientRoutesProxy>;
     };
     /**
-     * The local data center to use.
+     * The session-level data center preference for coordinator selection. It must be a non-empty string.
      *
-     * If using DCAwareRoundRobinPolicy (default), this option is required and only hosts from this data center are
-     * connected to and used in query plans.
+     * Supported load-balancing policies inherit this value when they do not configure their own data center.
+     * An explicit policy preference takes precedence. Data center failover is disabled by default and can be enabled
+     * through [DefaultLoadBalancingPolicy]{@link module:policies/loadBalancing~DefaultLoadBalancingPolicy}.
+     *
+     * The driver validates this value against the initial topology's token ring when data center metadata is
+     * available. If the initial topology contains no data center metadata, validation is skipped so a background
+     * metadata refresh can recover; validation is not repeated after that refresh. This option affects query plans;
+     * it does not restrict cluster discovery or act as a host allow list.
      */
     localDataCenter?: string;
     /**
@@ -730,6 +736,14 @@ function extend(baseOptions?: any, userOptions?: any): ClientOptions {
         }
     }
 
+    if (
+        options.localDataCenter !== undefined &&
+        (typeof options.localDataCenter !== "string" ||
+            options.localDataCenter.length === 0)
+    ) {
+        throw new TypeError("localDataCenter must be a non-empty string");
+    }
+
     options.sni = undefined;
 
     if (!options.logEmitter) {
@@ -1226,6 +1240,7 @@ function setRustOptions(options: ClientOptions): rust.SessionOptions {
     }
     rustOptions.clientId = options.id;
     rustOptions.keyspace = options.keyspace;
+    rustOptions.localDataCenter = options.localDataCenter;
     if (options.maxPrepared) {
         rustOptions.cacheSize = options.maxPrepared;
     }
@@ -1247,8 +1262,17 @@ function setRustOptions(options: ClientOptions): rust.SessionOptions {
     if (options.policies) {
         if (options.policies.loadBalancing) {
             try {
-                rustOptions.loadBalancingConfig =
+                const loadBalancingConfig =
                     options.policies.loadBalancing.getRustConfiguration();
+                rustOptions.loadBalancingConfig = Object.values(
+                    loadBalancingConfig,
+                ).includes(null)
+                    ? Object.fromEntries(
+                          Object.entries(loadBalancingConfig).filter(
+                              ([, value]) => value !== null,
+                          ),
+                      )
+                    : loadBalancingConfig;
             } catch (e) {
                 // We will catch this error when:
                 //  - The policy does not implement getRustConfiguration (someone provided policy that does not inherit from LoadBalancingPolicy)

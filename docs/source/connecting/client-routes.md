@@ -25,7 +25,7 @@ const { Client } = require('@scylladb/driver');
 (async () => {
   const client = new Client({
     contactPoints: ['my-privatelink-endpoint.amazonaws.com:9042'],
-    localDataCenter: 'datacenter1',
+    localDataCenter: '<your-dc>',
     clientRoutes: {
       proxies: [
         { connectionId: 'my-connection-id' },
@@ -36,6 +36,10 @@ const { Client } = require('@scylladb/driver');
   await client.connect();
 })();
 ```
+
+Replace `<your-dc>` with the datacenter name reported by your cluster. This
+setting controls coordinator selection; it does not filter discovered hosts or
+client routes.
 
 `contactPoints` is still required — use the address your cloud setup gives you for the
 initial connection. Contact points are never translated, which is what makes the first connection

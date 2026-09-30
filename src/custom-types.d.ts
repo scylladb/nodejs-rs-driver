@@ -94,6 +94,7 @@ export interface ClientRoutesConfig {
 /** Options for creating a new session via SessionWrapper.createSession. */
 export interface SessionOptions {
   connectPoints?: Array<string>
+  localDataCenter?: string
   keyspace?: string
   applicationName?: string
   applicationVersion?: string

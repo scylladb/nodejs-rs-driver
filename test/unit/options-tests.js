@@ -8,8 +8,13 @@ const {
     MappingAddressTranslator,
 } = require("../../lib/policies/address-resolution");
 const {
+    AllowListPolicy,
+    DCAwareRoundRobinPolicy,
     DefaultLoadBalancingPolicy,
+    RoundRobinPolicy,
+    TokenAwarePolicy,
 } = require("../../lib/policies/load-balancing");
+const { defaultLoadBalancingPolicy } = require("../../lib/policies");
 const { RetryPolicy } = require("../../lib/policies/retry");
 const { Uuid } = require("../../lib/types");
 const { PlainTextAuthProvider } = require("../../lib/auth");
@@ -140,6 +145,248 @@ describe("Client options", function () {
                     }),
                 /driverConfigReportingEnabled must be a boolean value/,
             );
+        });
+    });
+
+    describe("localDataCenter", function () {
+        function rustOptions(localDataCenter, policy) {
+            return setRustOptions({
+                localDataCenter,
+                policies: { loadBalancing: policy },
+            });
+        }
+
+        it("should forward localDataCenter separately from the default client policy", function () {
+            const extended = extend({
+                contactPoints: ["127.0.0.1"],
+                localDataCenter: "dc1",
+            });
+            const policyConfig =
+                extended.policies.loadBalancing.getRustConfiguration();
+            const nativeOptions = setRustOptions(extended);
+            const config = nativeOptions.loadBalancingConfig;
+
+            assert.strictEqual(config, policyConfig);
+            assert.strictEqual(config.preferDatacenter, undefined);
+            assert.strictEqual(config.permitDcFailover, undefined);
+            assert.strictEqual(nativeOptions.localDataCenter, "dc1");
+            rust.testsCheckClientOption(nativeOptions, 4);
+        });
+
+        it("should allow an omitted or undefined value", function () {
+            assert.doesNotThrow(() => extend({ contactPoints: ["127.0.0.1"] }));
+            assert.doesNotThrow(() =>
+                extend({
+                    contactPoints: ["127.0.0.1"],
+                    localDataCenter: undefined,
+                }),
+            );
+        });
+
+        it("should reject null, empty, and non-string values", function () {
+            for (const localDataCenter of [null, "", 1, {}, []]) {
+                assert.throws(
+                    () =>
+                        extend({
+                            contactPoints: ["127.0.0.1"],
+                            localDataCenter,
+                        }),
+                    TypeError,
+                    "localDataCenter must be a non-empty string",
+                );
+            }
+        });
+
+        it("should preserve a non-empty value without trimming it", function () {
+            const options = extend({
+                contactPoints: ["127.0.0.1"],
+                localDataCenter: "  ",
+            });
+
+            assert.strictEqual(options.localDataCenter, "  ");
+        });
+
+        it("should preserve a default policy's non-null configuration", function () {
+            const policyConfig = {
+                tokenAware: false,
+            };
+            const policy = new DefaultLoadBalancingPolicy(policyConfig);
+            const nativeOptions = rustOptions("dc1", policy);
+
+            assert.deepStrictEqual(nativeOptions.loadBalancingConfig, {
+                tokenAware: false,
+            });
+            assert.strictEqual(nativeOptions.localDataCenter, "dc1");
+        });
+
+        it("should preserve an explicit datacenter failover setting", function () {
+            const policy = new DefaultLoadBalancingPolicy({
+                permitDcFailover: true,
+            });
+
+            const nativeOptions = rustOptions("dc1", policy);
+
+            assert.deepStrictEqual(nativeOptions.loadBalancingConfig, {
+                permitDcFailover: true,
+            });
+            assert.strictEqual(nativeOptions.localDataCenter, "dc1");
+        });
+
+        it("should serialize both an explicit policy preference and the shadowed session preference", function () {
+            const policy = new DefaultLoadBalancingPolicy({
+                preferDatacenter: "policy-dc",
+                permitDcFailover: true,
+            });
+
+            const nativeOptions = rustOptions("client-dc", policy);
+
+            assert.deepStrictEqual(nativeOptions.loadBalancingConfig, {
+                preferDatacenter: "policy-dc",
+                permitDcFailover: true,
+            });
+            assert.strictEqual(nativeOptions.localDataCenter, "client-dc");
+            rust.testsCheckClientOption(nativeOptions, 5);
+        });
+
+        it("should serialize equal policy and session preferences independently", function () {
+            const policy = new DefaultLoadBalancingPolicy({
+                preferDatacenter: "dc1",
+            });
+            const nativeOptions = rustOptions("dc1", policy);
+
+            assert.deepStrictEqual(nativeOptions.loadBalancingConfig, {
+                preferDatacenter: "dc1",
+            });
+            assert.strictEqual(nativeOptions.localDataCenter, "dc1");
+        });
+
+        it("should preserve the helper datacenter preference", function () {
+            const policy = defaultLoadBalancingPolicy("policy-dc");
+            const nativeOptions = rustOptions("client-dc", policy);
+
+            assert.deepStrictEqual(nativeOptions.loadBalancingConfig, {
+                preferDatacenter: "policy-dc",
+                permitDcFailover: false,
+            });
+            assert.strictEqual(nativeOptions.localDataCenter, "client-dc");
+        });
+
+        it("should reject invalid helper datacenter preferences", function () {
+            for (const localDc of [null, "", 1, {}, []]) {
+                assert.throws(
+                    () => defaultLoadBalancingPolicy(localDc),
+                    TypeError,
+                    "localDc must be a non-empty string",
+                );
+            }
+        });
+
+        it("should not propagate client options through supported wrappers", function () {
+            class RecordingPolicy extends DefaultLoadBalancingPolicy {
+                constructor(config) {
+                    super(config);
+                    this.calls = [];
+                }
+
+                getRustConfiguration(...args) {
+                    this.calls.push(args);
+                    return super.getRustConfiguration();
+                }
+            }
+
+            const policyConfig = Object.freeze({ tokenAware: false });
+            const childPolicy = new RecordingPolicy(policyConfig);
+            const allowList = ["127.0.0.1:9042"];
+            const policy = new TokenAwarePolicy(
+                new AllowListPolicy(childPolicy, allowList),
+            );
+            const dc1Options = rustOptions("dc1", policy);
+            const dc2Options = rustOptions("dc2", policy);
+
+            assert.deepStrictEqual(dc1Options.loadBalancingConfig, {
+                tokenAware: true,
+                allowList,
+            });
+            assert.deepStrictEqual(dc2Options.loadBalancingConfig, {
+                tokenAware: true,
+                allowList,
+            });
+            assert.strictEqual(dc1Options.localDataCenter, "dc1");
+            assert.strictEqual(dc2Options.localDataCenter, "dc2");
+            assert.deepStrictEqual(childPolicy.calls, [[], []]);
+            assert.deepStrictEqual(policyConfig, { tokenAware: false });
+        });
+
+        it("should not mutate a policy reused by clients", function () {
+            const policyConfig = Object.freeze({ tokenAware: false });
+            const policy = new DefaultLoadBalancingPolicy(policyConfig);
+
+            const dc1Options = rustOptions("dc1", policy);
+            const dc2Options = rustOptions("dc2", policy);
+
+            assert.deepStrictEqual(
+                dc1Options.loadBalancingConfig,
+                policyConfig,
+            );
+            assert.deepStrictEqual(
+                dc2Options.loadBalancingConfig,
+                policyConfig,
+            );
+            assert.strictEqual(dc1Options.localDataCenter, "dc1");
+            assert.strictEqual(dc2Options.localDataCenter, "dc2");
+            assert.strictEqual(policy.getRustConfiguration(), policyConfig);
+            assert.deepStrictEqual(policyConfig, { tokenAware: false });
+        });
+
+        it("should normalize a null policy preference as absent", function () {
+            const policyConfig = {
+                preferDatacenter: null,
+                tokenAware: false,
+            };
+            const policy = new DefaultLoadBalancingPolicy(policyConfig);
+            const nativeOptions = rustOptions("dc1", policy);
+
+            assert.deepStrictEqual(nativeOptions.loadBalancingConfig, {
+                tokenAware: false,
+            });
+            assert.strictEqual(nativeOptions.localDataCenter, "dc1");
+            rust.testsCheckClientOption(nativeOptions, 4);
+        });
+
+        it("should pass localDataCenter alongside RoundRobinPolicy", function () {
+            const policy = new RoundRobinPolicy();
+            const nativeOptions = rustOptions("dc1", policy);
+
+            assert.deepStrictEqual(nativeOptions.loadBalancingConfig, {
+                tokenAware: false,
+            });
+            assert.strictEqual(nativeOptions.localDataCenter, "dc1");
+        });
+
+        it("should pass localDataCenter alongside DCAwareRoundRobinPolicy without a preference", function () {
+            const policy = new DCAwareRoundRobinPolicy();
+            const nativeOptions = rustOptions("dc1", policy);
+
+            assert.deepStrictEqual(nativeOptions.loadBalancingConfig, {
+                preferDatacenter: undefined,
+                permitDcFailover: false,
+                tokenAware: false,
+            });
+            assert.strictEqual(nativeOptions.localDataCenter, "dc1");
+        });
+
+        it("should leave the default policy unchanged without localDataCenter", function () {
+            const policyConfig = { tokenAware: false };
+            const policy = new DefaultLoadBalancingPolicy(policyConfig);
+
+            const nativeOptions = rustOptions(undefined, policy);
+
+            assert.deepStrictEqual(
+                nativeOptions.loadBalancingConfig,
+                policyConfig,
+            );
+            assert.property(nativeOptions, "localDataCenter");
+            assert.strictEqual(nativeOptions.localDataCenter, undefined);
         });
     });
 

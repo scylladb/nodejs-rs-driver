@@ -106,6 +106,7 @@ pub struct ClientRoutesConfig {
 define_js_to_rust_convertible_object!(
 pub struct SessionOptions {
     connect_points, connectPoints: Vec<String>,
+    local_datacenter, localDataCenter: String,
     keyspace, keyspace: String,
     application_name, applicationName: String,
     application_version, applicationVersion: String,
@@ -331,6 +332,9 @@ fn apply_common_options<K: SessionBuilderKindSupportsKnownNodes>(
         builder = builder.driver_config_reporting(enabled);
     }
     builder = builder.known_nodes(options.connect_points.as_deref().unwrap_or(&[]));
+    if let Some(local_datacenter) = &options.local_datacenter {
+        builder = builder.prefer_datacenter(local_datacenter.to_owned());
+    }
     if let Some(keyspace) = &options.keyspace {
         builder = builder.use_keyspace(keyspace, false);
     }
