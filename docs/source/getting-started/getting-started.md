@@ -32,6 +32,33 @@ const { Client } = require('@scylladb/driver');
 
 For connecting with authentication, see the [Authentication](../connecting/authentication.md) page.
 
+### Driver configuration reporting
+
+The control connection reports a JSON description of the configuration visible to the underlying
+Rust session in the `DRIVER_CONFIG` CQL startup option. It covers native connection, control-plane,
+and query-policy settings. Query defaults and execution-profile overrides that the Node.js layer
+resolves and applies to individual statements are not reflected in the report.
+
+ScyllaDB servers with a `client_options` column (available since ScyllaDB 2026.1) expose the report
+in `system.clients.client_options`, alongside the `SESSION_ID` shared by every connection from the
+same `Client`. Earlier server versions receive these startup options but do not expose them through
+that table. `system.clients` is node-local, and only the control connection sends `DRIVER_CONFIG`,
+so inspect each node or direct the query to the node hosting the control connection to find the
+report.
+
+Reporting is enabled by default. Disable it when the client configuration must not be disclosed to
+the cluster:
+
+```javascript
+const client = new Client({
+  contactPoints: ['127.0.0.1'],
+  localDataCenter: 'datacenter1',
+  driverConfigReportingEnabled: false,
+});
+```
+
+Disabling configuration reporting does not disable `SESSION_ID`.
+
 ## Executing a Statement
 
 Once connected, you can execute CQL statements. It is strongly recommended to use **prepared statements** for repeated operations, as they improve performance and enable advanced load balancing:

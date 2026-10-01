@@ -26,6 +26,7 @@ const options = {
     keyspace: "keyspace name",
     applicationName: "App name",
     applicationVersion: "App version",
+    driverConfigReportingEnabled: false,
     id: "Client id",
     maxPrepared: 2137,
     credentials: {
@@ -92,6 +93,54 @@ describe("Client options", function () {
     });
     it("should correctly verify empty client options", function () {
         extend({ contactPoints: ["1.1.1.1"] });
+    });
+
+    describe("driverConfigReportingEnabled", function () {
+        it("should be enabled by default and forwarded to Rust", function () {
+            const extended = extend({ contactPoints: ["127.0.0.1"] });
+
+            assert.strictEqual(extended.driverConfigReportingEnabled, true);
+            assert.strictEqual(
+                setRustOptions(extended).driverConfigReportingEnabled,
+                true,
+            );
+        });
+
+        it("should forward an explicit opt-out to Rust", function () {
+            const extended = extend({
+                contactPoints: ["127.0.0.1"],
+                driverConfigReportingEnabled: false,
+            });
+
+            assert.strictEqual(
+                setRustOptions(extended).driverConfigReportingEnabled,
+                false,
+            );
+        });
+
+        it("should use the default when explicitly undefined", function () {
+            const extended = extend({
+                contactPoints: ["127.0.0.1"],
+                driverConfigReportingEnabled: undefined,
+            });
+
+            assert.strictEqual(extended.driverConfigReportingEnabled, true);
+            assert.strictEqual(
+                setRustOptions(extended).driverConfigReportingEnabled,
+                true,
+            );
+        });
+
+        it("should reject a non-boolean value", function () {
+            assert.throws(
+                () =>
+                    extend({
+                        contactPoints: ["127.0.0.1"],
+                        driverConfigReportingEnabled: "false",
+                    }),
+                /driverConfigReportingEnabled must be a boolean value/,
+            );
+        });
     });
 
     describe("protocolOptions.port", function () {

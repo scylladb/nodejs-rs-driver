@@ -93,6 +93,7 @@ async function myTest(): Promise<any> {
         id: types.Uuid.random(),
         applicationName: "My app",
         applicationVersion: "3.1.2",
+        driverConfigReportingEnabled: false,
     });
 
     otherClient = new Client({

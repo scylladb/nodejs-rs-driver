@@ -40,3 +40,22 @@ pub(crate) async fn supports_feature(session: &Session, feature: &str) -> bool {
 pub async fn scylla_supports_tablets(session: &SessionWrapper) -> bool {
     supports_feature(session.inner.get_session(), "TABLETS").await
 }
+
+/// Returns the number of connections a newly built session is expected to open:
+/// one control connection plus one default pool connection per shard of every node.
+#[napi]
+pub fn tests_expected_connection_count(session: &SessionWrapper) -> u32 {
+    let count = 1 + session
+        .inner
+        .get_session()
+        .get_cluster_state()
+        .get_nodes_info()
+        .iter()
+        .map(|node| {
+            node.sharder()
+                .map_or(1, |sharder| usize::from(sharder.nr_shards.get()))
+        })
+        .sum::<usize>();
+
+    u32::try_from(count).expect("test cluster connection count fits in u32")
+}
