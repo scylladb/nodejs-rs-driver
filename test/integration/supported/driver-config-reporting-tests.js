@@ -121,10 +121,11 @@ async function waitForClientOptions(client, clientId) {
 
         // Session creation waits only for the first pool connection to each
         // node. The remaining per-shard connections open asynchronously, so
-        // wait for the exact control-plus-pool count known by the Rust session
-        // and for every shard to be represented.
+        // wait for at least the control-plus-pool count known by the Rust
+        // session and for every shard to be represented. Closed connections
+        // can linger in system.clients, so the count is a lower bound.
         if (
-            matching.length === expectedCount &&
+            matching.length >= expectedCount &&
             observedShardCount === expectedCount - 1
         ) {
             return matching.map((row) => row.client_options);
@@ -134,7 +135,7 @@ async function waitForClientOptions(client, clientId) {
 
     assert.fail(
         `client ${clientId} did not settle in ${CLIENTS_TABLE} within ${POLL_TIMEOUT_MS}ms; ` +
-            `expected ${expectedCount} connections across ${expectedCount - 1} shards, ` +
+            `expected at least ${expectedCount} connections across ${expectedCount - 1} shards, ` +
             `last observed ${matching.length} connections across ${observedShardCount} shards`,
     );
 }
