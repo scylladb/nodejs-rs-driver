@@ -39,7 +39,9 @@ describe("Client routes options", function () {
                 "clientRoutes",
             );
         });
+    });
 
+    describe("shared option forwarding", function () {
         it("should disable driver config reporting on the default builder", function () {
             assert.strictEqual(
                 driverConfigReporting({ driverConfigReportingEnabled: false }),
