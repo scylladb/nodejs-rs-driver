@@ -47,6 +47,7 @@ describe("Driver configuration reporting", function () {
             const options = await waitForClientOptions(
                 client,
                 clientId.toString(),
+                1,
             );
 
             assertSingleSessionId(options);
@@ -102,11 +103,16 @@ function createClient(clientId, driverConfigReportingEnabled) {
     return new Client(options);
 }
 
-async function waitForClientOptions(client, clientId) {
+async function waitForClientOptions(
+    client,
+    clientId,
+    expectedDriverConfigCount,
+) {
     const deadline = Date.now() + POLL_TIMEOUT_MS;
     const expectedCount = rust.testsExpectedConnectionCount(client.rustClient);
     let matching = [];
     let observedShardCount = 0;
+    let observedDriverConfigCount = 0;
 
     while (Date.now() < deadline) {
         const result = await client.execute(
@@ -118,6 +124,9 @@ async function waitForClientOptions(client, clientId) {
                 row.client_options[CLIENT_ID] === clientId,
         );
         observedShardCount = new Set(matching.map((row) => row.shard_id)).size;
+        observedDriverConfigCount = matching.filter(
+            (row) => DRIVER_CONFIG in row.client_options,
+        ).length;
 
         // Session creation waits only for the first pool connection to each
         // node. The remaining per-shard connections open asynchronously, so
@@ -126,17 +135,24 @@ async function waitForClientOptions(client, clientId) {
         // can linger in system.clients, so the count is a lower bound.
         if (
             matching.length >= expectedCount &&
-            observedShardCount === expectedCount - 1
+            observedShardCount === expectedCount - 1 &&
+            (expectedDriverConfigCount === undefined ||
+                observedDriverConfigCount === expectedDriverConfigCount)
         ) {
             return matching.map((row) => row.client_options);
         }
         await helper.delayAsync(POLL_INTERVAL_MS);
     }
 
+    const expectedDriverConfigDetails =
+        expectedDriverConfigCount === undefined
+            ? ""
+            : ` and exactly ${expectedDriverConfigCount} DRIVER_CONFIG reports`;
     assert.fail(
         `client ${clientId} did not settle in ${CLIENTS_TABLE} within ${POLL_TIMEOUT_MS}ms; ` +
-            `expected at least ${expectedCount} connections across ${expectedCount - 1} shards, ` +
-            `last observed ${matching.length} connections across ${observedShardCount} shards`,
+            `expected at least ${expectedCount} connections across ${expectedCount - 1} shards` +
+            `${expectedDriverConfigDetails}, last observed ${matching.length} connections across ` +
+            `${observedShardCount} shards and ${observedDriverConfigCount} DRIVER_CONFIG reports`,
     );
 }
 
