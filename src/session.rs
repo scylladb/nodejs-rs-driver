@@ -1,9 +1,13 @@
 pub mod config;
-use std::sync::{Arc, Mutex};
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use config::SessionOptions;
 use napi::Env;
 use scylla::client::caching_session::CachingSession;
+use scylla::client::execution_profile::ExecutionProfileHandle;
 use scylla::response::{PagingState, PagingStateResponse};
 use scylla::statement::batch::Batch;
 use scylla::statement::{Consistency, SerialConsistency, Statement};
@@ -32,6 +36,11 @@ pub struct BatchWrapper {
 #[napi]
 pub struct SessionWrapper {
     pub(crate) inner: CachingSession,
+    /// A copy of the session's default profile with its request timeout disabled.
+    ///
+    /// A statement timeout of `None` normally inherits the session profile timeout,
+    /// so this profile is necessary to preserve the public `readTimeout: 0` contract.
+    timeout_disabled_profile: ExecutionProfileHandle,
     /// Cache of the last `ClusterSnapshot` that was computed, alongside the `Arc<ClusterState>`
     /// pointer it was built from.
     cluster_snapshot: Mutex<Option<JsThreadOnly<ClusterSnapshot>>>,
@@ -125,9 +134,16 @@ impl SessionWrapper {
             let cache_size = options.cache_size.unwrap_or(DEFAULT_CACHE_SIZE) as usize;
             let builder = configure_session_builder(options)?;
             let session = builder.build().await?;
+            let timeout_disabled_profile = session
+                .get_default_execution_profile_handle()
+                .pointee_to_builder()
+                .request_timeout(None)
+                .build()
+                .into_handle();
             let session: CachingSession = CachingSession::from(session, cache_size);
             ConvertedResult::Ok(SessionWrapper {
                 inner: session,
+                timeout_disabled_profile,
                 cluster_snapshot: Mutex::new(None),
             })
         })
@@ -418,6 +434,24 @@ macro_rules! make_apply_options {
 
                 if let Some(o) = options.is_idempotent {
                     statement.set_is_idempotent(o);
+                }
+
+                if let Some(timeout_ms) = options.read_timeout {
+                    match timeout_ms {
+                        0 => {
+                            statement.set_request_timeout(None);
+                            statement.set_execution_profile_handle(Some(
+                                self.timeout_disabled_profile.clone(),
+                            ));
+                        }
+                        1.. => statement
+                            .set_request_timeout(Some(Duration::from_millis(timeout_ms as u64))),
+                        _ => {
+                            return Err(ConvertedError::from(make_js_error(
+                                "readTimeout must be a non-negative integer",
+                            )));
+                        }
+                    }
                 }
 
                 if let Some(o) = &options.timestamp {

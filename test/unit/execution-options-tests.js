@@ -9,6 +9,7 @@ const DefaultExecutionOptions =
 const ExecutionProfile =
     require("../../lib/execution-profile").ExecutionProfile;
 const defaultOptions = require("../../lib/client-options").defaultOptions;
+const Client = require("../../lib/client");
 
 describe("DefaultExecutionOptions", () => {
     describe("create()", () => {
@@ -133,6 +134,44 @@ describe("DefaultExecutionOptions", () => {
             );
         });
 
+        it("should preserve read timeout precedence when a higher-priority value is zero", () => {
+            const clientOptions = defaultOptions();
+            clientOptions.socketOptions.readTimeout = 3456;
+
+            const queryOverride = DefaultExecutionOptions.create(
+                { readTimeout: 0 },
+                getClientFake(
+                    new ExecutionProfile("query-zero", { readTimeout: 1000 }),
+                    clientOptions,
+                ),
+            );
+            assert.strictEqual(queryOverride.getReadTimeout(), 0);
+
+            const profileOverride = DefaultExecutionOptions.create(
+                {},
+                getClientFake(
+                    new ExecutionProfile("profile-zero", { readTimeout: 0 }),
+                    clientOptions,
+                ),
+            );
+            assert.strictEqual(profileOverride.getReadTimeout(), 0);
+        });
+
+        it("should reject invalid query read timeouts", () => {
+            [-1, 1.5, NaN, Infinity, 0x80000000, "100"].forEach(
+                (readTimeout) => {
+                    assert.throws(
+                        () =>
+                            DefaultExecutionOptions.create(
+                                { readTimeout },
+                                getClientFake(),
+                            ),
+                        /QueryOptions\.readTimeout must be an integer between 0 and 2147483647/,
+                    );
+                },
+            );
+        });
+
         it("should allow null, undefined or function queryOptions argument", () => {
             const executionProfile = new ExecutionProfile("a", {
                 consistency: 1,
@@ -227,6 +266,27 @@ describe("DefaultExecutionOptions", () => {
             assert.ok(value.equals(types.Long.ONE));
             assert.strictEqual(this.called, 1);
         });
+    });
+});
+
+describe("Client#batch()", () => {
+    it("should validate query read timeout before connecting", async () => {
+        const client = new Client(helper.baseOptions);
+        client.isShuttingDown = true;
+
+        await assert.rejects(
+            client.batch(["SELECT key FROM system.local"], {
+                readTimeout: -1,
+            }),
+            (err) => {
+                assert.ok(err instanceof TypeError);
+                assert.match(
+                    err.message,
+                    /QueryOptions\.readTimeout must be an integer between 0 and 2147483647/,
+                );
+                return true;
+            },
+        );
     });
 });
 

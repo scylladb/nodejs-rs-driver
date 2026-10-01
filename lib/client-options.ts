@@ -7,7 +7,7 @@ import utils = require("./utils");
 import tracker = require("./tracker");
 import metrics = require("./metrics");
 import auth = require("./auth");
-import { throwNotSupported } from "./new-utils";
+import { throwNotSupported, validateReadTimeout } from "./new-utils";
 import errors = require("./errors");
 import rust = require("../index");
 import {
@@ -302,22 +302,20 @@ export interface ClientOptions {
          */
         keepAliveDelay?: number;
         /**
-         * Per-host read timeout in milliseconds.
+         * Client-side deadline in milliseconds for the coordinator-request phase of
+         * each statement or batch execution.
          *
-         * Please note that this is not the maximum time a call to {@link Client#execute} may have to wait;
-         * this is the maximum time that call will wait for one particular Cassandra host, but other hosts will be tried if
-         * one of them timeout. In other words, a {@link Client#execute} call may theoretically wait up to
-         * `readTimeout * number_of_cassandra_hosts` (though the total number of hosts tried for a given query also
-         * depends on the LoadBalancingPolicy in use).
+         * Coordinator attempts, retries, and speculative executions share the same time
+         * budget. On expiry the client stops waiting and starts no further attempts; work
+         * already sent to the database may still complete. Each page of a paged query
+         * receives a new deadline.
          *
-         * When setting this value, keep in mind the following:
-         * - the timeout settings used on the Cassandra side (*_request_timeout_in_ms in cassandra.yaml) should be taken
-         * into account when picking a value for this read timeout. You should pick a value a couple of seconds greater than
-         * the Cassandra timeout settings.
-         * - the read timeout is only approximate and only control the timeout to one Cassandra host, not the full query.
+         * Connection setup, metadata requests, preparation requests, and post-response
+         * work are outside it.
          *
-         * Setting a value of 0 disables read timeouts. Default: `12000`.
-         * [TODO: Add support for this field]
+         * A deadline expiry rejects with a native error named `ExecutionError`. Setting
+         * this value to `0` disables the client-side deadline. The value must be an integer
+         * between `0` and `2147483647`. Default: `12000`.
          */
         readTimeout?: number;
         /**
@@ -926,9 +924,10 @@ function validateSocketOptions(
     if (!socketOptions) {
         throw new TypeError("socketOptions not defined in options");
     }
-    if (typeof socketOptions.readTimeout !== "number") {
-        throw new TypeError("socketOptions.readTimeout must be a Number");
+    if (socketOptions.readTimeout === undefined) {
+        throw new TypeError("socketOptions.readTimeout must be defined");
     }
+    validateReadTimeout(socketOptions.readTimeout, "socketOptions.readTimeout");
     if (
         typeof socketOptions.coalescingThreshold !== "number" ||
         socketOptions.coalescingThreshold <= 0

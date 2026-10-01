@@ -143,6 +143,31 @@ describe("Client options", function () {
         });
     });
 
+    describe("socketOptions.readTimeout", function () {
+        it("should accept zero", function () {
+            const result = extend({
+                contactPoints: ["1.1.1.1"],
+                socketOptions: { readTimeout: 0 },
+            });
+            assert.strictEqual(result.socketOptions.readTimeout, 0);
+        });
+
+        it("should reject invalid values", function () {
+            [-1, 1.5, NaN, Infinity, 0x80000000, "100"].forEach(
+                (readTimeout) => {
+                    assert.throws(
+                        () =>
+                            extend({
+                                contactPoints: ["1.1.1.1"],
+                                socketOptions: { readTimeout },
+                            }),
+                        /socketOptions\.readTimeout must be an integer between 0 and 2147483647/,
+                    );
+                },
+            );
+        });
+    });
+
     describe("protocolOptions.port", function () {
         function connectPointsFor(contactPoints, port) {
             return setRustOptions({

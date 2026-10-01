@@ -33,7 +33,12 @@ export class ExecutionProfile {
     consistency?: types.consistencies;
     /** Load-balancing policy. */
     loadBalancing?: LoadBalancingPolicy;
-    /** Client read timeout. */
+    /**
+     * Client-side deadline in milliseconds for the coordinator-request phase,
+     * shared by retries and speculative attempts. It does not bound post-response
+     * processing. A value of `0` disables the deadline. The value must be an integer
+     * between `0` and `2147483647`. Query options take precedence over this value.
+     */
     readTimeout?: number;
     /** Retry policy. */
     retry?: RetryPolicy;
@@ -62,6 +67,10 @@ export class ExecutionProfile {
             throw new TypeError("Execution profile name must be a string");
         }
         const opts = options || ({} as NonNullable<typeof options>);
+        newUtils.validateReadTimeout(
+            opts.readTimeout,
+            "ExecutionProfile.readTimeout",
+        );
         this.name = name;
         this.consistency = opts.consistency;
         this.loadBalancing = opts.loadBalancing;

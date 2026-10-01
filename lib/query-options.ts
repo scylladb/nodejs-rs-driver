@@ -3,6 +3,7 @@ import rust = require("../index");
 import type { ExecutionOptions } from "./execution-options";
 import type { ExecutionProfile } from "./execution-profile";
 import type { Host, policies as policiesModule } from "../";
+import { validateReadTimeout } from "./new-utils";
 
 type RetryPolicy = policiesModule.retry.RetryPolicy;
 
@@ -119,15 +120,19 @@ export interface QueryOptions {
     /** Determines if the query must be executed as a prepared statement. */
     prepare?: boolean;
     /**
-     * When defined, it overrides the default read timeout
-     * (`socketOptions.readTimeout`) in milliseconds for this execution per coordinator.
+     * Overrides the execution profile and `socketOptions.readTimeout` deadline
+     * for this execution, in milliseconds.
      *
-     * Suitable for statements for which the coordinator may allow a longer server-side timeout, for example aggregation
-     * queries.
+     * The deadline covers the coordinator-request phase. Coordinator attempts,
+     * retries, and speculative executions share its time budget. On expiry the
+     * client stops waiting and starts no further attempts; work already sent to the
+     * database may still complete. Each page of a paged query receives a new deadline.
      *
-     * A value of `0` disables client side read timeout for the execution. Default: `undefined`.
+     * Connection setup, metadata requests, preparation, and post-response work are
+     * outside it.
      *
-     * [TODO: Add support for this field]
+     * A value of `0` disables the deadline. The value must be an integer between
+     * `0` and `2147483647`. Default: `undefined`.
      */
     readTimeout?: number;
     /**
@@ -205,7 +210,9 @@ export function queryOptionsIntoWrapper(
     rustOptions.keyspace = asProperties.keyspace;
     rustOptions.logged = asProperties.logged;
     rustOptions.prepare = asProperties.prepare;
-    rustOptions.readTimeout = options.getReadTimeout();
+    const readTimeout = options.getReadTimeout();
+    validateReadTimeout(readTimeout, "readTimeout");
+    rustOptions.readTimeout = readTimeout;
     rustOptions.routingIndexes = options.getRoutingIndexes();
     rustOptions.routingNames = options.getRoutingNames();
     rustOptions.serialConsistency = options.getSerialConsistency();
