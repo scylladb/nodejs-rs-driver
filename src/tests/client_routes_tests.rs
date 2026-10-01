@@ -27,6 +27,21 @@ pub fn tests_session_builder_mode(options: SessionOptions) -> JsResult<String> {
     })
 }
 
+/// Reports whether driver configuration reporting is enabled on the selected
+/// session builder.
+#[napi]
+pub fn tests_session_builder_driver_config_reporting(options: SessionOptions) -> JsResult<bool> {
+    with_custom_error_sync(|| {
+        let enabled = match configure_session_builder(options)? {
+            ConfiguredSessionBuilder::Default(builder) => builder.config.driver_config_reporting,
+            ConfiguredSessionBuilder::ClientRoutes(builder) => {
+                builder.config.driver_config_reporting
+            }
+        };
+        ConvertedResult::Ok(enabled)
+    })
+}
+
 /// Renders the rust `ClientRoutesConfig` that the given options convert into.
 #[napi]
 pub fn tests_describe_client_routes_config(options: SessionOptions) -> JsResult<String> {

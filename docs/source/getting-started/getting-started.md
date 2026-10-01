@@ -36,8 +36,9 @@ For connecting with authentication, see the [Authentication](../connecting/authe
 
 The control connection reports a JSON description of the configuration visible to the underlying
 Rust session in the `DRIVER_CONFIG` CQL startup option. It covers native connection, control-plane,
-and query-policy settings. Query defaults and execution-profile overrides that the Node.js layer
-resolves and applies to individual statements are not reflected in the report.
+and query-policy settings. The report's `query.defaults` entries contain native Rust defaults. They
+may differ from the Node.js query defaults and execution-profile overrides applied to individual
+statements.
 
 ScyllaDB servers with a `client_options` column (available since ScyllaDB 2026.1) expose the report
 in `system.clients.client_options`, alongside the `SESSION_ID` shared by every connection from the
