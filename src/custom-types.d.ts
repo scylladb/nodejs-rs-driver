@@ -97,6 +97,7 @@ export interface SessionOptions {
   keyspace?: string
   applicationName?: string
   applicationVersion?: string
+  driverConfigReportingEnabled?: boolean
   clientId?: string
   credentialsUsername?: string
   credentialsPassword?: string

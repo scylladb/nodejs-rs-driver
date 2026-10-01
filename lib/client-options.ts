@@ -118,6 +118,16 @@ export interface ClientOptions {
      */
     applicationVersion?: string;
     /**
+     * Whether the control connection reports the configuration visible to the native Rust session in the
+     * `DRIVER_CONFIG` startup option. Defaults that the Node.js layer resolves and applies to individual
+     * statements, including query defaults and execution-profile overrides, are not reflected in the report.
+     * ScyllaDB servers with a `system.clients.client_options` column (available since ScyllaDB 2026.1) expose
+     * the JSON report on the node hosting the control connection. Set this to `false` when the native session
+     * configuration must not be disclosed to the cluster. This does not disable the opaque `SESSION_ID`
+     * startup option. Default: `true`.
+     */
+    driverConfigReportingEnabled?: boolean;
+    /**
      * The default window size in milliseconds used to debounce node list and schema
      * refresh metadata requests. Default: 1000.
      * [TODO: Add support for this field]
@@ -667,6 +677,7 @@ function defaultOptions(): ClientOptions {
             coalescingThreshold: 65536,
         },
         authProvider: null,
+        driverConfigReportingEnabled: true,
         requestTracker: null,
         metrics: new metrics.DefaultMetrics(),
         maxPrepared: null, // Default is 512, defined on the Rust side
@@ -762,6 +773,14 @@ function extend(baseOptions?: any, userOptions?: any): ClientOptions {
     }
 
     validateApplicationInfo(options);
+
+    if (options.driverConfigReportingEnabled === undefined) {
+        options.driverConfigReportingEnabled = true;
+    } else if (typeof options.driverConfigReportingEnabled !== "boolean") {
+        throw new TypeError(
+            "driverConfigReportingEnabled must be a boolean value",
+        );
+    }
 
     return options;
 }
@@ -1200,6 +1219,8 @@ function setRustOptions(options: ClientOptions): rust.SessionOptions {
             : options.contactPoints;
     rustOptions.applicationName = options.applicationName;
     rustOptions.applicationVersion = options.applicationVersion;
+    rustOptions.driverConfigReportingEnabled =
+        options.driverConfigReportingEnabled;
     if (options.id instanceof types.Uuid) {
         options.id = options.id.toString();
     }

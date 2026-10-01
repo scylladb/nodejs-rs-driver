@@ -109,6 +109,7 @@ pub struct SessionOptions {
     keyspace, keyspace: String,
     application_name, applicationName: String,
     application_version, applicationVersion: String,
+    driver_config_reporting_enabled, driverConfigReportingEnabled: bool,
     client_id, clientId: String,
     credentials_username, credentialsUsername: String,
     credentials_password, credentialsPassword: String,
@@ -326,6 +327,9 @@ fn apply_common_options<K: SessionBuilderKindSupportsKnownNodes>(
     options: &SessionOptions,
 ) -> ConvertedResult<GenericSessionBuilder<K>> {
     builder = builder.custom_identity(self_identity(options));
+    if let Some(enabled) = options.driver_config_reporting_enabled {
+        builder = builder.driver_config_reporting(enabled);
+    }
     builder = builder.known_nodes(options.connect_points.as_deref().unwrap_or(&[]));
     if let Some(keyspace) = &options.keyspace {
         builder = builder.use_keyspace(keyspace, false);
