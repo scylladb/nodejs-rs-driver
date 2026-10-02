@@ -1,15 +1,29 @@
-import { auth, Client, ExecutionProfile, policies, types } from "../../main";
+import {
+    auth,
+    Client,
+    ExecutionProfile,
+    policies,
+    SslOptions,
+    types,
+} from "../../main";
 
 /*
  * TypeScript definitions compilation tests for Client class.
  */
 
 async function myTest(): Promise<any> {
+    const sslOptions: SslOptions = { rejectUnauthorized: false };
+
+    // SslOptions describes an options object; it is not exported at runtime.
+    // @ts-expect-error SslOptions is a type-only export, not a constructor.
+    new SslOptions();
+
     const client = new Client({
         contactPoints: ["h1", "h2"],
         localDataCenter: "dc1",
         keyspace: "ks1",
         authProvider: new auth.PlainTextAuthProvider("a", "b"),
+        sslOptions,
     });
 
     let promise: Promise<void>;

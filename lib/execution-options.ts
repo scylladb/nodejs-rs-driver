@@ -302,7 +302,6 @@ class ExecutionOptions {
 
     /**
      * @abstract
-     * @internal
      * @ignore
      */
     setHints(hints: Array<any>): void {}
