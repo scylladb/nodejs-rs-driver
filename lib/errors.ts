@@ -109,8 +109,10 @@ class ArgumentError extends DriverError {
 }
 
 /**
- * Represents a client-side error that is raised when the client didn't hear back from the server within.
- * {@link ClientOptions.socketOptions.readTimeout}.
+ * Legacy client-side timeout error type retained for API compatibility.
+ *
+ * Native coordinator-request deadlines configured through `readTimeout`
+ * currently reject with an `Error` named `ExecutionError` instead.
  */
 class OperationTimedOutError extends DriverError {
     /**
@@ -124,9 +126,7 @@ class OperationTimedOutError extends DriverError {
      */
     constructor(message: string, host?: string) {
         super(message);
-        this.info =
-            "Represents a client-side error that is raised when the client did not hear back from the server " +
-            "within socketOptions.readTimeout";
+        this.info = "Represents a legacy client-side timeout error.";
 
         this.host = host;
     }

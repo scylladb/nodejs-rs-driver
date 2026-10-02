@@ -5,6 +5,7 @@ import types = require("./types");
 import errors = require("./errors");
 import _rust = require("../index");
 import { queryOptionsIntoWrapper } from "./query-options";
+import { validateReadTimeout } from "./new-utils";
 import type { ExecutionProfile } from "./execution-profile";
 import type { Host, QueryOptions, policies as policiesModule } from "../";
 
@@ -217,9 +218,9 @@ class ExecutionOptions {
     }
 
     /**
-     * Gets the timeout in milliseconds to be used for the execution per coordinator.
+     * Gets the client-side deadline in milliseconds for the coordinator-request phase.
      *
-     * A value of `0` disables client side read timeout for the execution. Default: `undefined`.
+     * A value of `0` disables the deadline for the execution. Default: `undefined`.
      * @abstract
      */
     getReadTimeout(): number | undefined {
@@ -376,6 +377,10 @@ class DefaultExecutionOptions extends ExecutionOptions {
         super();
 
         this.#queryOptions = queryOptions;
+        validateReadTimeout(
+            this.#queryOptions.readTimeout,
+            "QueryOptions.readTimeout",
+        );
         this.#rowCallback = rowCallback;
         this.#routingKey = this.#queryOptions.routingKey;
         this.#hints = this.#queryOptions.hints;

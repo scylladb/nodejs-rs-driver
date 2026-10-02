@@ -34,6 +34,32 @@ The following option is no longer supported:
 
 - `graphOptions`: those options configure DSx specific features, that are not supported in this driver
 
+## Request deadlines
+
+`readTimeout` keeps its name and its query option → execution profile →
+`socketOptions.readTimeout` precedence, but its timing model differs from the Apache
+`cassandra-driver`.
+
+The Apache driver applies `readTimeout` separately to each coordinator attempt.
+The ScyllaDB Node.js RS Driver applies it as one client-side deadline for the
+coordinator-request phase of each native statement or batch execution.
+Coordinator attempts, retries, and speculative executions share that budget,
+and deadline expiry is not passed to the retry policy for another attempt. On
+expiry the client stops waiting and starts no further attempts, but work
+already sent to the database may still complete. Each page fetch starts a
+separate coordinator-request phase and receives a fresh deadline.
+
+This deadline is not a wall-clock upper bound for the complete client call.
+Post-response work performed by the native driver—such as propagating `USE` to
+existing connections, waiting for schema agreement, or refreshing metadata—is
+outside it. Connection setup, metadata requests, and preparation requests
+performed before the coordinator-request phase are outside it as well. Expiry
+rejects with an `Error` whose `name` is `ExecutionError` and whose message
+identifies the configured client timeout. A value of `0` disables the deadline.
+All three `readTimeout` settings require an integer from `0` through
+`2147483647`; other values throw a `TypeError`. The default remains `12000`
+milliseconds.
+
 ## Client options
 
 The following options remain unchanged:
