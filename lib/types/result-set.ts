@@ -9,9 +9,6 @@ import Uuid = require("./uuid");
 import Row = require("./row");
 import Encoder = require("../encoder");
 
-const asyncIteratorSymbol = (Symbol.asyncIterator ||
-    "@@asyncIterator") as typeof Symbol.asyncIterator;
-
 /** @module types */
 
 /**
@@ -288,7 +285,7 @@ class ResultSet {
      *   console.log(row['email']);
      * }
      */
-    [asyncIteratorSymbol](): AsyncIterator<Row> {
+    [Symbol.asyncIterator](): AsyncIterator<Row> {
         let index = 0;
         let pageState = this.rawPageState;
         let rows = this.rows as Array<Row>;
