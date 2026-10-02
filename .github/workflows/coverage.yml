@@ -1,0 +1,335 @@
+# The goal of this workflow is to measure the code coverage of both layers of
+# the driver -- the JS API (main.js and lib/) and the Rust N-API addon (src/) --
+# as exercised by the test suites. See scripts/coverage.sh for how.
+#
+# It runs the suites the unit and integration workflows run -- unit, unit-gc,
+# unit-not-supported, integration and integration-gc -- once, on one host:
+# x86_64 Linux and node 20, against the ScyllaDB version in scylla_version.env.
+# The aarch64 host in those workflows' matrices runs the same code, so measuring
+# it as well would only repeat this number. The integration workflow's Apache
+# Cassandra leg is not measured either: the lane measures against one server,
+# the one the driver is built for, so lines that only a Cassandra server reaches
+# count as uncovered, alike on every run.
+name: Code coverage
+env:
+  PEDANTIC: true
+  RUST_BACKTRACE: full
+"on":
+  push:
+    branches:
+      - main
+      - "branch-**"
+  pull_request:
+    branches:
+      - '**'
+
+permissions:
+  contents: read
+
+concurrency:
+  # A new push to a pull request supersedes its running measurement, as in the
+  # other workflows. A push to main or a release branch must not supersede
+  # anything: the report of every one of those commits is what pull requests
+  # built on it are compared against. cancel-in-progress: false alone would not
+  # do, as GitHub keeps one waiting run per group and a newer run replaces it,
+  # so those runs get a group of their own, by commit.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  coverage:
+    name: Measure code coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      # Set at job level so that no step can run without them. Without
+      # CCM_IS_SCYLLA the integration suites would run against Cassandra, and
+      # the ScyllaDB-only tests in them would not even be defined.
+      CCM_IS_SCYLLA: "true"
+      CCM_PATH: ./scylla-ccm
+      SCYLLA_ARCH: x86_64
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      # Takes seconds, as every tool coverage.sh runs is stubbed out. A change
+      # that makes the script stop at a failing suite, or exit 0 after one,
+      # fails here rather than going unnoticed until a suite fails.
+      - name: Test the coverage script
+        run: bash scripts/test-coverage.sh
+      # The same for the report check in the upload job below, which that job
+      # only ever runs on the reports of a good run.
+      - name: Test the report check
+        run: python3 scripts/test-report-check.py
+      - name: Setup node
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 20
+          cache: npm
+      # Not .github/common/setup: its own checkout keeps the job's token
+      # configured for git, within reach of the build and the tests.
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: stable
+          components: llvm-tools-preview
+      # Built from crates.io rather than fetched by an install action, which
+      # would be one more third-party action for the repository's list of
+      # allowed actions to cover. The build takes about a minute.
+      - name: Install cargo-llvm-cov
+        run: cargo install cargo-llvm-cov@0.9.1 --locked
+      # Java and ccm are installed the same way .github/common/integration does.
+      - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          distribution: 'temurin'
+          java-version: '8'
+      - name: Install ccm
+        # The ssl tests need the certificates in scylla-ccm's ssl/ directory
+        # (hence CCM_PATH), which installing ccm as a package does not keep.
+        run: |
+          git clone https://github.com/scylladb/scylla-ccm.git
+          pip install --user --upgrade psutil
+          pip install --user ./scylla-ccm
+      - name: Install dependencies
+        run: npm ci
+      - name: Run tests with coverage
+        run: npm run coverage
+      - name: Publish coverage summary
+        if: always()
+        run: |
+          for layer in js rust; do
+            echo "## Coverage: $layer"
+            echo '```'
+            cat "coverage/$layer/summary.txt" 2>/dev/null || echo "no report: the run stopped before it was written"
+            echo '```'
+          done >> "$GITHUB_STEP_SUMMARY"
+      # The artifact's root is coverage/, the common ancestor of the two paths,
+      # so it holds js/ and rust/, each with an lcov.info and an HTML report.
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: coverage-report
+          path: |
+            coverage/js/
+            coverage/rust/
+
+  # The upload is a job of its own so that CODECOV_TOKEN never shares a runner
+  # with the code the coverage job executes: the driver build and its build
+  # scripts, the test suites, every npm package and crate those pull in, and
+  # scylla-ccm as cloned from its master branch. In the same job, a process any
+  # of those left behind could read the upload step's environment, token
+  # included. This job runs no repository code: it checks out the tree only so
+  # the report check and the Codecov CLI can see which files exist, and
+  # everything it executes is defined right here. The workflow's contents: read
+  # is all it needs: download-artifact reads this run's artifacts with the
+  # runner's own credentials, and the Codecov action authenticates with
+  # CODECOV_TOKEN.
+  #
+  # `needs` also makes the upload conditional on the coverage job succeeding.
+  # scripts/coverage.sh writes both reports even when a suite fails and only
+  # then exits non-zero, so a failed run leaves partial reports behind (the
+  # artifact above keeps them, for diagnosis). Uploading them is not merely
+  # noise: on main they become the baseline `target: auto` compares the next
+  # pull request against, so an artificially low number reads as a phantom
+  # improvement on every pull request after it, with a real regression free to
+  # hide inside that margin. The informational statuses in codecov.yml stop a
+  # bad number from blocking a merge; they do not stop it from being recorded.
+  # Uploading nothing is the better failure: Codecov falls back to the nearest
+  # ancestor that has a report.
+  #
+  # A green coverage job is also a complete one. Every suite runs, and fails the
+  # job if a test fails, if it runs no tests at all (--fail-zero) or only the
+  # ones a committed .only singles out (--forbid-only), or if no process in it
+  # wrote an LLVM profile, which is what an uninstrumented addon looks like.
+  # CCM_IS_SCYLLA is set at job level, a ccm cluster that cannot be created or
+  # started fails the tests that need it, and no step in the job is conditional
+  # or continue-on-error. The tests that can skip at run time key on the
+  # ScyllaDB version (whether it has system.client_routes) or on node features
+  # every run has, so they skip alike on every run until scylla_version.env
+  # changes.
+  upload:
+    name: Upload coverage to Codecov
+    needs: coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Download coverage report
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: coverage-report
+          path: coverage
+      # codecov.yml has no path fixes because none are needed: c8 names every
+      # file relative to the repository root, and cargo llvm-cov by its absolute
+      # path in the coverage job's checkout -- the same directory as this job's
+      # $GITHUB_WORKSPACE on GitHub-hosted runners -- and Codecov's default path
+      # fixing maps each onto the right file. That holds only while both reports
+      # keep this shape. c8 reporting the compiled .js of a TypeScript module,
+      # which is not tracked, instead of its .ts source is one way to lose it.
+      # Codecov accepts an upload whose paths match nothing and still reports
+      # green, so check the shape here, where a mismatch fails the job instead
+      # of silently emptying the report. Each report is also held to the layer
+      # it stands for, since Codecov computes each component's figure from
+      # whatever files the upload names: a layer whose report lost some of its
+      # files would just read higher. scripts/test-report-check.py runs this
+      # step against good and broken reports.
+      - name: Check the reports
+        shell: python
+        run: |
+          import json, os, re, subprocess, sys
+
+          workspace = os.environ["GITHUB_WORKSPACE"] + "/"
+          tracked = set(subprocess.run(["git", "ls-files", "-z"], check=True,
+                                       capture_output=True, text=True).stdout.split("\0")) - {""}
+
+          # c8 runs with --all --include main.js --include 'lib/**' (see
+          # scripts/coverage.sh), so the JS report lists every JS and TypeScript
+          # source there, whether a test loaded it or not, but for the
+          # declaration files c8 always leaves out. There is no such list for
+          # the Rust report: cargo llvm-cov leaves out src/tests/ and any file it
+          # has no coverage regions for, such as a mod.rs that only declares
+          # modules. It is held instead to summary.json, the line counts cargo
+          # llvm-cov wrote from the same profile data, file for file.
+          js_sources = {f for f in tracked
+                        if (f == "main.js" or f.startswith("lib/"))
+                        and re.search(r"\.(js|cjs|mjs|ts|tsx|jsx)$", f)
+                        and not f.endswith(".d.ts")}
+          rust_summary = "coverage/rust/summary.json"
+
+          def repo_path(name):
+              return name[len(workspace):] if name.startswith(workspace) else name
+
+          class Malformed(Exception):
+              pass
+
+          # The files an lcov report names, each with its number of covered
+          # lines and its LF and LH. A report cut short at the end of a record
+          # loses whole files, which the checks below catch; one cut short
+          # inside a record is caught here.
+          def read_lcov(report):
+              records = {}
+              name = None
+              with open(report) as lcov:
+                  for number, line in enumerate(lcov, 1):
+                      line = line.rstrip("\n")
+                      if line.startswith("SF:"):
+                          if name is not None:
+                              raise Malformed(f"line {number} starts a record for {line[3:]} "
+                                              f"inside the one for {name}")
+                          name = line[3:]
+                          if name in records:
+                              raise Malformed(f"line {number} starts a second record for {name}")
+                          records[name] = {"covered": 0, "LF": None, "LH": None}
+                      elif line == "end_of_record":
+                          name = None
+                      elif name is None:
+                          continue
+                      elif line.startswith("DA:"):
+                          try:
+                              records[name]["covered"] += float(line[3:].split(",")[1]) > 0
+                          except (IndexError, ValueError):
+                              raise Malformed(f"line {number} is not DA:<line>,<count>: {line!r}")
+                      elif line.startswith(("LF:", "LH:")):
+                          try:
+                              records[name][line[:2]] = int(line[3:])
+                          except ValueError:
+                              raise Malformed(f"line {number} is not {line[:3]}<count>: {line!r}")
+              if name is not None:
+                  raise Malformed(f"the record for {name} has no end_of_record: the report "
+                                  f"is cut short")
+              return records
+
+          # What sets the Rust report apart from summary.json, if anything.
+          # Its LF and LH are the ones to compare: cargo llvm-cov counts more
+          # lines there than it writes DA entries for.
+          def rust_summary_mismatch(records):
+              try:
+                  with open(rust_summary) as summary:
+                      lines = {f["filename"]: (f["summary"]["lines"]["count"],
+                                               f["summary"]["lines"]["covered"])
+                               for f in json.load(summary)["data"][0]["files"]}
+              except FileNotFoundError:
+                  return f"{rust_summary} is missing from the coverage-report artifact"
+              except (ValueError, LookupError, TypeError) as error:
+                  return f"{rust_summary} is not a cargo llvm-cov JSON summary: {error!r}"
+              missing = sorted(lines.keys() - records.keys())
+              extra = sorted(records.keys() - lines.keys())
+              if missing or extra:
+                  return (f"it leaves out {len(missing)} of the {len(lines)} files that "
+                          f"{rust_summary} lists, {missing[:10]}, and names {len(extra)} "
+                          f"that it does not, {extra[:10]}")
+              wrong = [f for f, record in records.items()
+                       if (record["LF"], record["LH"]) != lines[f]]
+              if wrong:
+                  return (f"the LF and LH of {len(wrong)} files differ from their line counts "
+                          f"in {rust_summary}: {wrong[:10]}")
+              return None
+
+          errors = []
+          for report in ("coverage/js/lcov.info", "coverage/rust/lcov.info"):
+              if not os.path.isfile(report):
+                  errors.append(f"{report} is missing from the coverage-report artifact")
+                  continue
+              try:
+                  records = read_lcov(report)
+              except Malformed as error:
+                  errors.append(f"{report}: {error}")
+                  continue
+              if not records:
+                  errors.append(f"{report} names no source files")
+                  continue
+              bad = [f for f in records if repo_path(f) not in tracked]
+              if bad:
+                  errors.append(f"{report}: {len(bad)} of {len(records)} files are not tracked "
+                                f"files, relative to the repository root or under {workspace}, "
+                                f"which Codecov's default path fixing relies on: {bad[:10]}")
+                  continue
+              covered = {repo_path(f): record["covered"] for f, record in records.items()}
+              if report == "coverage/js/lcov.info":
+                  missing = sorted(js_sources - covered.keys())
+                  if missing:
+                      errors.append(f"{report} leaves out {len(missing)} of the {len(js_sources)} "
+                                    f"JS and TypeScript sources in main.js and lib/, which "
+                                    f"c8 --all lists whether covered or not: {missing[:10]}")
+                      continue
+              else:
+                  mismatch = rust_summary_mismatch(records)
+                  if mismatch:
+                      errors.append(f"{report}: {mismatch}")
+                      continue
+                  if not any(n for f, n in covered.items() if f.startswith("src/")):
+                      errors.append(f"{report} covers no line in src/")
+                      continue
+              if not sum(covered.values()):
+                  errors.append(f"{report} reports no covered lines")
+              else:
+                  print(f"{report}: {len(covered)} files, all tracked, "
+                        f"{sum(covered.values())} lines covered")
+          if errors:
+              sys.exit("\n".join(errors))
+      # Pull requests from forks get no secrets, and neither do the ones
+      # Dependabot opens (their runs get Dependabot's secrets, not the
+      # repository's), so `token` comes through empty for both. A fork's upload
+      # falls back to Codecov's tokenless path for public repositories, which is
+      # best-effort; a Dependabot branch is not a fork, so it does not even get
+      # that. Neither must be what turns such a pull request red, hence
+      # fail_ci_if_error is off for those two only. Everywhere else it stays on,
+      # so a missing or revoked CODECOV_TOKEN fails the job instead of quietly
+      # uploading nothing.
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          # Both reports in one upload, so a commit that has a report always
+          # has both halves of it (see the note on flags in codecov.yml).
+          files: coverage/js/lcov.info,coverage/rust/lcov.info
+          # The files are named explicitly, so there is nothing to gain from
+          # letting the action sweep the tree for other report-shaped files or
+          # from running the CLI's plugins (gcov, Xcode, pycoverage) -- the
+          # reports are already built by scripts/coverage.sh.
+          disable_search: true
+          plugins: noop
+          fail_ci_if_error: ${{ github.event.pull_request.head.repo.fork != true && github.actor != 'dependabot[bot]' }}

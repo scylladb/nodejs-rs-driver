@@ -24,3 +24,6 @@ build.rs
 flame.sh
 js-doc-config.js
 eslint.config.mjs
+coverage
+scripts
+codecov.yml
