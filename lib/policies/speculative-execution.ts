@@ -41,7 +41,7 @@ class SpeculativeExecutionPolicy {
      */
     newPlan(
         keyspace: string,
-        queryInfo: string | Array<string>,
+        queryInfo: string | Array<object>,
     ): SpeculativeExecutionPlan {
         throw new Error(
             "You must implement newPlan() method in the SpeculativeExecutionPolicy",
@@ -73,7 +73,10 @@ class NoSpeculativeExecutionPolicy extends SpeculativeExecutionPolicy {
             },
         };
     }
-    newPlan(): SpeculativeExecutionPlan {
+    newPlan(
+        keyspace: string,
+        queryInfo: string | Array<object>,
+    ): SpeculativeExecutionPlan {
         return this.#plan;
     }
 }
@@ -108,7 +111,10 @@ class ConstantSpeculativeExecutionPolicy extends SpeculativeExecutionPolicy {
         this.#delay = delay;
         this.#maxSpeculativeExecutions = maxSpeculativeExecutions;
     }
-    newPlan(): SpeculativeExecutionPlan {
+    newPlan(
+        keyspace: string,
+        queryInfo: string | Array<object>,
+    ): SpeculativeExecutionPlan {
         let executions = 0;
         const self = this;
         return {
