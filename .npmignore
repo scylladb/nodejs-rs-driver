@@ -24,3 +24,7 @@ build.rs
 flame.sh
 js-doc-config.js
 eslint.config.mjs
+
+# Publish compiled JavaScript and declarations, not TypeScript sources.
+lib/**/*.ts
+!lib/**/*.d.ts
