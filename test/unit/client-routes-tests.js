@@ -15,6 +15,8 @@ function withClientRoutes(proxies, rest) {
 }
 
 const mode = (options) => rust.testsSessionBuilderMode(setRustOptions(options));
+const driverConfigReporting = (options) =>
+    rust.testsSessionBuilderDriverConfigReporting(setRustOptions(options));
 const describeConfig = (options) =>
     rust.testsDescribeClientRoutesConfig(setRustOptions(options));
 
@@ -35,6 +37,26 @@ describe("Client routes options", function () {
                     }),
                 ),
                 "clientRoutes",
+            );
+        });
+    });
+
+    describe("shared option forwarding", function () {
+        it("should disable driver config reporting on the default builder", function () {
+            assert.strictEqual(
+                driverConfigReporting({ driverConfigReportingEnabled: false }),
+                false,
+            );
+        });
+
+        it("should disable driver config reporting on the client routes builder", function () {
+            assert.strictEqual(
+                driverConfigReporting(
+                    withClientRoutes([{ connectionId: CONNECTION_ID }], {
+                        driverConfigReportingEnabled: false,
+                    }),
+                ),
+                false,
             );
         });
     });

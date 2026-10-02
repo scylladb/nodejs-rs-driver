@@ -119,8 +119,8 @@ export interface ClientOptions {
     applicationVersion?: string;
     /**
      * Whether the control connection reports the configuration visible to the native Rust session in the
-     * `DRIVER_CONFIG` startup option. Defaults that the Node.js layer resolves and applies to individual
-     * statements, including query defaults and execution-profile overrides, are not reflected in the report.
+     * `DRIVER_CONFIG` startup option. The report's `query.defaults` entries contain native Rust defaults. They
+     * may differ from the Node.js query defaults and execution-profile overrides applied to individual statements.
      * ScyllaDB servers with a `system.clients.client_options` column (available since ScyllaDB 2026.1) expose
      * the JSON report on the node hosting the control connection. Set this to `false` when the native session
      * configuration must not be disclosed to the cluster. This does not disable the opaque `SESSION_ID`
