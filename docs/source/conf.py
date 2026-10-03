@@ -13,10 +13,10 @@ sys.path.insert(0, os.path.abspath("../_extensions"))
 # Build documentation for the following tags and branches
 TARGET_VERSION = (Path(__file__).resolve().parents[1] / "version").read_text().strip()
 LATEST_VERSION = os.environ.get("LATEST_VERSION", TARGET_VERSION).strip()
-TAGS = [LATEST_VERSION]
+DEPRECATED_VERSIONS = ["v0.6.1"]
+TAGS = list(dict.fromkeys((*DEPRECATED_VERSIONS, LATEST_VERSION)))
 BRANCHES = ["main"]
 UNSTABLE_VERSIONS = ["main"]
-DEPRECATED_VERSIONS = []
 
 # Add any Sphinx extension module names here, as strings.
 extensions = [
@@ -139,4 +139,3 @@ html_baseurl = "https://nodejs-rs-driver.docs.scylladb.com"
 
 # Dictionary of values to pass into the template engine's context for all pages
 html_context = {"html_baseurl": html_baseurl}
-
