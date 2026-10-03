@@ -33,15 +33,25 @@ export function defaultAddressTranslator(): addressResolution.AddressTranslator 
 
 /**
  * Returns a new instance of the default load-balancing policy used by the driver.
- * @param localDc When provided, it sets the data center that is going to be used as local for the
- * load-balancing policy instance, with dc failover disabled.
+ * @param localDc When provided, it explicitly sets the data center that is going to be used as local for the
+ * load-balancing policy instance, with dc failover disabled. This value takes precedence over
+ * `ClientOptions.localDataCenter`.
  *
- * When localDc is undefined, the load balancing policy will not be data-center aware.
+ * When `localDc` is undefined, the policy has no explicit data-center preference. If the policy is used by a client,
+ * `ClientOptions.localDataCenter` supplies the fallback preference. The policy is not data-center aware when neither
+ * value is provided.
  */
 export function defaultLoadBalancingPolicy(
     localDc?: string,
 ): loadBalancing.DefaultLoadBalancingPolicy {
-    if (!localDc) {
+    if (
+        localDc !== undefined &&
+        (typeof localDc !== "string" || localDc.length === 0)
+    ) {
+        throw new TypeError("localDc must be a non-empty string");
+    }
+
+    if (localDc === undefined) {
         return new loadBalancing.DefaultLoadBalancingPolicy();
     }
 

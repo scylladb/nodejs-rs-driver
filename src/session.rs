@@ -1,4 +1,5 @@
 pub mod config;
+use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex};
 
 use config::SessionOptions;
@@ -123,8 +124,10 @@ impl SessionWrapper {
     pub async fn create_session(options: SessionOptions) -> JsResult<SessionWrapper> {
         with_custom_error_async(async || {
             let cache_size = options.cache_size.unwrap_or(DEFAULT_CACHE_SIZE) as usize;
+            let local_datacenter = options.local_datacenter.clone();
             let builder = configure_session_builder(options)?;
             let session = builder.build().await?;
+            validate_local_datacenter(&session, local_datacenter.as_deref())?;
             let session: CachingSession = CachingSession::from(session, cache_size);
             ConvertedResult::Ok(SessionWrapper {
                 inner: session,
@@ -339,6 +342,85 @@ impl SessionWrapper {
             batch = self.apply_batch_options(batch, &options.options)?;
             ConvertedResult::Ok(BatchWrapper { inner: batch })
         })
+    }
+}
+
+fn validate_local_datacenter(
+    session: &scylla::client::session::Session,
+    local_datacenter: Option<&str>,
+) -> ConvertedResult<()> {
+    let Some(local_datacenter) = local_datacenter else {
+        return Ok(());
+    };
+
+    let cluster_state = session.get_cluster_state();
+    // Keep the names sorted so configuration errors are deterministic.
+    let available_datacenters: BTreeSet<&str> = cluster_state
+        .get_nodes_info()
+        .iter()
+        .filter_map(|node| node.datacenter.as_deref())
+        .collect();
+
+    // An initial metadata read can fail while the Rust driver still creates a
+    // session backed by dummy topology. Keep that session alive so its
+    // background metadata refresh can recover it. Once any DC metadata is
+    // available, reject an unknown preference instead of allowing empty plans.
+    let datacenter_exists_in_ring = cluster_state
+        .replica_locator()
+        .unique_nodes_in_datacenter_ring(local_datacenter)
+        .is_some();
+    if !should_reject_local_datacenter(&available_datacenters, datacenter_exists_in_ring) {
+        return Ok(());
+    }
+
+    let message = if available_datacenters.contains(local_datacenter) {
+        format!(
+            "Datacenter {local_datacenter} was found in topology but has no nodes in the token ring"
+        )
+    } else {
+        format!(
+            "Datacenter {local_datacenter} was not found. Available DCs are: [{}]",
+            available_datacenters
+                .into_iter()
+                .collect::<Vec<_>>()
+                .join(",")
+        )
+    };
+
+    Err(ConvertedError::from(make_js_error(message)))
+}
+
+fn should_reject_local_datacenter(
+    available_datacenters: &BTreeSet<&str>,
+    datacenter_exists_in_ring: bool,
+) -> bool {
+    !available_datacenters.is_empty() && !datacenter_exists_in_ring
+}
+
+#[cfg(test)]
+mod local_datacenter_validation_tests {
+    use super::should_reject_local_datacenter;
+    use std::collections::BTreeSet;
+
+    #[test]
+    fn skips_validation_until_datacenter_metadata_is_available() {
+        assert!(!should_reject_local_datacenter(&BTreeSet::new(), false));
+    }
+
+    #[test]
+    fn accepts_a_datacenter_present_in_the_ring() {
+        assert!(!should_reject_local_datacenter(
+            &BTreeSet::from(["dc1"]),
+            true
+        ));
+    }
+
+    #[test]
+    fn rejects_a_datacenter_absent_from_the_ring_once_metadata_is_available() {
+        assert!(should_reject_local_datacenter(
+            &BTreeSet::from(["dc1"]),
+            false
+        ));
     }
 }
 
