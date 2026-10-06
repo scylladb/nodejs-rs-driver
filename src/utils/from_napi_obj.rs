@@ -3,6 +3,7 @@
 ///
 /// Because user can provide an object with some of the fields unset,
 /// all of the fields are wrapped into a Option<>.
+/// A field set to `undefined` or `null` is converted to `None`.
 /// This struct implements FromNapiValue,
 /// by getting each of the fields by the struct name
 /// after converting that name to camelCase.
@@ -68,7 +69,10 @@ macro_rules! define_js_to_rust_convertible_object {
                 let o = unsafe { ::napi::bindgen_prelude::Object::from_napi_value(env, napi_val) }?;
                 Ok($struct_name {
                     $(
-                        $field_name: o.get::<$field_type>(stringify!($js_name))?,
+                        // Reading through `Option` maps both `undefined` and `null` to `None`.
+                        $field_name: o
+                            .get::<Option<$field_type>>(stringify!($js_name))?
+                            .flatten(),
                     )*
                 })
             }

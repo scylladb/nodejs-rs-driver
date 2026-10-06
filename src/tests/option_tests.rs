@@ -18,6 +18,7 @@ pub fn tests_check_client_option(options: SessionOptions, test_case: i32) {
                         "Contact point 1".to_owned(),
                         "Contact point 2".to_owned()
                     ]),
+                    local_datacenter: None,
                     keyspace: Some("keyspace name".to_owned()),
                     application_name: Some("App name".to_owned()),
                     application_version: Some("App version".to_owned()),
@@ -76,6 +77,7 @@ pub fn tests_check_client_option(options: SessionOptions, test_case: i32) {
                 options,
                 SessionOptions {
                     connect_points: None,
+                    local_datacenter: None,
                     keyspace: None,
                     application_name: None,
                     application_version: None,
@@ -101,6 +103,7 @@ pub fn tests_check_client_option(options: SessionOptions, test_case: i32) {
                 options,
                 SessionOptions {
                     connect_points: Some(vec!["192.168.0.1".to_owned()]),
+                    local_datacenter: None,
                     keyspace: None,
                     application_name: None,
                     application_version: None,
@@ -120,6 +123,18 @@ pub fn tests_check_client_option(options: SessionOptions, test_case: i32) {
                     client_routes_config: None
                 }
             )
+        }
+        4 => {
+            assert_eq!(options.local_datacenter.as_deref(), Some("dc1"));
+            let config = options.load_balancing_config.unwrap();
+            assert_eq!(config.prefer_datacenter, None);
+            assert_eq!(config.permit_dc_failover, None);
+        }
+        5 => {
+            assert_eq!(options.local_datacenter.as_deref(), Some("client-dc"));
+            let config = options.load_balancing_config.unwrap();
+            assert_eq!(config.prefer_datacenter.as_deref(), Some("policy-dc"));
+            assert_eq!(config.permit_dc_failover, Some(true));
         }
         _ => {}
     }
