@@ -294,6 +294,42 @@ describe("Client options", function () {
             }
         });
 
+        it("should not propagate client options through supported wrappers", function () {
+            class RecordingPolicy extends DefaultLoadBalancingPolicy {
+                constructor(config) {
+                    super(config);
+                    this.calls = [];
+                }
+
+                getRustConfiguration(...args) {
+                    this.calls.push(args);
+                    return super.getRustConfiguration();
+                }
+            }
+
+            const policyConfig = Object.freeze({ tokenAware: false });
+            const childPolicy = new RecordingPolicy(policyConfig);
+            const allowList = ["127.0.0.1:9042"];
+            const policy = new TokenAwarePolicy(
+                new AllowListPolicy(childPolicy, allowList),
+            );
+            const dc1Options = rustOptions("dc1", policy);
+            const dc2Options = rustOptions("dc2", policy);
+
+            assert.deepStrictEqual(dc1Options.loadBalancingConfig, {
+                tokenAware: true,
+                allowList,
+            });
+            assert.deepStrictEqual(dc2Options.loadBalancingConfig, {
+                tokenAware: true,
+                allowList,
+            });
+            assert.strictEqual(dc1Options.localDataCenter, "dc1");
+            assert.strictEqual(dc2Options.localDataCenter, "dc2");
+            assert.deepStrictEqual(childPolicy.calls, [[], []]);
+            assert.deepStrictEqual(policyConfig, { tokenAware: false });
+        });
+
         it("should not mutate a policy reused by clients", function () {
             const policyConfig = Object.freeze({ tokenAware: false });
             const policy = new DefaultLoadBalancingPolicy(policyConfig);
@@ -313,6 +349,17 @@ describe("Client options", function () {
             assert.strictEqual(dc2Options.localDataCenter, "dc2");
             assert.deepStrictEqual(policy.getRustConfiguration(), policyConfig);
             assert.deepStrictEqual(policyConfig, { tokenAware: false });
+        });
+
+        it("should snapshot a policy configuration at construction", function () {
+            const policyConfig = { preferDatacenter: "dc1" };
+            const policy = new DefaultLoadBalancingPolicy(policyConfig);
+
+            policyConfig.preferDatacenter = "dc2";
+
+            assert.deepStrictEqual(policy.getRustConfiguration(), {
+                preferDatacenter: "dc1",
+            });
         });
 
         it("should normalize a null policy preference as absent", function () {
