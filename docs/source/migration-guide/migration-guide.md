@@ -34,6 +34,37 @@ The following option is no longer supported:
 
 - `graphOptions`: those options configure DSx specific features, that are not supported in this driver
 
+## Request deadlines
+
+The Apache `cassandra-driver` applies `readTimeout` separately to each
+coordinator attempt. This driver does not support that behavior. Custom
+`readTimeout` values in query options, execution profiles, or
+`socketOptions` raise an error directing you to `requestTimeout`. The legacy
+`socketOptions.readTimeout` default of `12000` is accepted but does not set a
+request deadline.
+
+Use `requestTimeout` for one client-side deadline for each native statement or
+batch execution (one page of results). It can be set on the client,
+execution profile, or query; the query setting has highest precedence, followed
+by the execution profile, then the client setting. When omitted, the Rust
+driver's default request timeout applies.
+
+Coordinator attempts, retries, and speculative executions share that budget,
+and deadline expiry is not passed to the retry policy for another attempt. On
+expiry the client stops waiting and starts no further attempts, but work
+already sent to the database may still complete. Each page fetch receives a
+fresh deadline.
+
+This deadline is not a wall-clock upper bound for the complete client call.
+Post-response work performed by the native driver—such as propagating `USE` to
+existing connections, waiting for schema agreement, or refreshing metadata—is
+outside it. Connection setup, metadata requests, and preparation requests
+performed before statement execution are outside it as well. Expiry
+rejects with an `Error` whose `name` is `ExecutionError` and whose message
+identifies the configured client timeout. A value of `0` disables the deadline.
+All three `requestTimeout` settings require an integer from `0` through
+`2147483647`; other values throw a `TypeError`.
+
 ## Client options
 
 The following options remain unchanged:

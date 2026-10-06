@@ -844,9 +844,10 @@ class Client extends events.EventEmitter {
             throw new errors.ArgumentError("Queries array should not be empty");
         }
 
-        await this.#connect();
-
+        // Validate options before connecting so invalid options cannot open a session.
         const execOptions = this.createOptions(options);
+
+        await this.#connect();
 
         let shouldBePrepared = execOptions.isPrepared();
         let allQueries: string[] = [];

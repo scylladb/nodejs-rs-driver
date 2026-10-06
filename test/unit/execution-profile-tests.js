@@ -8,6 +8,33 @@ const ExecutionProfile =
 const ProfileManager = require("../../lib/execution-profile").ProfileManager;
 const types = require("../../lib/types");
 
+describe("ExecutionProfile", function () {
+    it("should accept a zero request timeout", function () {
+        const profile = new ExecutionProfile("no-timeout", {
+            requestTimeout: 0,
+        });
+        assert.strictEqual(profile.requestTimeout, 0);
+    });
+
+    it("should reject invalid request timeouts", function () {
+        [-1, 1.5, NaN, Infinity, 0x80000000, "100"].forEach(
+            (requestTimeout) => {
+                assert.throws(
+                    () => new ExecutionProfile("invalid", { requestTimeout }),
+                    /ExecutionProfile\.requestTimeout must be an integer between 0 and 2147483647/,
+                );
+            },
+        );
+    });
+
+    it("rejects legacy readTimeout", function () {
+        assert.throws(
+            () => new ExecutionProfile("legacy", { readTimeout: 1000 }),
+            /ExecutionProfile\.readTimeout is unsupported; use requestTimeout instead/,
+        );
+    });
+});
+
 describe("ProfileManager", function () {
     describe("constructor", function () {
         it("should set the default profile based on the client options", function () {

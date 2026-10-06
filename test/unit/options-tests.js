@@ -416,6 +416,71 @@ describe("Client options", function () {
         });
     });
 
+    describe("socketOptions.readTimeout", function () {
+        it("should accept the legacy default without applying it", function () {
+            const result = extend({
+                contactPoints: ["1.1.1.1"],
+                socketOptions: { readTimeout: 12000 },
+            });
+            assert.strictEqual(result.socketOptions.readTimeout, 12000);
+        });
+
+        it("should reject custom values and point to requestTimeout", function () {
+            [0, 1000, -1, 1.5, NaN, Infinity, 0x80000000, "100"].forEach(
+                (readTimeout) => {
+                    assert.throws(
+                        () =>
+                            extend({
+                                contactPoints: ["1.1.1.1"],
+                                socketOptions: { readTimeout },
+                            }),
+                        /socketOptions\.readTimeout is unsupported; use requestTimeout instead/,
+                    );
+                },
+            );
+        });
+    });
+
+    describe("requestTimeout", function () {
+        it("should accept zero and positive values", function () {
+            for (const requestTimeout of [0, 1000]) {
+                const result = extend({
+                    contactPoints: ["1.1.1.1"],
+                    requestTimeout,
+                });
+                assert.strictEqual(result.requestTimeout, requestTimeout);
+            }
+        });
+
+        it("should reject invalid values", function () {
+            for (const requestTimeout of [
+                -1,
+                1.5,
+                NaN,
+                Infinity,
+                0x80000000,
+                "100",
+            ]) {
+                assert.throws(
+                    () =>
+                        extend({ contactPoints: ["1.1.1.1"], requestTimeout }),
+                    /requestTimeout must be an integer between 0 and 2147483647/,
+                );
+            }
+        });
+    });
+
+    it("rejects legacy query defaults", function () {
+        assert.throws(
+            () =>
+                extend({
+                    contactPoints: ["1.1.1.1"],
+                    queryOptions: { readTimeout: 1000 },
+                }),
+            /queryOptions\.readTimeout is unsupported; use requestTimeout instead/,
+        );
+    });
+
     describe("protocolOptions.port", function () {
         function connectPointsFor(contactPoints, port) {
             return setRustOptions({

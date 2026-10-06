@@ -1077,7 +1077,7 @@ function insertSelectTest(
             fetchSize: rowLength,
         },
         socketOptions: {
-            readTimeout: 100000,
+            requestTimeout: 100000,
         },
     });
     client.on("log", helper.log(["warning", "error"]));

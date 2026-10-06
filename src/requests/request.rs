@@ -28,7 +28,7 @@ pub struct QueryOptionsObj{
     keyspace, keyspace: String,
     logged, logged: bool,
     prepare, prepare: bool,
-    read_timeout, readTimeout: i32,
+    request_timeout, requestTimeout: i32,
     routing_indexes, routingIndexes: Vec<i32>,
     routing_names, routingNames: Vec<String>,
     serial_consistency, serialConsistency: i16,

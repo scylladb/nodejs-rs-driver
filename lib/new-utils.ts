@@ -4,7 +4,7 @@ import { inspect } from "util";
 
 import Long = require("long");
 import { ColumnInfo } from "./types/cql-utils";
-import { ExecutionOptions } from "./execution-options";
+import type { ExecutionOptions } from "./execution-options";
 
 /**
  * Internal utility for marking not supported endpoints.
@@ -51,6 +51,44 @@ function arbitraryValueToBigInt(
 
 const minInt32 = -0x80000000;
 const maxInt32 = 0x7fffffff;
+
+/**
+ * Validates a request timeout before it crosses the N-API boundary as an i32.
+ * `undefined` means that the caller should use the next value in the option
+ * precedence chain.
+ */
+function validateRequestTimeout(value: unknown, name: string): void {
+    if (value === undefined) {
+        return;
+    }
+    if (
+        typeof value !== "number" ||
+        !Number.isInteger(value) ||
+        value < 0 ||
+        value > maxInt32
+    ) {
+        throw new TypeError(
+            `${name} must be an integer between 0 and ${maxInt32}`,
+        );
+    }
+}
+
+/**
+ * Rejects legacy timeout settings that would otherwise be silently ignored.
+ * Only socketOptions.readTimeout may retain its built-in 12000 ms default;
+ * query and execution-profile settings have no such default.
+ */
+function rejectUnsupportedReadTimeout(
+    value: unknown,
+    name: string,
+    allowDefault: boolean,
+): void {
+    if (value !== undefined && (!allowDefault || value !== 12000)) {
+        throw new TypeError(
+            `${name} is unsupported; use requestTimeout instead`,
+        );
+    }
+}
 
 /**
  * Checks whether the number is a 32 bit signed integer.
@@ -148,5 +186,7 @@ export {
     isNamedParameters,
     ensure32SignedInteger,
     ensure64SignedInteger,
+    validateRequestTimeout,
+    rejectUnsupportedReadTimeout,
     PreparedInfo,
 };

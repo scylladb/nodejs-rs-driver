@@ -120,7 +120,7 @@ export interface QueryOptionsObj {
   keyspace?: string
   logged?: boolean
   prepare?: boolean
-  readTimeout?: number
+  requestTimeout?: number
   routingIndexes?: Array<number>
   routingNames?: Array<string>
   serialConsistency?: number
