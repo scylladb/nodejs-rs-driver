@@ -3,6 +3,7 @@ import rust = require("../index");
 import type { ExecutionOptions } from "./execution-options";
 import type { ExecutionProfile } from "./execution-profile";
 import type { Host, policies as policiesModule } from "../";
+import { validateRequestTimeout } from "./new-utils";
 
 type RetryPolicy = policiesModule.retry.RetryPolicy;
 
@@ -118,18 +119,15 @@ export interface QueryOptions {
     pageState?: Buffer | string;
     /** Determines if the query must be executed as a prepared statement. */
     prepare?: boolean;
-    /**
-     * When defined, it overrides the default read timeout
-     * (`socketOptions.readTimeout`) in milliseconds for this execution per coordinator.
-     *
-     * Suitable for statements for which the coordinator may allow a longer server-side timeout, for example aggregation
-     * queries.
-     *
-     * A value of `0` disables client side read timeout for the execution. Default: `undefined`.
-     *
-     * [TODO: Add support for this field]
-     */
+    /** Per-attempt read timeout is unsupported. Use `requestTimeout`. */
     readTimeout?: number;
+    /**
+     * Overrides the execution profile and client request deadline in milliseconds.
+     * Retries and speculative attempts share the deadline; each page gets a fresh
+     * deadline. Connection setup, preparation, and post-response work are outside
+     * it. `0` disables the deadline. Range: `0` through `2147483647`.
+     */
+    requestTimeout?: number;
     /**
      * Retry policy for the query.
      *
@@ -205,7 +203,9 @@ export function queryOptionsIntoWrapper(
     rustOptions.keyspace = asProperties.keyspace;
     rustOptions.logged = asProperties.logged;
     rustOptions.prepare = asProperties.prepare;
-    rustOptions.readTimeout = options.getReadTimeout();
+    const requestTimeout = options.getRequestTimeout();
+    validateRequestTimeout(requestTimeout, "requestTimeout");
+    rustOptions.requestTimeout = requestTimeout;
     rustOptions.routingIndexes = options.getRoutingIndexes();
     rustOptions.routingNames = options.getRoutingNames();
     rustOptions.serialConsistency = options.getSerialConsistency();

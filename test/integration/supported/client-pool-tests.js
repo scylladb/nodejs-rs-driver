@@ -741,7 +741,7 @@ describe("Client", function () {
                             retry: new helper.FallthroughRetryPolicy(),
                         },
                         socketOptions: {
-                            readTimeout: 5000,
+                            requestTimeout: 5000,
                         },
                     });
                     utils.series(

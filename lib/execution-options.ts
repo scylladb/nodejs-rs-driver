@@ -5,6 +5,10 @@ import types = require("./types");
 import errors = require("./errors");
 import _rust = require("../index");
 import { queryOptionsIntoWrapper } from "./query-options";
+import {
+    validateRequestTimeout,
+    rejectUnsupportedReadTimeout,
+} from "./new-utils";
 import type { ExecutionProfile } from "./execution-profile";
 import type { Host, QueryOptions, policies as policiesModule } from "../";
 
@@ -217,10 +221,20 @@ class ExecutionOptions {
     }
 
     /**
-     * Gets the timeout in milliseconds to be used for the execution per coordinator.
+     * Gets the client-side deadline in milliseconds for statement execution
+     * (acquiring a single page of results).
      *
-     * A value of `0` disables client side read timeout for the execution. Default: `undefined`.
+     * A value of `0` disables the deadline for the execution. Default: `undefined`.
      * @abstract
+     */
+    getRequestTimeout(): number | undefined {
+        return undefined;
+    }
+
+    /**
+     * Gets the legacy per-attempt read timeout setting. This setting is unsupported
+     * and does not affect native execution. Retained for API compatibility.
+     * @deprecated Use {@link ExecutionOptions#getRequestTimeout}.
      */
     getReadTimeout(): number | undefined {
         return undefined;
@@ -376,6 +390,15 @@ class DefaultExecutionOptions extends ExecutionOptions {
         super();
 
         this.#queryOptions = queryOptions;
+        rejectUnsupportedReadTimeout(
+            this.#queryOptions.readTimeout,
+            "QueryOptions.readTimeout",
+            false,
+        );
+        validateRequestTimeout(
+            this.#queryOptions.requestTimeout,
+            "QueryOptions.requestTimeout",
+        );
         this.#rowCallback = rowCallback;
         this.#routingKey = this.#queryOptions.routingKey;
         this.#hints = this.#queryOptions.hints;
@@ -590,6 +613,14 @@ class DefaultExecutionOptions extends ExecutionOptions {
 
     getRawQueryOptions(): QueryOptions | undefined {
         return this.#queryOptions;
+    }
+
+    getRequestTimeout(): number | undefined {
+        return ifUndefined3(
+            this.#queryOptions.requestTimeout,
+            this.#profile.requestTimeout,
+            this.#client.options.requestTimeout,
+        );
     }
 
     getReadTimeout(): number | undefined {

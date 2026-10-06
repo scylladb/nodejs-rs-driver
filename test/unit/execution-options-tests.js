@@ -9,6 +9,7 @@ const DefaultExecutionOptions =
 const ExecutionProfile =
     require("../../lib/execution-profile").ExecutionProfile;
 const defaultOptions = require("../../lib/client-options").defaultOptions;
+const Client = require("../../lib/client");
 
 describe("DefaultExecutionOptions", () => {
     describe("create()", () => {
@@ -27,7 +28,7 @@ describe("DefaultExecutionOptions", () => {
                 logged: true,
                 pageState: utils.allocBufferFromArray([1, 2, 3, 4]),
                 prepare: true,
-                readTimeout: 123,
+                requestTimeout: 123,
                 retry: {},
                 routingNames: ["a"],
                 routingIndexes: [1, 2],
@@ -41,7 +42,7 @@ describe("DefaultExecutionOptions", () => {
                 consistency: 100,
                 serialConsistency: 200,
                 retry: {},
-                readTimeout: 1000,
+                requestTimeout: 1000,
             });
 
             const execOptions = DefaultExecutionOptions.create(
@@ -77,7 +78,7 @@ describe("DefaultExecutionOptions", () => {
                 consistency: 1,
                 serialConsistency: 2,
                 retry: {},
-                readTimeout: 3,
+                requestTimeout: 3,
                 loadBalancing: {},
             });
 
@@ -113,7 +114,7 @@ describe("DefaultExecutionOptions", () => {
                 serialConsistency: 5,
                 traceQuery: true,
             };
-            clientOptions.socketOptions.readTimeout = 3456;
+            clientOptions.requestTimeout = 3456;
             clientOptions.policies.retry = {};
 
             const execOptions = DefaultExecutionOptions.create(
@@ -124,12 +125,77 @@ describe("DefaultExecutionOptions", () => {
             assertExecutionOptions(execOptions, options);
             assertExecutionOptions(execOptions, clientOptions.queryOptions);
             assert.strictEqual(
-                execOptions.getReadTimeout(),
-                clientOptions.socketOptions.readTimeout,
+                execOptions.getRequestTimeout(),
+                clientOptions.requestTimeout,
             );
             assert.strictEqual(
                 execOptions.getRetryPolicy(),
                 clientOptions.policies.retry,
+            );
+        });
+
+        it("should preserve request timeout precedence when a higher-priority value is zero", () => {
+            const clientOptions = defaultOptions();
+            clientOptions.requestTimeout = 3456;
+
+            const queryOverride = DefaultExecutionOptions.create(
+                { requestTimeout: 0 },
+                getClientFake(
+                    new ExecutionProfile("query-zero", {
+                        requestTimeout: 1000,
+                    }),
+                    clientOptions,
+                ),
+            );
+            assert.strictEqual(queryOverride.getRequestTimeout(), 0);
+
+            const profileOverride = DefaultExecutionOptions.create(
+                {},
+                getClientFake(
+                    new ExecutionProfile("profile-zero", { requestTimeout: 0 }),
+                    clientOptions,
+                ),
+            );
+            assert.strictEqual(profileOverride.getRequestTimeout(), 0);
+        });
+
+        it("should retain the legacy read timeout getter without applying it", () => {
+            const clientOptions = defaultOptions();
+            const execOptions = DefaultExecutionOptions.create(
+                { requestTimeout: 25 },
+                getClientFake(null, clientOptions),
+            );
+
+            assert.strictEqual(
+                execOptions.getReadTimeout(),
+                clientOptions.socketOptions.readTimeout,
+            );
+            assert.strictEqual(execOptions.getRequestTimeout(), 25);
+        });
+
+        it("should reject invalid query request timeouts", () => {
+            [-1, 1.5, NaN, Infinity, 0x80000000, "100"].forEach(
+                (requestTimeout) => {
+                    assert.throws(
+                        () =>
+                            DefaultExecutionOptions.create(
+                                { requestTimeout },
+                                getClientFake(),
+                            ),
+                        /QueryOptions\.requestTimeout must be an integer between 0 and 2147483647/,
+                    );
+                },
+            );
+        });
+
+        it("rejects legacy query readTimeout", () => {
+            assert.throws(
+                () =>
+                    DefaultExecutionOptions.create(
+                        { readTimeout: 1000 },
+                        getClientFake(),
+                    ),
+                /QueryOptions\.readTimeout is unsupported; use requestTimeout instead/,
             );
         });
 
@@ -138,7 +204,7 @@ describe("DefaultExecutionOptions", () => {
                 consistency: 1,
                 serialConsistency: 2,
                 retry: {},
-                readTimeout: 3,
+                requestTimeout: 3,
                 loadBalancing: {},
             });
 
@@ -230,6 +296,27 @@ describe("DefaultExecutionOptions", () => {
     });
 });
 
+describe("Client#batch()", () => {
+    it("should validate query request timeout before connecting", async () => {
+        const client = new Client(helper.baseOptions);
+        client.isShuttingDown = true;
+
+        await assert.rejects(
+            client.batch(["SELECT key FROM system.local"], {
+                requestTimeout: -1,
+            }),
+            (err) => {
+                assert.ok(err instanceof TypeError);
+                assert.match(
+                    err.message,
+                    /QueryOptions\.requestTimeout must be an integer between 0 and 2147483647/,
+                );
+                return true;
+            },
+        );
+    });
+});
+
 /**
  * @param {ExecutionOptions} execOptions
  * @param expectedOptions
@@ -245,7 +332,12 @@ function assertExecutionOptions(execOptions, expectedOptions) {
         ["loadBalancing", "getLoadBalancingPolicy"],
     ]);
 
-    const ignoreProps = new Set(["executionProfile", "name", "graphOptions"]);
+    const ignoreProps = new Set([
+        "executionProfile",
+        "name",
+        "graphOptions",
+        "readTimeout",
+    ]);
 
     Object.keys(expectedOptions).forEach((prop) => {
         if (ignoreProps.has(prop)) {

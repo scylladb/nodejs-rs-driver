@@ -7,7 +7,11 @@ import utils = require("./utils");
 import tracker = require("./tracker");
 import metrics = require("./metrics");
 import auth = require("./auth");
-import { throwNotSupported } from "./new-utils";
+import {
+    throwNotSupported,
+    validateRequestTimeout,
+    rejectUnsupportedReadTimeout,
+} from "./new-utils";
 import errors = require("./errors");
 import rust = require("../index");
 import {
@@ -301,22 +305,8 @@ export interface ClientOptions {
          */
         keepAliveDelay?: number;
         /**
-         * Per-host read timeout in milliseconds.
-         *
-         * Please note that this is not the maximum time a call to {@link Client#execute} may have to wait;
-         * this is the maximum time that call will wait for one particular Cassandra host, but other hosts will be tried if
-         * one of them timeout. In other words, a {@link Client#execute} call may theoretically wait up to
-         * `readTimeout * number_of_cassandra_hosts` (though the total number of hosts tried for a given query also
-         * depends on the LoadBalancingPolicy in use).
-         *
-         * When setting this value, keep in mind the following:
-         * - the timeout settings used on the Cassandra side (*_request_timeout_in_ms in cassandra.yaml) should be taken
-         * into account when picking a value for this read timeout. You should pick a value a couple of seconds greater than
-         * the Cassandra timeout settings.
-         * - the read timeout is only approximate and only control the timeout to one Cassandra host, not the full query.
-         *
-         * Setting a value of 0 disables read timeouts. Default: `12000`.
-         * [TODO: Add support for this field]
+         * Per-attempt read timeout is unsupported. The legacy default
+         * value of `12000` is accepted but has no effect. Use `requestTimeout` instead.
          */
         readTimeout?: number;
         /**
@@ -331,6 +321,13 @@ export interface ClientOptions {
          */
         coalescingThreshold?: number;
     };
+    /**
+     * Client-side deadline in milliseconds for each native statement or batch request.
+     * Retries and speculative attempts share this deadline. Each page gets a fresh
+     * deadline. Connection setup, preparation, and post-response work are outside it.
+     * `0` disables the deadline; when omitted, the Rust driver's default applies.
+     */
+    requestTimeout?: number;
     /**
      * Provider to be used to authenticate to an auth-enabled cluster.
      * [TODO: Add support for this field]
@@ -745,6 +742,12 @@ function extend(baseOptions?: any, userOptions?: any): ClientOptions {
     if (!options.queryOptions) {
         throw new TypeError("queryOptions not defined in options");
     }
+    rejectUnsupportedReadTimeout(
+        options.queryOptions.readTimeout,
+        "queryOptions.readTimeout",
+        false,
+    );
+    validateRequestTimeout(options.requestTimeout, "requestTimeout");
 
     if (
         options.requestTracker !== null &&
@@ -933,9 +936,11 @@ function validateSocketOptions(
     if (!socketOptions) {
         throw new TypeError("socketOptions not defined in options");
     }
-    if (typeof socketOptions.readTimeout !== "number") {
-        throw new TypeError("socketOptions.readTimeout must be a Number");
-    }
+    rejectUnsupportedReadTimeout(
+        socketOptions.readTimeout,
+        "socketOptions.readTimeout",
+        true,
+    );
     if (
         typeof socketOptions.coalescingThreshold !== "number" ||
         socketOptions.coalescingThreshold <= 0

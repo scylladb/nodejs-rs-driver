@@ -33,8 +33,10 @@ export class ExecutionProfile {
     consistency?: types.consistencies;
     /** Load-balancing policy. */
     loadBalancing?: LoadBalancingPolicy;
-    /** Client read timeout. */
+    /** Per-attempt read timeout is unsupported. Use `requestTimeout`. */
     readTimeout?: number;
+    /** Request deadline in milliseconds, shared by retries and speculative attempts. */
+    requestTimeout?: number;
     /** Retry policy. */
     retry?: RetryPolicy;
     /** Serial consistency level. */
@@ -53,6 +55,7 @@ export class ExecutionProfile {
             consistency?: types.consistencies;
             loadBalancing?: LoadBalancingPolicy;
             readTimeout?: number;
+            requestTimeout?: number;
             retry?: RetryPolicy;
             serialConsistency?: types.consistencies;
         },
@@ -62,10 +65,20 @@ export class ExecutionProfile {
             throw new TypeError("Execution profile name must be a string");
         }
         const opts = options || ({} as NonNullable<typeof options>);
+        newUtils.rejectUnsupportedReadTimeout(
+            opts.readTimeout,
+            "ExecutionProfile.readTimeout",
+            false,
+        );
+        newUtils.validateRequestTimeout(
+            opts.requestTimeout,
+            "ExecutionProfile.requestTimeout",
+        );
         this.name = name;
         this.consistency = opts.consistency;
         this.loadBalancing = opts.loadBalancing;
         this.readTimeout = opts.readTimeout;
+        this.requestTimeout = opts.requestTimeout;
         this.retry = opts.retry;
         this.serialConsistency = opts.serialConsistency;
 

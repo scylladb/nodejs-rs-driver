@@ -2,6 +2,7 @@ pub mod config;
 use std::collections::BTreeSet;
 use std::fmt;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use config::SessionOptions;
 use napi::Env;
@@ -478,6 +479,23 @@ macro_rules! make_apply_options {
 
                 if let Some(o) = options.is_idempotent {
                     statement.set_is_idempotent(o);
+                }
+
+                if let Some(timeout_ms) = options.request_timeout {
+                    match timeout_ms {
+                        0 => {
+                            // `None` inherits the session profile timeout. A very long
+                            // statement timeout preserves the public disabled setting.
+                            statement.set_request_timeout(Some(Duration::MAX));
+                        }
+                        1.. => statement
+                            .set_request_timeout(Some(Duration::from_millis(timeout_ms as u64))),
+                        _ => {
+                            return Err(ConvertedError::from(make_js_error(
+                                "requestTimeout must be a non-negative integer",
+                            )));
+                        }
+                    }
                 }
 
                 if let Some(o) = &options.timestamp {
