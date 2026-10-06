@@ -17,6 +17,8 @@ public
 .yarn
 __test__
 renovate.json
+renovate.jsonc
+scylla_version.env
 Cargo.toml
 docs
 artifacts
