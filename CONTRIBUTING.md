@@ -97,3 +97,6 @@ Only one run at a time can use a checkout: while one holds `target/coverage.lock
 
 CI runs the same script, integration suites included, in `.github/workflows/coverage.yml`,
 on x86_64 Linux with node 20 and against the ScyllaDB version in `scylla_version.env`, and keeps both reports as the `coverage-report` workflow artifact.
+It also uploads both reports from every passing run to [Codecov](https://codecov.io/gh/scylladb/nodejs-rs-driver),
+which comments the coverage delta on the pull request; the components in `codecov.yml` split it into the JS API and the Rust addon.
+Its statuses are informational, so a drop never blocks a merge.
