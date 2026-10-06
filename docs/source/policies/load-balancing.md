@@ -12,7 +12,7 @@ existing policies, see [migration guide](../migration-guide/migration-guide.md#l
 `DefaultLoadBalancingPolicy` is configured only at creation time.
 You can set all or a subset of these options:
 
-- `preferDatacenter` (default: `null` - no preference)
+- `preferDatacenter` (default: `null` - no explicit policy preference)
 - `preferRack` (default: `null` - no preference)
 - `tokenAware` (default: `true`)
 - `permitDcFailover` (default: `false`)
@@ -20,6 +20,29 @@ You can set all or a subset of these options:
 - `allowList` (default: `null` - all hosts are accepted)
 
 You can assume `undefined` is equivalent to `null` for the purpose of all configurations.
+
+`ClientOptions.localDataCenter` must be a non-empty string and sets the
+session-level preferred datacenter.
+`DefaultLoadBalancingPolicy` uses it when `preferDatacenter` is `null` or
+`undefined`; an explicit `preferDatacenter` takes precedence. The session-level
+preference does not change `permitDcFailover`: failover remains disabled by
+default, and an explicit `permitDcFailover: true` is preserved. If neither
+preference is provided, the policy treats all datacenters as local.
+
+The session-level preference also applies to `RoundRobinPolicy` and to
+`DCAwareRoundRobinPolicy()` constructed without a datacenter. Passing a
+datacenter to `DCAwareRoundRobinPolicy` creates an explicit policy preference,
+which takes precedence over `localDataCenter`. The same rules apply when these
+policies are wrapped in another supported Rust-backed policy.
+
+The driver validates `localDataCenter` against the initial topology's token
+ring, even when an explicit policy preference overrides it. If the name is
+unknown or the datacenter has no token-ring nodes, `connect()` fails with an
+`ArgumentError`. If the topology is not available at connect time, validation
+is skipped.
+
+An empty or `null` `localDc` passed to `defaultLoadBalancingPolicy` means no
+explicit policy preference, so `ClientOptions.localDataCenter` can supply one.
 
 ```js
 const DefaultLoadBalancingPolicy = require("@scylladb/driver").policies.loadBalancing.DefaultLoadBalancingPolicy;

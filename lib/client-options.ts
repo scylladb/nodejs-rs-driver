@@ -69,10 +69,9 @@ export interface ClientOptions {
         proxies: Array<ClientRoutesProxy>;
     };
     /**
-     * The local data center to use.
-     *
-     * If using DCAwareRoundRobinPolicy (default), this option is required and only hosts from this data center are
-     * connected to and used in query plans.
+     * The session-level data center preference for coordinator selection. It must be a non-empty string.
+     * See the [load-balancing guide](https://github.com/scylladb/nodejs-rs-driver/blob/main/docs/source/policies/load-balancing.md)
+     * for precedence, failover, and validation rules.
      */
     localDataCenter?: string;
     /**
@@ -730,6 +729,14 @@ function extend(baseOptions?: any, userOptions?: any): ClientOptions {
         }
     }
 
+    if (
+        options.localDataCenter !== undefined &&
+        (typeof options.localDataCenter !== "string" ||
+            options.localDataCenter.length === 0)
+    ) {
+        throw new TypeError("localDataCenter must be a non-empty string");
+    }
+
     options.sni = undefined;
 
     if (!options.logEmitter) {
@@ -1226,6 +1233,7 @@ function setRustOptions(options: ClientOptions): rust.SessionOptions {
     }
     rustOptions.clientId = options.id;
     rustOptions.keyspace = options.keyspace;
+    rustOptions.localDataCenter = options.localDataCenter;
     if (options.maxPrepared) {
         rustOptions.cacheSize = options.maxPrepared;
     }

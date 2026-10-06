@@ -337,6 +337,9 @@ class Client extends events.EventEmitter {
             );
             this.metadata = new metadataModule.Metadata(this.rustClient);
         } catch (err) {
+            if (err instanceof Error && err.name === "InvalidLocalDatacenter") {
+                err = new errors.ArgumentError(err.message);
+            }
             // We should close the pools (if any) and reset the state to allow successive calls to connect()
             this.connected = false;
             this.connecting = false;

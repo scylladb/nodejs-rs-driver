@@ -1,4 +1,6 @@
 pub mod config;
+use std::collections::BTreeSet;
+use std::fmt;
 use std::sync::{Arc, Mutex};
 
 use config::SessionOptions;
@@ -123,8 +125,10 @@ impl SessionWrapper {
     pub async fn create_session(options: SessionOptions) -> JsResult<SessionWrapper> {
         with_custom_error_async(async || {
             let cache_size = options.cache_size.unwrap_or(DEFAULT_CACHE_SIZE) as usize;
+            let local_datacenter = options.local_datacenter.clone();
             let builder = configure_session_builder(options)?;
             let session = builder.build().await?;
+            validate_local_datacenter(&session, local_datacenter.as_deref())?;
             let session: CachingSession = CachingSession::from(session, cache_size);
             ConvertedResult::Ok(SessionWrapper {
                 inner: session,
@@ -340,6 +344,62 @@ impl SessionWrapper {
             ConvertedResult::Ok(BatchWrapper { inner: batch })
         })
     }
+}
+
+#[derive(Debug)]
+struct InvalidLocalDatacenter(String);
+
+impl fmt::Display for InvalidLocalDatacenter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for InvalidLocalDatacenter {}
+
+fn validate_local_datacenter(
+    session: &scylla::client::session::Session,
+    local_datacenter: Option<&str>,
+) -> ConvertedResult<()> {
+    let Some(local_datacenter) = local_datacenter else {
+        return Ok(());
+    };
+
+    let cluster_state = session.get_cluster_state();
+    // Keep the names sorted so configuration errors are deterministic.
+    let available_datacenters: BTreeSet<&str> = cluster_state
+        .get_nodes_info()
+        .iter()
+        .filter_map(|node| node.datacenter.as_deref())
+        .collect();
+
+    // An initial metadata read can fail while the Rust driver still creates a
+    // session backed by dummy topology. Keep that session alive so its
+    // background metadata refresh can recover it. Once any DC metadata is
+    // available, reject an unknown preference instead of allowing empty plans.
+    let datacenter_exists_in_ring = cluster_state
+        .replica_locator()
+        .unique_nodes_in_datacenter_ring(local_datacenter)
+        .is_some();
+    if available_datacenters.is_empty() || datacenter_exists_in_ring {
+        return Ok(());
+    }
+
+    let message = if available_datacenters.contains(local_datacenter) {
+        format!(
+            "Datacenter {local_datacenter} was found in topology but has no nodes in the token ring"
+        )
+    } else {
+        format!(
+            "Datacenter {local_datacenter} was not found. Available DCs are: [{}]",
+            available_datacenters
+                .into_iter()
+                .collect::<Vec<_>>()
+                .join(",")
+        )
+    };
+
+    Err(ConvertedError::from(InvalidLocalDatacenter(message)))
 }
 
 impl SessionWrapper {
