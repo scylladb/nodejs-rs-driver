@@ -2,17 +2,9 @@
 
 set -euo pipefail
 
-mode=${1:?Usage: check-release-tag.sh MODE TAG EXPECTED_SHA}
-tag=${2:?Usage: check-release-tag.sh MODE TAG EXPECTED_SHA}
-expected_sha=${3:?Usage: check-release-tag.sh MODE TAG EXPECTED_SHA}
-
-case "$mode" in
-  optional | create | required) ;;
-  *)
-    echo "::error::Unknown release tag check mode: $mode"
-    exit 1
-    ;;
-esac
+tag=${1:?Usage: check-release-tag.sh TAG EXPECTED_SHA}
+expected_sha=${2:?Usage: check-release-tag.sh TAG EXPECTED_SHA}
+signing_fingerprint=71A6D22711CDB7C2446D21CFBF4BF97A8D4DF1AA
 
 resolve_remote_tag() {
   local direct_sha=
@@ -50,26 +42,38 @@ require_expected_sha() {
 }
 
 remote_sha=$(resolve_remote_tag)
-if [[ -n "$remote_sha" ]]; then
-  require_expected_sha "$remote_sha"
-  exit 0
+if [[ -z "$remote_sha" ]]; then
+  echo "::error::Remote tag $tag does not exist. Sign and push it before publishing."
+  exit 1
 fi
 
-case "$mode" in
-  optional)
-    echo "Remote tag $tag does not exist."
-    ;;
-  required)
-    require_expected_sha "$remote_sha"
-    ;;
-  create)
-    if [[ "$(git rev-parse HEAD)" != "$expected_sha" ]]; then
-      echo "::error::Checked-out commit does not match release commit $expected_sha."
-      exit 1
-    fi
-    git tag "$tag" "$expected_sha"
-    git push origin "refs/tags/$tag:refs/tags/$tag"
-    remote_sha=$(resolve_remote_tag)
-    require_expected_sha "$remote_sha"
-    ;;
-esac
+require_expected_sha "$remote_sha"
+
+# Verify the remote tag object, not a possibly stale local tag.
+git fetch --no-tags origin "refs/tags/$tag"
+tag_object=$(git rev-parse FETCH_HEAD)
+if [[ "$(git cat-file -t "$tag_object")" != tag ]] ||
+   [[ "$(git rev-parse "$tag_object^{commit}")" != "$expected_sha" ]]; then
+  echo "::error::Remote tag $tag is not an annotated tag for $expected_sha."
+  exit 1
+fi
+signed_tag=$(git cat-file tag "$tag_object" | sed -n '/^$/q; s/^tag //p')
+if [[ "$signed_tag" != "$tag" ]]; then
+  echo "::error::Remote tag $tag contains a signature for ${signed_tag:-an unnamed tag}."
+  exit 1
+fi
+
+export GNUPGHOME
+GNUPGHOME=$(mktemp -d)
+trap 'rm -rf "$GNUPGHOME"' EXIT
+gpg --batch --import "$(dirname "$0")/release-signing.asc"
+if ! verification=$(git -c gpg.program=gpg verify-tag --raw "$tag_object" 2>&1); then
+  echo "::error::Remote tag $tag has an invalid GPG signature."
+  echo "$verification" >&2
+  exit 1
+fi
+if ! grep -q "^\[GNUPG:\] VALIDSIG $signing_fingerprint " <<< "$verification"; then
+  echo "::error::Remote tag $tag was not signed by $signing_fingerprint."
+  exit 1
+fi
+echo "Remote tag $tag has a valid signature from $signing_fingerprint."
