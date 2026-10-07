@@ -940,6 +940,7 @@ dependencies = [
 name = "scylladb-javascript-driver"
 version = "0.7.0"
 dependencies = [
+ "bytes",
  "futures",
  "napi",
  "napi-build",
