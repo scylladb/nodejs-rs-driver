@@ -5,6 +5,7 @@ import ReconnectionPolicy = policies.reconnection.ReconnectionPolicy;
 import RetryPolicy = policies.retry.RetryPolicy;
 import ConstantReconnectionPolicy = policies.reconnection.ConstantReconnectionPolicy;
 import ExponentialReconnectionPolicy = policies.reconnection.ExponentialReconnectionPolicy;
+import SpeculativeExecutionPolicy = policies.speculativeExecution.SpeculativeExecutionPolicy;
 import addressResolution = policies.addressResolution;
 
 /*
@@ -32,6 +33,23 @@ function myTest(): void {
     rp.getOptions();
 
     retryPolicy = new RetryPolicy();
+
+    const noSpeculativeExecution =
+        new policies.speculativeExecution.NoSpeculativeExecutionPolicy();
+    const constantSpeculativeExecution =
+        new policies.speculativeExecution.ConstantSpeculativeExecutionPolicy(
+            100,
+            1,
+        );
+    const batchQueryInfo: Array<object> = [
+        { query: "INSERT INTO ks1.table1 (id) VALUES (?)" },
+    ];
+    let speculativeExecutionPolicy: SpeculativeExecutionPolicy =
+        noSpeculativeExecution;
+
+    noSpeculativeExecution.newPlan("ks1", "SELECT * FROM ks1.table1");
+    constantSpeculativeExecution.newPlan("ks1", batchQueryInfo);
+    speculativeExecutionPolicy.newPlan("ks1", batchQueryInfo);
 
     let ar: addressResolution.AddressTranslator =
         new addressResolution.EC2MultiRegionTranslator();
