@@ -141,18 +141,18 @@ export interface QueryOptions {
      * the routing.
      * [TODO: Add support for this field]
      */
-    routingIndexes?: Array<any>;
+    routingIndexes?: Array<number>;
     /**
      * Partition key(s) to determine which coordinator should be used for the query.
      * [TODO: Add support for this field]
      */
-    routingKey?: Buffer | Array<any>;
+    routingKey?: Buffer | Array<Buffer>;
     /**
      * Array of the parameters names that are part of the partition key to determine the
      * routing. Only valid for non-prepared requests, it's recommended that you use the prepare flag instead.
      * [TODO: Add support for this field]
      */
-    routingNames?: Array<any>;
+    routingNames?: Array<string>;
     /**
      * Serial consistency is the consistency level for the serial phase of
      * conditional updates.
