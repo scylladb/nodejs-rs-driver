@@ -28,6 +28,12 @@ pub struct MetaColumnWrapper {
     pub name: String,
 }
 
+/// Owned column specifications retained between result pages without keeping row buffers alive.
+#[napi]
+pub struct ColumnSpecsSnapshot {
+    specs: Vec<ColumnSpec<'static>>,
+}
+
 #[napi]
 impl QueryResultWrapper {
     /// Converts rust query result into query result wrapper that can be passed to NAPI-RS
@@ -94,6 +100,33 @@ impl QueryResultWrapper {
         .iter()
         .map(|f: &ColumnSpec| ComplexType::new_borrowed(f.typ()))
         .collect()
+    }
+
+    /// Copy the column specifications so the previous page's row buffer can be released.
+    #[napi]
+    pub fn get_columns_snapshot(&self) -> Option<ColumnSpecsSnapshot> {
+        match &self.inner {
+            QueryResultVariant::RowsResult(result) => Some(ColumnSpecsSnapshot {
+                specs: result
+                    .column_specs()
+                    .iter()
+                    .cloned()
+                    .map(ColumnSpec::into_owned)
+                    .collect(),
+            }),
+            QueryResultVariant::EmptyResult(_) => None,
+        }
+    }
+
+    /// Compare complete column specifications; non-rows results never match.
+    #[napi]
+    pub fn has_same_columns_as(&self, previous: &ColumnSpecsSnapshot) -> bool {
+        match &self.inner {
+            QueryResultVariant::RowsResult(current) => {
+                current.column_specs().as_slice() == previous.specs.as_slice()
+            }
+            QueryResultVariant::EmptyResult(_) => false,
+        }
     }
 
     /// Get the coordinator that answered the query

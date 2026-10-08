@@ -4,11 +4,15 @@ const assert = require("assert");
 const proxyquire = require("proxyquire").noCallThru();
 
 class FakeResultSet {
-    constructor(rawResult, _encoder, pagingState) {
+    static created = [];
+
+    constructor(rawResult, _encoder, pagingState, decodedColumns) {
         this.rows = rawResult.rows;
         this.rowLength = this.rows.length;
         this.innerPageState = pagingState || undefined;
         this.rawPageState = pagingState?.getRawPageState();
+        this.decodedColumns = decodedColumns;
+        FakeResultSet.created.push(this);
     }
 }
 
@@ -17,6 +21,7 @@ const Client = proxyquire("../../lib/client", {
 });
 
 function makeClient() {
+    FakeResultSet.created = [];
     const client = new Client({
         contactPoints: ["127.0.0.1"],
         logLevel: "off",
@@ -26,11 +31,22 @@ function makeClient() {
     let fetches = 0;
     const states = [Buffer.from([1]), Buffer.from([2])];
 
-    client.rustyExecute = async () => {
+    client.rustyExecute = async (
+        _query,
+        _params,
+        _options,
+        _state,
+        decodedColumns,
+    ) => {
         executions++;
-        const first = new FakeResultSet({ rows: [{ page: 1 }] }, null, {
-            getRawPageState: () => states[0],
-        });
+        const first = new FakeResultSet(
+            { rows: [{ page: 1 }] },
+            null,
+            {
+                getRawPageState: () => states[0],
+            },
+            decodedColumns,
+        );
         first.rawNextPageAsync = async (state) => {
             assert.deepStrictEqual(state, states[fetches]);
             fetches++;
@@ -70,6 +86,12 @@ describe("eachRow paging", function () {
         assert.strictEqual(result.nextPage, undefined);
         assert.deepStrictEqual(result.rows, [{ page: 3 }]);
         assert.deepStrictEqual(counts(), { executions: 1, fetches: 2 });
+        const pageCaches = FakeResultSet.created.map(
+            (page) => page.decodedColumns,
+        );
+        assert.strictEqual(pageCaches.length, 3);
+        assert.ok(pageCaches[0]);
+        assert.ok(pageCaches.every((cache) => cache === pageCaches[0]));
     });
 
     it("uses the native executor for manual nextPage calls", async function () {

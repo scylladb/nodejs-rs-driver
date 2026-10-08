@@ -2,6 +2,7 @@
 
 const { assert } = require("chai");
 const Client = require("../../../lib/client");
+const rust = require("../../../index");
 const types = require("../../../lib/types");
 const helper = require("../../test-helper");
 const promiseUtils = require("../../../lib/promise-utils");
@@ -52,6 +53,124 @@ module.exports = function (keyspace, prepare) {
                 client.execute(insertQuery, ["b", n, `b${n}`], insertOptions),
             ),
         );
+
+        it("compares native column snapshots across row and non-row results", async () => {
+            await helper.ddl(
+                client,
+                "CREATE TABLE tbl_nested_metadata (id int PRIMARY KEY, nested map<text, frozen<list<text>>>, numbers map<text, frozen<list<int>>>)",
+            );
+            await helper.ddl(
+                client,
+                "CREATE TABLE tbl_other_metadata (id int PRIMARY KEY, nested map<text, frozen<list<text>>>)",
+            );
+            const options = client.createOptions().getRustOptions();
+            const first = await client.rustClient.queryUnpaged(
+                "SELECT * FROM tbl_nested_metadata",
+                [],
+                options,
+            );
+            const snapshot = first.getColumnsSnapshot();
+            assert.isNotNull(snapshot);
+
+            const next = await client.rustClient.queryUnpaged(
+                "SELECT * FROM tbl_nested_metadata",
+                [],
+                options,
+            );
+            assert.isTrue(next.hasSameColumnsAs(snapshot));
+
+            const differentType = await client.rustClient.queryUnpaged(
+                "SELECT id AS value FROM tbl_nested_metadata",
+                [],
+                options,
+            );
+            const aliasedNested = await client.rustClient.queryUnpaged(
+                "SELECT nested AS value FROM tbl_nested_metadata",
+                [],
+                options,
+            );
+            assert.isFalse(
+                differentType.hasSameColumnsAs(
+                    aliasedNested.getColumnsSnapshot(),
+                ),
+            );
+            const differentNestedType = await client.rustClient.queryUnpaged(
+                "SELECT numbers AS value FROM tbl_nested_metadata",
+                [],
+                options,
+            );
+            assert.isFalse(
+                differentNestedType.hasSameColumnsAs(
+                    aliasedNested.getColumnsSnapshot(),
+                ),
+            );
+
+            const changed = await client.rustClient.queryUnpaged(
+                "SELECT nested FROM tbl_nested_metadata",
+                [],
+                options,
+            );
+            assert.isFalse(changed.hasSameColumnsAs(snapshot));
+
+            const otherTable = await client.rustClient.queryUnpaged(
+                "SELECT * FROM tbl_other_metadata",
+                [],
+                options,
+            );
+            assert.isFalse(otherTable.hasSameColumnsAs(snapshot));
+
+            const write = await client.rustClient.queryUnpaged(
+                "INSERT INTO tbl_nested_metadata (id) VALUES (1)",
+                [],
+                options,
+            );
+            assert.isNull(write.getColumnsSnapshot());
+            assert.isFalse(write.hasSameColumnsAs(snapshot));
+
+            await client.execute(
+                "INSERT INTO tbl_nested_metadata (id, nested) VALUES (2, {'k': ['a']})",
+            );
+            await client.execute(
+                "INSERT INTO tbl_nested_metadata (id, nested) VALUES (3, {'k': ['b']})",
+            );
+
+            const result = await client.execute(
+                "SELECT * FROM tbl_nested_metadata",
+                [],
+                { prepare, fetchSize: 1 },
+            );
+            const rows = await helper.asyncIteratorToArray(result);
+            assert.deepEqual(
+                rows.map((row) => row.id),
+                [1, 2, 3],
+            );
+            assert.strictEqual(rows[1].nested.k[0], "a");
+
+            let typeConversions = 0;
+            const originalGetTypes =
+                rust.QueryResultWrapper.prototype.getColumnsTypes;
+            rust.QueryResultWrapper.prototype.getColumnsTypes = function (
+                ...args
+            ) {
+                typeConversions++;
+                return originalGetTypes.apply(this, args);
+            };
+            try {
+                await new Promise((resolve, reject) => {
+                    client.eachRow(
+                        "SELECT * FROM tbl_nested_metadata",
+                        [],
+                        { prepare, fetchSize: 1, autoPage: true },
+                        () => {},
+                        (error) => (error ? reject(error) : resolve()),
+                    );
+                });
+                assert.strictEqual(typeConversions, 1);
+            } finally {
+                rust.QueryResultWrapper.prototype.getColumnsTypes =
+                    originalGetTypes;
+            }
+        });
 
         it("should use pageState and fetchSize", async () => {
             const fetchSize = 70;

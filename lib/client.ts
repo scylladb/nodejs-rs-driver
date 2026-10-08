@@ -21,6 +21,7 @@ import { ExecutionOptions, DefaultExecutionOptions } from "./execution-options";
 import promiseUtils = require("./promise-utils");
 import rust = require("../index");
 import ResultSet = require("./types/result-set");
+import type { DecodedColumns } from "./types/results-wrapper";
 import {
     encodeParams,
     convertComplexType,
@@ -442,6 +443,7 @@ class Client extends events.EventEmitter {
      * When called without pageState, executes an unpaged query.
      * @param pageState When provided (including null), enables paged execution.
      * When unprovided (undefined), executes an unpaged query.
+     * @param decodedColumns Mutable metadata cache shared by eachRow pages.
      * @internal
      * @ignore
      */
@@ -450,6 +452,7 @@ class Client extends events.EventEmitter {
         params: ArrayOrObject,
         execOptions: ExecutionOptions,
         pageState?: rust.PagingStateWrapper | Buffer | null,
+        decodedColumns?: DecodedColumns,
     ): Promise<ResultSet> {
         // Why not just take execOptions.isPaged()?
         // When executing through eachRow, users may not set the isPaged query option properly
@@ -497,7 +500,12 @@ class Client extends events.EventEmitter {
         let resultPageState = resultTuple[0];
         let executor = resultTuple[2];
 
-        let resultSet = new ResultSet(result, this.#encoder, resultPageState);
+        let resultSet = new ResultSet(
+            result,
+            this.#encoder,
+            resultPageState,
+            decodedColumns,
+        );
         if (resultPageState) {
             // If resultPageState then executor must be defined according to type definition.
             assert(executor instanceof rust.QueryExecutor);
@@ -676,6 +684,7 @@ class Client extends events.EventEmitter {
         }
 
         let rowLength = 0;
+        const decodedColumns: DecodedColumns = {};
         let fetchPage: ResultSet["rawNextPageAsync"];
         let pageState: Buffer | undefined;
         let fetchedFirstPage = false;
@@ -690,7 +699,12 @@ class Client extends events.EventEmitter {
                 );
             }
             const [pagingState, rawResult] = await fetchPage(pageState);
-            const result = new ResultSet(rawResult, this.#encoder, pagingState);
+            const result = new ResultSet(
+                rawResult,
+                this.#encoder,
+                pagingState,
+                decodedColumns,
+            );
             if (pagingState) {
                 result.rawNextPageAsync = fetchPage;
             }
@@ -706,6 +720,7 @@ class Client extends events.EventEmitter {
                           (params as ArrayOrObject | undefined) || [],
                           execOptions,
                           null,
+                          decodedColumns,
                       ),
                 pageCallback,
             );

@@ -4,7 +4,7 @@ import utils = require("../utils");
 import errors = require("../errors");
 import rust = require("../../index");
 import resultsWrapper = require("./results-wrapper");
-import { ColumnMetadata } from "./results-wrapper";
+import { ColumnMetadata, DecodedColumns } from "./results-wrapper";
 import Uuid = require("./uuid");
 import Row = require("./row");
 import Encoder = require("../encoder");
@@ -63,6 +63,9 @@ class ResultSet {
      */
     #encoder!: Encoder;
 
+    /** Column metadata shared with later pages, when this result is paged. */
+    #decodedColumns?: DecodedColumns;
+
     /**
      * Internal representation of the page state, used for fetching the next page of results.
      * @internal
@@ -119,7 +122,12 @@ class ResultSet {
         result: rust.QueryResultWrapper,
         encoder: Encoder,
         pagingState?: rust.PagingStateWrapper | null,
+        decodedColumns?: DecodedColumns,
     ) {
+        this.#decodedColumns =
+            pagingState || decodedColumns?.page
+                ? decodedColumns || {}
+                : undefined;
         // Old constructor logic only for purpose of unit tests.
         if (!(result instanceof rust.QueryResultWrapper)) {
             console.warn(
@@ -150,7 +158,11 @@ class ResultSet {
             }
             return;
         }
-        this.rows = resultsWrapper.getRowsFromResultsWrapper(result, encoder);
+        this.rows = resultsWrapper.getRowsFromResultsWrapper(
+            result,
+            encoder,
+            this.#decodedColumns,
+        );
 
         this.rowLength = this.rows ? this.rows.length : 0;
 
@@ -293,6 +305,8 @@ class ResultSet {
         let pageState = this.rawPageState;
         let rows = this.rows as Array<Row>;
         const encoder = this.#encoder;
+        // Each iterator can advance independently, so metadata updates stay local to it.
+        const decodedColumns = { ...this.#decodedColumns };
 
         if (!rows || rows.length === 0) {
             return {
@@ -317,6 +331,7 @@ class ResultSet {
                     rows = resultsWrapper.getRowsFromResultsWrapper(
                         rs[1],
                         encoder,
+                        decodedColumns,
                     ) as Array<Row>;
                     index = 0;
                     if (rs[0]) {
