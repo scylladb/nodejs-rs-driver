@@ -948,6 +948,7 @@ dependencies = [
  "openssl",
  "regex",
  "scylla",
+ "scylla-cql-core",
  "scylla-proxy",
  "thiserror",
  "tokio",
