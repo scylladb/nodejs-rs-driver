@@ -676,16 +676,37 @@ class Client extends events.EventEmitter {
         }
 
         let rowLength = 0;
-        let pagingState: rust.PagingStateWrapper | null | undefined = null;
+        let fetchPage: ResultSet["rawNextPageAsync"];
+        let pageState: Buffer | undefined;
+        let fetchedFirstPage = false;
+
+        const fetchNextPage = async (): Promise<ResultSet> => {
+            if (!this.connected) {
+                await this.#connect();
+            }
+            if (!fetchPage || !pageState) {
+                throw new errors.DriverInternalError(
+                    "Next page executor or paging state is missing",
+                );
+            }
+            const [pagingState, rawResult] = await fetchPage(pageState);
+            const result = new ResultSet(rawResult, this.#encoder, pagingState);
+            if (pagingState) {
+                result.rawNextPageAsync = fetchPage;
+            }
+            return result;
+        };
 
         const nextPage = () => {
             promiseUtils.toCallback(
-                this.rustyExecute(
-                    query,
-                    (params as ArrayOrObject | undefined) || [],
-                    execOptions,
-                    pagingState,
-                ),
+                fetchedFirstPage
+                    ? fetchNextPage()
+                    : this.rustyExecute(
+                          query,
+                          (params as ArrayOrObject | undefined) || [],
+                          execOptions,
+                          null,
+                      ),
                 pageCallback,
             );
         };
@@ -706,8 +727,9 @@ class Client extends events.EventEmitter {
             }
 
             if (result.innerPageState) {
-                // Use new page state as next request page state
-                pagingState = result.innerPageState;
+                fetchedFirstPage = true;
+                fetchPage = result.rawNextPageAsync;
+                pageState = result.rawPageState;
 
                 if (execOptions.isAutoPage()) {
                     // Issue next request for the next page
@@ -722,15 +744,7 @@ class Client extends events.EventEmitter {
             cleanCallback(null, result);
         }
 
-        promiseUtils.toCallback(
-            this.rustyExecute(
-                query,
-                (params as ArrayOrObject | undefined) || [],
-                execOptions,
-                pagingState,
-            ),
-            pageCallback,
-        );
+        nextPage();
     }
 
     /**
