@@ -3,10 +3,11 @@ use napi::{
     sys,
 };
 use scylla::{
-    cluster::metadata::ColumnType,
+    cluster::metadata::{ColumnType, NativeType},
     errors::SerializationError,
     serialize::value::{BuiltinSerializationError, BuiltinSerializationErrorKind, SerializeValue},
 };
+use scylla_cql_core::serialize::row::SerializedValues;
 
 use crate::errors::make_js_error;
 
@@ -18,6 +19,100 @@ enum MaybeUnsetNullableValue<T> {
 
 pub struct EncodedValuesWrapper {
     inner: MaybeUnsetNullableValue<Vec<u8>>,
+}
+
+/// Owns the complete CQL value list before execution leaves the JS thread.
+/// Buffer contents are read only while converting the N-API argument, so JS
+/// can safely reuse or mutate the source buffers after the call returns.
+pub struct SerializedValuesWrapper {
+    pub(crate) inner: SerializedValues,
+}
+
+impl FromNapiValue for SerializedValuesWrapper {
+    /// # Safety
+    ///
+    /// `env` and `napi_val` must be valid for this synchronous N-API call.
+    unsafe fn from_napi_value(env: sys::napi_env, napi_val: sys::napi_value) -> napi::Result<Self> {
+        let mut is_array = false;
+        check_status!(
+            unsafe { sys::napi_is_array(env, napi_val, &mut is_array) },
+            "Failed to inspect encoded values",
+        )?;
+        if !is_array {
+            return Err(make_js_error(
+                "Expected an array of encoded values".to_owned(),
+            ));
+        }
+        let mut count = 0;
+        check_status!(
+            unsafe { sys::napi_get_array_length(env, napi_val, &mut count) },
+            "Expected an array of encoded values",
+        )?;
+
+        let mut inner = SerializedValues::new();
+        for index in 0..count {
+            let mut element = std::ptr::null_mut();
+            check_status!(
+                unsafe { sys::napi_get_element(env, napi_val, index, &mut element) },
+                "Failed to read encoded value",
+            )?;
+
+            let mut value_type = 0;
+            check_status!(
+                unsafe { sys::napi_typeof(env, element, &mut value_type) },
+                "Failed to inspect encoded value",
+            )?;
+
+            let value = match value_type {
+                sys::ValueType::napi_undefined => MaybeUnsetNullableValue::Unset,
+                sys::ValueType::napi_null => MaybeUnsetNullableValue::Null,
+                sys::ValueType::napi_object => {
+                    let bytes: &[u8] = unsafe { <&[u8]>::from_napi_value(env, element) }
+                        .map_err(|_| make_js_error("Expected a Buffer or Uint8Array".to_owned()))?;
+                    MaybeUnsetNullableValue::Value(bytes)
+                }
+                _ => {
+                    return Err(make_js_error(
+                        "Expected a Buffer, null or undefined".to_owned(),
+                    ));
+                }
+            };
+            inner
+                .add_value(
+                    &EncodedValueRef(value),
+                    &ColumnType::Native(NativeType::Blob),
+                )
+                .map_err(|err| make_js_error(err.to_string()))?;
+        }
+
+        Ok(Self { inner })
+    }
+}
+
+struct EncodedValueRef<'a>(MaybeUnsetNullableValue<&'a [u8]>);
+
+impl SerializeValue for EncodedValueRef<'_> {
+    fn serialize<'b>(
+        &self,
+        typ: &ColumnType,
+        writer: scylla::serialize::writers::CellWriter<'b>,
+    ) -> Result<scylla::serialize::writers::WrittenCellProof<'b>, SerializationError> {
+        serialize_preencoded::<Self>(&self.0, typ, writer)
+    }
+}
+
+fn serialize_preencoded<'b, T>(
+    value: &MaybeUnsetNullableValue<&[u8]>,
+    typ: &ColumnType,
+    writer: scylla::serialize::writers::CellWriter<'b>,
+) -> Result<scylla::serialize::writers::WrittenCellProof<'b>, SerializationError> {
+    match value {
+        MaybeUnsetNullableValue::Value(bytes) => writer
+            .set_value(bytes)
+            .map_err(|_| mk_ser_err::<T>(typ, BuiltinSerializationErrorKind::SizeOverflow)),
+        MaybeUnsetNullableValue::Null => Ok(writer.set_null()),
+        MaybeUnsetNullableValue::Unset => Ok(writer.set_unset()),
+    }
 }
 fn mk_ser_err<T: ?Sized>(
     got: &ColumnType,
@@ -45,13 +140,14 @@ impl SerializeValue for EncodedValuesWrapper {
         writer: scylla::serialize::writers::CellWriter<'b>,
     ) -> Result<scylla::serialize::writers::WrittenCellProof<'b>, scylla::errors::SerializationError>
     {
-        match &self.inner {
-            MaybeUnsetNullableValue::Value(inner) => writer
-                .set_value(inner.as_ref())
-                .map_err(|_| mk_ser_err::<Self>(typ, BuiltinSerializationErrorKind::SizeOverflow)),
-            MaybeUnsetNullableValue::Null => Ok(writer.set_null()),
-            MaybeUnsetNullableValue::Unset => Ok(writer.set_unset()),
-        }
+        let value = match &self.inner {
+            MaybeUnsetNullableValue::Value(inner) => {
+                MaybeUnsetNullableValue::Value(inner.as_slice())
+            }
+            MaybeUnsetNullableValue::Null => MaybeUnsetNullableValue::Null,
+            MaybeUnsetNullableValue::Unset => MaybeUnsetNullableValue::Unset,
+        };
+        serialize_preencoded::<Self>(&value, typ, writer)
     }
 }
 
