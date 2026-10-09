@@ -5,7 +5,7 @@ use crate::{
     types::type_wrappers::ComplexType, utils::from_napi_obj::define_js_to_rust_convertible_object,
 };
 
-pub(crate) struct PreparedStatementWrapper {
+pub struct PreparedStatementWrapper {
     pub(crate) prepared: PreparedStatement,
 }
 
