@@ -1,6 +1,8 @@
 # TypeScript build output (emitted in-place from .ts files)
 uuid.js
 uuid.d.ts
+entropy-cache-snapshot.js
+entropy-cache-snapshot.d.ts
 big-decimal.js
 big-decimal.d.ts
 local-time.js

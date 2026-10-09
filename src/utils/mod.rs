@@ -7,9 +7,8 @@ pub mod napi_ref;
 pub mod to_napi_obj;
 
 use crate::errors::{ConvertedError, ConvertedResult, make_js_error};
-use napi::bindgen_prelude::{BigInt, Buffer};
+use napi::bindgen_prelude::BigInt;
 use std::fmt::{self, Display};
-use uuid::Uuid;
 
 /// Convert napi bigint to i64. Returns napi::Error if value doesn't fit in i64.
 pub(crate) fn bigint_to_i64(value: BigInt, error_msg: impl Display) -> ConvertedResult<i64> {
@@ -43,9 +42,4 @@ impl fmt::Write for CharCounter {
         self.count = s.len();
         Ok(())
     }
-}
-
-#[napi]
-pub fn get_random_uuid_v4() -> Buffer {
-    Buffer::from(Uuid::new_v4().as_bytes().as_slice())
 }
