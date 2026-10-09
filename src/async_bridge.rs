@@ -282,9 +282,12 @@ fn reject_conversion_error(env: Env, deferred: DeferredPtr, error: napi::Error) 
     let mut pending = false;
     // A JS constructor used by ToNapiValue may have thrown. Node-API cannot
     // create an error or settle a promise until that exception is cleared.
+    // SAFETY: Env is valid on this environment's JavaScript thread, and pending is writable.
     unsafe { check_status!(sys::napi_is_exception_pending(env.raw(), &mut pending))? };
     if pending {
         let mut exception = ptr::null_mut();
+        // SAFETY: Env is valid for this callback. The returned exception belongs
+        // to this environment and is used once to reject its deferred promise.
         unsafe {
             check_status!(sys::napi_get_and_clear_last_exception(
                 env.raw(),

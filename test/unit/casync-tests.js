@@ -71,8 +71,7 @@ describe("casync bridge", function () {
                 assert.fail("Promise should have been rejected");
             } catch (e) {
                 helper.assertInstanceOf(e, Error);
-                // The message may be truncated or replaced — the important thing
-                // is that the process did not crash and the promise was rejected.
+                assert.strictEqual(e.message, "error with\0null byte");
             }
         });
     });
@@ -197,6 +196,18 @@ describe("casync bridge", function () {
                 assert.fail("Promise should have been rejected");
             } catch (error) {
                 assert.strictEqual(error.message, "conversion failed");
+            }
+        });
+
+        it("rejects conversion errors with null bytes through the fallback", async function () {
+            try {
+                await rust.testsCasyncConversionErrorWithNullByte();
+                assert.fail("Promise should have been rejected");
+            } catch (error) {
+                assert.strictEqual(
+                    error.message,
+                    "[Unknown error] Error message contained illegal null byte",
+                );
             }
         });
     });

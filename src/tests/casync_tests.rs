@@ -77,14 +77,7 @@ pub fn tests_casync_reject_delayed(env: Env, millis: u32) -> JsResult<JsPromise<
 }
 
 /// Rejects with a ConvertedError whose message contains an interior null byte.
-/// The error is produced by a type whose Display output contains '\0', so if
-/// the rejection machinery needs a CString-based fallback reason, CString::new
-/// will fail and the code must still reject safely without crashing.
-///
-/// This test exercises the direct rejection path by returning
-/// `Err::<i32, ConvertedError>(NullByteError.into())`. More practically, it
-/// validates that a ConvertedError with a null byte does NOT crash the process
-/// - the promise is simply rejected with a fallback message.
+/// This exercises direct error conversion, which preserves the full message.
 #[napi(ts_return_type = "Promise<number>")]
 pub fn tests_casync_reject_null_byte(env: Env) -> JsResult<JsPromise<i32>> {
     /// An error whose Display contains an interior null byte.
@@ -92,7 +85,6 @@ pub fn tests_casync_reject_null_byte(env: Env) -> JsResult<JsPromise<i32>> {
 
     impl std::fmt::Display for NullByteError {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            // The \0 makes CString::new fail when reject_with_reason is called.
             write!(f, "error with\0null byte")
         }
     }
@@ -181,5 +173,26 @@ impl ToNapiValue for ThrowingConversion {
 pub fn tests_casync_throwing_conversion(env: Env) -> JsResult<JsPromise<ThrowingConversion>> {
     with_custom_error_sync(|| {
         submit_future(&env, async { Ok::<_, ConvertedError>(ThrowingConversion) })
+    })
+}
+
+/// Test value whose conversion fails without leaving a JS exception pending.
+pub struct FailedConversionWithNullByte;
+
+impl ToNapiValue for FailedConversionWithNullByte {
+    unsafe fn to_napi_value(_: sys::napi_env, _: Self) -> napi::Result<sys::napi_value> {
+        Err(napi::Error::from_reason("conversion\0failed"))
+    }
+}
+
+/// Exercises the rejection fallback for conversion errors containing a null byte.
+#[napi(ts_return_type = "Promise<void>")]
+pub fn tests_casync_conversion_error_with_null_byte(
+    env: Env,
+) -> JsResult<JsPromise<FailedConversionWithNullByte>> {
+    with_custom_error_sync(|| {
+        submit_future(&env, async {
+            Ok::<_, ConvertedError>(FailedConversionWithNullByte)
+        })
     })
 }

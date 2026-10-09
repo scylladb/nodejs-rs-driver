@@ -1,3 +1,4 @@
+#[cfg(feature = "tests")]
 use napi::bindgen_prelude::create_custom_tokio_runtime;
 
 #[macro_use]
@@ -20,6 +21,7 @@ pub mod tracing_info;
 pub mod types;
 pub mod utils;
 
+#[cfg(feature = "tests")]
 #[napi_derive::module_init]
 fn init() {
     let rt = tokio::runtime::Builder::new_multi_thread()

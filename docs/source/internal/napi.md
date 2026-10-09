@@ -84,6 +84,7 @@ converted to JavaScript and settle their Promises on the environment's JavaScrip
 The thread-safe function is referenced while futures are outstanding so Node.js stays alive until
 they settle. Conversion errors reject the Promise; a JavaScript exception thrown during conversion
 is cleared and used as the rejection value.
+Test builds also start napi-rs's runtime for older async test helpers.
 
 ### JSResults
 
