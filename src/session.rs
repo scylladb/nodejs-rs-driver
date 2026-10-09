@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use config::SessionOptions;
 use napi::Env;
+use napi::bindgen_prelude::External;
 use scylla::client::caching_session::CachingSession;
 use scylla::errors::{ExecutionError, RequestAttemptError};
 use scylla::response::{PagingState, PagingStateResponse};
@@ -256,22 +257,78 @@ impl SessionWrapper {
     }
 
     /// Prepares a statement through rust driver for a given session.
-    /// Returns (expected type, variable name) pairs for the prepared statement.
-    #[napi(ts_return_type = "Promise<Array<[ComplexType, string]>>")]
+    /// Returns the native prepared handle and its bind metadata. The bind metadata
+    /// remains fixed for this handle even if the schema changes.
+    #[napi(
+        ts_return_type = "Promise<[ExternalObject<PreparedStatementWrapper>, Array<[ComplexType, string]>]>"
+    )]
     pub async fn prepare_statement(
         &self,
         statement: String,
-    ) -> JsResult<Vec<(ComplexType<'static>, String)>> {
+    ) -> JsResult<(
+        External<PreparedStatementWrapper>,
+        Vec<(ComplexType<'static>, String)>,
+    )> {
         with_custom_error_async(async || {
             let statement: Statement = statement.into();
-            let w = PreparedStatementWrapper {
-                prepared: self
-                    .inner
-                    .add_prepared_statement(&statement) // TODO: change for add_prepared_statement_to_owned after it is made public
-                    .await?,
+            let handle = PreparedStatementWrapper {
+                prepared: self.inner.get_session().prepare(statement).await?,
             };
-            let types = w.get_expected_types();
-            ConvertedResult::Ok(types)
+            let expected_types = handle.get_expected_types();
+            ConvertedResult::Ok((External::new(handle), expected_types))
+        })
+        .await
+    }
+
+    /// Executes an already prepared handle without another cache lookup.
+    #[napi(ts_return_type = "Promise<QueryResultWrapper>")]
+    pub async fn execute_prepared_handle_unpaged(
+        &self,
+        handle: &External<PreparedStatementWrapper>,
+        params: SerializedValuesWrapper,
+        options: &QueryOptionsWrapper,
+    ) -> JsResult<QueryResultWrapper> {
+        with_custom_error_async(async || {
+            let statement =
+                self.apply_prepared_statement_options(handle.prepared.clone(), &options.options)?;
+            validate_value_count(&statement, &params)?;
+            let (result, paging_state) = self
+                .inner
+                .get_session()
+                .execute_unstable(&statement, &params.inner, false, PagingState::start())
+                .await?;
+            if !matches!(paging_state, PagingStateResponse::NoMorePages) {
+                tracing::error!("Unpaged prepared query returned a non-empty paging state");
+                return Err(ConvertedError::from(ExecutionError::LastAttemptError(
+                    RequestAttemptError::NonfinishedPagingState,
+                )));
+            }
+            QueryResultWrapper::from_query(result)
+        })
+        .await
+    }
+
+    /// Fetches a page using an already prepared handle.
+    #[napi(ts_return_type = "Promise<PagingResultWithExecutor>")]
+    pub async fn execute_prepared_handle_single_page(
+        &self,
+        handle: &External<PreparedStatementWrapper>,
+        params: SerializedValuesWrapper,
+        options: &QueryOptionsWrapper,
+        paging_state: Option<&PagingStateWrapper>,
+    ) -> JsResult<PagingResultWithExecutor> {
+        with_custom_error_async(async || {
+            let statement =
+                self.apply_prepared_statement_options(handle.prepared.clone(), &options.options)?;
+            validate_value_count(&statement, &params)?;
+            let executor = QueryExecutor::new(QueryValues::Prepared {
+                values: params,
+                statement,
+            });
+            let res = executor
+                .fetch_next_page_internal(self, paging_state)
+                .await?;
+            ConvertedResult::Ok(res.with_executor(executor))
         })
         .await
     }
@@ -595,4 +652,9 @@ macro_rules! make_non_batch_apply_options {
 }
 
 make_non_batch_apply_options!(Statement, apply_statement_options, statement_opt_partial);
+make_non_batch_apply_options!(
+    PreparedStatement,
+    apply_prepared_statement_options,
+    prepared_statement_opt_partial
+);
 make_apply_options!(Batch, apply_batch_options);

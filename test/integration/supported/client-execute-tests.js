@@ -43,6 +43,36 @@ describe("Client @SERVER_API", function () {
             });
         });
 
+        it("refreshes cached bind types after an external schema change", async function () {
+            const client = setupInfo.client;
+            const other = new Client(helper.baseOptions);
+            const changedTable = `${keyspace}.${helper.getRandomName("prepared_meta")}`;
+            const insert = `INSERT INTO ${changedTable} (k, v) VALUES (?, ?)`;
+
+            try {
+                await helper.ddl(
+                    client,
+                    `CREATE TABLE ${changedTable} (k int PRIMARY KEY, v int)`,
+                );
+                await client.execute(insert, [1, 10], { prepare: true });
+                await client.execute(insert, [2, 20], { prepare: true });
+
+                await other.connect();
+                await other.execute(`DROP TABLE ${changedTable}`);
+                await other.execute(
+                    `CREATE TABLE ${changedTable} (k int PRIMARY KEY, v text)`,
+                );
+
+                await client.execute(insert, [3, "changed"], { prepare: true });
+                const result = await client.execute(
+                    `SELECT v FROM ${changedTable} WHERE k = 3`,
+                );
+                assert.strictEqual(result.first().v, "changed");
+            } finally {
+                await other.shutdown();
+            }
+        });
+
         it("should callback with syntax error", function (done) {
             const client = setupInfo.client;
             client.connect(function (err) {
