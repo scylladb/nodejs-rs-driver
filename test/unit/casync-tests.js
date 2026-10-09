@@ -43,36 +43,27 @@ describe("casync bridge", function () {
 
     describe("reject", function () {
         it("should reject with the correct error message and name", async function () {
-            try {
-                await rust.testsCasyncReject();
-                assert.fail("Promise should have been rejected");
-            } catch (e) {
-                helper.assertInstanceOf(e, Error);
-                assert.strictEqual(e.message, "Keyspace name is empty");
-                assert.strictEqual(e.name, "BadKeyspaceName");
-            }
+            const error = await helper.assertThrowsAsync(
+                rust.testsCasyncReject(),
+            );
+            assert.strictEqual(error.message, "Keyspace name is empty");
+            assert.strictEqual(error.name, "BadKeyspaceName");
         });
 
         it("should reject with the correct error after a delay", async function () {
-            try {
-                await rust.testsCasyncRejectDelayed(30);
-                assert.fail("Promise should have been rejected");
-            } catch (e) {
-                helper.assertInstanceOf(e, Error);
-                assert.strictEqual(e.message, "Keyspace name is empty");
-                assert.strictEqual(e.name, "BadKeyspaceName");
-            }
+            const error = await helper.assertThrowsAsync(
+                rust.testsCasyncRejectDelayed(30),
+            );
+            assert.strictEqual(error.message, "Keyspace name is empty");
+            assert.strictEqual(error.name, "BadKeyspaceName");
         });
 
         it("should reject cleanly even when the error message contains a null byte", async function () {
             // The promise must reject (not crash) when ConvertedError::msg has \0.
-            try {
-                await rust.testsCasyncRejectNullByte();
-                assert.fail("Promise should have been rejected");
-            } catch (e) {
-                helper.assertInstanceOf(e, Error);
-                assert.strictEqual(e.message, "error with\0null byte");
-            }
+            const error = await helper.assertThrowsAsync(
+                rust.testsCasyncRejectNullByte(),
+            );
+            assert.strictEqual(error.message, "error with\0null byte");
         });
     });
 
@@ -191,24 +182,20 @@ describe("casync bridge", function () {
         });
 
         it("rejects a conversion exception without aborting Node", async function () {
-            try {
-                await rust.testsCasyncThrowingConversion();
-                assert.fail("Promise should have been rejected");
-            } catch (error) {
-                assert.strictEqual(error.message, "conversion failed");
-            }
+            const error = await helper.assertThrowsAsync(
+                rust.testsCasyncThrowingConversion(),
+            );
+            assert.strictEqual(error.message, "conversion failed");
         });
 
         it("rejects conversion errors with null bytes through the fallback", async function () {
-            try {
-                await rust.testsCasyncConversionErrorWithNullByte();
-                assert.fail("Promise should have been rejected");
-            } catch (error) {
-                assert.strictEqual(
-                    error.message,
-                    "[Unknown error] Error message contained illegal null byte",
-                );
-            }
+            const error = await helper.assertThrowsAsync(
+                rust.testsCasyncConversionErrorWithNullByte(),
+            );
+            assert.strictEqual(
+                error.message,
+                "[Unknown error] Error message contained illegal null byte",
+            );
         });
     });
 });

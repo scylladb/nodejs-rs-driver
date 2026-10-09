@@ -164,7 +164,7 @@ impl ToNapiValue for ThrowingConversion {
         if status != sys::Status::napi_ok {
             return Err(napi::Error::from_status(status.into()));
         }
-        Err(napi::Error::from_reason("conversion failed"))
+        Err(napi::Error::from_reason("Rust conversion reason"))
     }
 }
 
