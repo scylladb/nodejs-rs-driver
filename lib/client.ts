@@ -298,6 +298,17 @@ class Client extends events.EventEmitter {
             undefined,
         );
 
+        if (this.options.encoding?.copyBuffer === false) {
+            this.log(
+                "warning",
+                "The encoding.copyBuffer option is deprecated and may be removed in the future.\n" +
+                    "Setting it to false does not decrease memory or copy overhead in this driver. " +
+                    "Remove this option from the client options.",
+                undefined,
+                undefined,
+            );
+        }
+
         try {
             if (this.options.logLevel !== types.logLevels.off) {
                 // We need weak ref, since it lives inside log callback.
