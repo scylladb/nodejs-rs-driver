@@ -9,7 +9,7 @@ crate-type = ["cdylib"]
 [dependencies]
 bytes = "1"
 
-napi = { version = "3.6.0", default-features = false, features = ["napi4", "napi6", "async"] }
+napi = { version = "3.6.0", default-features = false, features = ["napi4", "napi6"] }
 napi-derive = "3.4.0"
 # Keep these versions aligned: execute_unstable accepts scylla-cql-core's SerializedValues.
 # Its existing interop API is gated by unstable-python-rs until a Node-specific gate is available.
@@ -28,8 +28,8 @@ tracing-subscriber = { version = "0.3", features = ["registry"] }
 scylla-proxy = { version = "0.0.6", optional = true }
 
 [features]
-# Enables the client-routes fake-NLB test helpers in src/tests/client_routes_proxy_tests.rs.
-tests = ["scylla-proxy"]
+# Enables proxy helpers and the napi-rs async runtime used by test helpers.
+tests = ["scylla-proxy", "napi/async"]
 
 [lints.rust]
 unsafe-op-in-unsafe-fn = "warn"

@@ -312,7 +312,7 @@ fn noop_callback() {
 /// thread drives the reactor (epoll/kqueue). A single weak TSFN is used
 /// as the cross-thread wake mechanism — ABI-stable, cross-platform, no
 /// direct libuv dependency.
-#[napi]
+#[napi(ts_return_type = "void")]
 pub fn init_poll_bridge(env: Env) -> JsResult<()> {
     with_custom_error_sync(|| {
         let key = env.raw() as usize;
