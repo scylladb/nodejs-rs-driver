@@ -39,6 +39,24 @@ describe("Client.createOptions()", () => {
         assert.strictEqual(seen[0], seen[1]);
     });
 
+    it("reuses options across execute calls with fresh equivalents", async () => {
+        const client = new Client({ contactPoints: ["127.0.0.1"] });
+        const seen = [];
+        client.rustyExecute = async (_query, _params, executionOptions) => {
+            seen.push(executionOptions);
+        };
+
+        await client.execute("SELECT value FROM items WHERE id = ?", [1], {
+            prepare: true,
+            isIdempotent: true,
+        });
+        await client.execute("SELECT value FROM items WHERE id = ?", [2], {
+            prepare: true,
+            isIdempotent: true,
+        });
+        assert.strictEqual(seen[0], seen[1]);
+    });
+
     it("reuses execution and native options for repeated calls", () => {
         const client = new Client({ contactPoints: ["127.0.0.1"] });
         const options = { prepare: true };
@@ -48,6 +66,345 @@ describe("Client.createOptions()", () => {
         assert.strictEqual(second, first);
         assert.strictEqual(second.getRustOptions(), first.getRustOptions());
         assert.strictEqual(client.createOptions({ prepare: true }), first);
+    });
+
+    it("reuses options for equivalent fresh scalar objects", () => {
+        const client = new Client({ contactPoints: ["127.0.0.1"] });
+        const first = client.createOptions({
+            prepare: true,
+            isIdempotent: true,
+        });
+        const second = client.createOptions({
+            isIdempotent: true,
+            prepare: true,
+        });
+
+        assert.strictEqual(second, first);
+        assert.strictEqual(second.getRustOptions(), first.getRustOptions());
+    });
+
+    it("keeps caller mutations out of equivalent cached options", () => {
+        const client = new Client({ contactPoints: ["127.0.0.1"] });
+        const original = { prepare: true, requestTimeout: 10 };
+        const first = client.createOptions(original);
+        original.requestTimeout = 20;
+
+        const equivalentInput = {
+            prepare: true,
+            requestTimeout: 10,
+        };
+        const equivalent = client.createOptions(equivalentInput);
+        assert.strictEqual(equivalent, first);
+        assert.strictEqual(equivalent.getRequestTimeout(), 10);
+        assert.strictEqual(
+            client.createOptions(original).getRequestTimeout(),
+            20,
+        );
+
+        equivalentInput.requestTimeout = 30;
+        assert.strictEqual(
+            client.createOptions(equivalentInput).getRequestTimeout(),
+            30,
+        );
+    });
+
+    it("keeps shared scalar snapshots immutable", () => {
+        const client = new Client({ contactPoints: ["127.0.0.1"] });
+        const first = client.createOptions({ requestTimeout: 10 });
+        const raw = first.getRawQueryOptions();
+
+        assert(Object.isFrozen(raw));
+        assert.throws(() => {
+            raw.requestTimeout = 20;
+        }, TypeError);
+        const equivalent = client.createOptions({ requestTimeout: 10 });
+        assert.strictEqual(equivalent, first);
+        assert.strictEqual(equivalent.getRequestTimeout(), 10);
+    });
+
+    it("keeps a rebuilt scalar option stable after another caller mutation", () => {
+        const client = new Client({ contactPoints: ["127.0.0.1"] });
+        const input = { requestTimeout: 10 };
+        client.createOptions(input);
+
+        input.requestTimeout = 20;
+        const rebuilt = client.createOptions(input);
+        input.requestTimeout = 30;
+
+        assert.strictEqual(rebuilt.getRequestTimeout(), 20);
+    });
+
+    it("snapshots an object that becomes scalar after removing a mutable option", () => {
+        const client = new Client({ contactPoints: ["127.0.0.1"] });
+        const input = { requestTimeout: 10, routingIndexes: [0] };
+        client.createOptions(input);
+
+        delete input.routingIndexes;
+        const rebuilt = client.createOptions(input);
+        input.requestTimeout = 20;
+
+        assert.strictEqual(rebuilt.getRequestTimeout(), 10);
+    });
+
+    it("keeps an interned scalar entry stable when a mutable option is added", () => {
+        const client = new Client({ contactPoints: ["127.0.0.1"] });
+        const input = { requestTimeout: 10 };
+        const first = client.createOptions(input);
+
+        input.routingIndexes = [0];
+        const rebuilt = client.createOptions(input);
+
+        assert.notStrictEqual(rebuilt, first);
+        assert.strictEqual(first.getRoutingIndexes(), undefined);
+        assert.deepStrictEqual(rebuilt.getRoutingIndexes(), [0]);
+        assert.strictEqual(client.createOptions({ requestTimeout: 10 }), first);
+    });
+
+    it("does not intern options containing mutable values", () => {
+        const client = new Client({ contactPoints: ["127.0.0.1"] });
+        const first = client.createOptions({ routingIndexes: [0] });
+        const second = client.createOptions({ routingIndexes: [0] });
+        assert.notStrictEqual(second, first);
+
+        const firstTimestamp = client.createOptions({
+            timestamp: types.Long.fromNumber(10),
+        });
+        const secondTimestamp = client.createOptions({
+            timestamp: types.Long.fromNumber(10),
+        });
+        assert.notStrictEqual(secondTimestamp, firstTimestamp);
+
+        const firstBuffer = client.createOptions({
+            routingKey: Buffer.from([1]),
+        });
+        const secondBuffer = client.createOptions({
+            routingKey: Buffer.from([1]),
+        });
+        assert.notStrictEqual(secondBuffer, firstBuffer);
+    });
+
+    it("keeps distinct scalar values in separate cache entries", () => {
+        const client = new Client({ contactPoints: ["127.0.0.1"] });
+        const enabled = client.createOptions({ isIdempotent: true });
+        const disabled = client.createOptions({ isIdempotent: false });
+        const omitted = client.createOptions({});
+
+        assert.notStrictEqual(disabled, enabled);
+        assert.notStrictEqual(omitted, disabled);
+        assert.strictEqual(
+            client.createOptions({ isIdempotent: true }),
+            enabled,
+        );
+    });
+
+    it("keeps missing and undefined properties distinct", () => {
+        const client = new Client({ contactPoints: ["127.0.0.1"] });
+        const numeric = client.createOptions({ requestTimeout: 10 });
+        const missing = client.createOptions({});
+        const explicit = client.createOptions({ requestTimeout: undefined });
+
+        assert.notStrictEqual(numeric, missing);
+        assert.notStrictEqual(explicit, missing);
+        assert.strictEqual(
+            client.createOptions({ requestTimeout: 10 }),
+            numeric,
+        );
+        assert.strictEqual(
+            client.createOptions({ requestTimeout: undefined }),
+            explicit,
+        );
+    });
+
+    it("rejects invalid fresh options on every call", () => {
+        const client = new Client({ contactPoints: ["127.0.0.1"] });
+        for (let i = 0; i < 2; i++) {
+            assert.throws(
+                () => client.createOptions({ requestTimeout: -1 }),
+                /requestTimeout/,
+            );
+        }
+    });
+
+    it("does not intern options with symbol properties", () => {
+        const client = new Client({ contactPoints: ["127.0.0.1"] });
+        const marker = Symbol("marker");
+        const first = { prepare: true, [marker]: 1 };
+        const second = { prepare: true, [marker]: 1 };
+
+        assert.notStrictEqual(
+            client.createOptions(first),
+            client.createOptions(second),
+        );
+        assert.notStrictEqual(
+            client.createOptions(first),
+            client.createOptions(first),
+        );
+    });
+
+    it("does not cache query options supplied by a Proxy", () => {
+        const client = new Client({ contactPoints: ["127.0.0.1"] });
+        const options = new Proxy(
+            {},
+            {
+                get(target, key, receiver) {
+                    return key === "requestTimeout"
+                        ? 10
+                        : Reflect.get(target, key, receiver);
+                },
+            },
+        );
+        const first = client.createOptions(options);
+        const second = client.createOptions(options);
+
+        assert.strictEqual(first.getRequestTimeout(), 10);
+        assert.strictEqual(first.getRawQueryOptions(), options);
+        assert.notStrictEqual(second, first);
+        assert.notStrictEqual(client.createOptions({}), first);
+    });
+
+    it("does not let changing Proxy values poison equivalent options", () => {
+        const client = new Client({ contactPoints: ["127.0.0.1"] });
+        let reads = 0;
+        const options = new Proxy(
+            { requestTimeout: 10 },
+            {
+                get(target, key, receiver) {
+                    if (key === "requestTimeout") {
+                        return ++reads === 1 ? 10 : 20;
+                    }
+                    return Reflect.get(target, key, receiver);
+                },
+            },
+        );
+        const first = client.createOptions(options);
+        const second = client.createOptions({ requestTimeout: 10 });
+
+        assert.notStrictEqual(second, first);
+        assert.strictEqual(second.getRequestTimeout(), 10);
+    });
+
+    it("does not cache client defaults supplied by a Proxy", () => {
+        const client = new Client({ contactPoints: ["127.0.0.1"] });
+        let fetchSize = 10;
+        client.options.queryOptions = new Proxy(client.options.queryOptions, {
+            get(target, key, receiver) {
+                return key === "fetchSize"
+                    ? fetchSize
+                    : Reflect.get(target, key, receiver);
+            },
+        });
+        const first = client.createOptions({ prepare: true });
+        fetchSize = 20;
+        const second = client.createOptions({ prepare: true });
+
+        assert.notStrictEqual(second, first);
+        assert.strictEqual(second.getFetchSize(), 20);
+    });
+
+    it("evicts the least recently used equivalent options after 64 entries", () => {
+        const client = new Client({ contactPoints: ["127.0.0.1"] });
+        const firstInput = { requestTimeout: 0 };
+        const first = client.createOptions(firstInput);
+        const second = client.createOptions({ requestTimeout: 1 });
+        for (let timeout = 2; timeout < 64; timeout++) {
+            client.createOptions({ requestTimeout: timeout });
+        }
+
+        assert.strictEqual(client.createOptions(firstInput), first);
+        client.createOptions({ requestTimeout: 64 });
+        assert.strictEqual(client.createOptions({ requestTimeout: 0 }), first);
+        assert.notStrictEqual(
+            client.createOptions({ requestTimeout: 1 }),
+            second,
+        );
+    });
+
+    it("refreshes equivalent-cache recency for fresh-object hits", () => {
+        const client = new Client({ contactPoints: ["127.0.0.1"] });
+        const first = client.createOptions({ requestTimeout: 0 });
+        const second = client.createOptions({ requestTimeout: 1 });
+        for (let timeout = 2; timeout < 64; timeout++) {
+            client.createOptions({ requestTimeout: timeout });
+        }
+
+        assert.strictEqual(client.createOptions({ requestTimeout: 0 }), first);
+        client.createOptions({ requestTimeout: 64 });
+        assert.strictEqual(client.createOptions({ requestTimeout: 0 }), first);
+        assert.notStrictEqual(
+            client.createOptions({ requestTimeout: 1 }),
+            second,
+        );
+    });
+
+    it("does not share equivalent options across identically configured clients", () => {
+        const firstClient = new Client({ contactPoints: ["127.0.0.1"] });
+        const secondClient = new Client({ contactPoints: ["127.0.0.1"] });
+        const first = firstClient.createOptions({ prepare: true });
+        const second = secondClient.createOptions({ prepare: true });
+
+        assert.notStrictEqual(second, first);
+        assert.notStrictEqual(second.getRustOptions(), first.getRustOptions());
+    });
+
+    it("invalidates equivalent options after defaults and profiles change", () => {
+        const client = new Client({ contactPoints: ["127.0.0.1"] });
+        const first = client.createOptions({ prepare: true });
+        client.options.queryOptions.fetchSize = 100;
+        const second = client.createOptions({ prepare: true });
+        assert.notStrictEqual(second, first);
+        assert.strictEqual(second.getFetchSize(), 100);
+
+        client.profileManager.getProfile().consistency =
+            types.consistencies.localQuorum;
+        const third = client.createOptions({ prepare: true });
+        assert.notStrictEqual(third, second);
+        assert.strictEqual(
+            third.getConsistency(),
+            types.consistencies.localQuorum,
+        );
+
+        client.options.requestTimeout = 100;
+        const fourth = client.createOptions({ prepare: true });
+        assert.notStrictEqual(fourth, third);
+        assert.strictEqual(fourth.getRequestTimeout(), 100);
+    });
+
+    it("reuses named profiles and invalidates changed profile settings", () => {
+        const fast = new ExecutionProfile("fast", { requestTimeout: 10 });
+        const slow = new ExecutionProfile("slow", { requestTimeout: 20 });
+        const client = new Client({
+            contactPoints: ["127.0.0.1"],
+            profiles: [fast, slow],
+        });
+        const first = client.createOptions({ executionProfile: "fast" });
+
+        assert.strictEqual(
+            client.createOptions({ executionProfile: "fast" }),
+            first,
+        );
+        assert.strictEqual(
+            client
+                .createOptions({ executionProfile: "slow" })
+                .getRequestTimeout(),
+            20,
+        );
+        fast.requestTimeout = 30;
+        const changed = client.createOptions({ executionProfile: "fast" });
+        assert.notStrictEqual(changed, first);
+        assert.strictEqual(changed.getRequestTimeout(), 30);
+    });
+
+    it("invalidates options when client defaults are replaced", () => {
+        const client = new Client({ contactPoints: ["127.0.0.1"] });
+        const oldDefaults = client.options.queryOptions;
+        const first = client.createOptions({ prepare: true });
+        client.options.queryOptions = { ...oldDefaults };
+        const second = client.createOptions({ prepare: true });
+        oldDefaults.fetchSize = 1;
+
+        assert.notStrictEqual(second, first);
+        assert.notStrictEqual(second.getRustOptions(), first.getRustOptions());
+        assert.notStrictEqual(second.getFetchSize(), 1);
     });
 
     it("rebuilds options after a query option changes", () => {
@@ -74,6 +431,17 @@ describe("Client.createOptions()", () => {
 
         assert.notStrictEqual(second.getRustOptions(), first.getRustOptions());
         assert.deepStrictEqual(second.getRoutingIndexes(), [0, 1]);
+    });
+
+    it("rebuilds after replacing a routing array element", () => {
+        const client = new Client({ contactPoints: ["127.0.0.1"] });
+        const options = { routingIndexes: [0] };
+        const first = client.createOptions(options);
+        options.routingIndexes[0] = 1;
+        const second = client.createOptions(options);
+
+        assert.notStrictEqual(second.getRustOptions(), first.getRustOptions());
+        assert.deepStrictEqual(second.getRoutingIndexes(), [1]);
     });
 
     it("does not cache accessor or inherited options", () => {
