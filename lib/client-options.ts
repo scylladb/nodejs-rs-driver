@@ -365,19 +365,46 @@ export interface ClientOptions {
          */
         set?: Function;
         /**
-         * Determines if the network buffer should be copied for buffer based data
-         * types (blob, uuid, timeuuid and inet).
+         * Determines if values of buffer-based types are copied out of the result page.
+         * These types are: blob, uuid, timeuuid, inet, and custom types without a decoder.
          *
-         * Setting it to true will cause that the network buffer is copied for each row value of those types,
-         * causing additional allocations but freeing the network buffer to be reused.
-         * Setting it to true is a good choice for cases where the Row and ResultSet returned by the queries are long-lived
-         * objects.
+         * The Rust driver owns the result page and keeps the page until the page is fully
+         * consumed. JavaScript must not write to memory that Rust can read. Yet, deserialized
+         * JavaScript Buffers that are handed to the user remain writable.
+         * Thus, one of the two sides always gets a copy:
          *
-         * Setting it to false will cause less overhead and the reference of the network buffer to be maintained until the row
-         * / result set are de-referenced.
+         * ```
+         * copyBuffer: true (default)
+         *
+         *   Rust page (shared, read-only)   [ hdr | blob A | uuid B | ... ]
+         *          | zero-copy view                 |        |
+         *          v                                | copy   | copy
+         *   decoder reads the page                  v        v
+         *                                   row.a: Buffer  row.b: Uuid
+         *                                   (owns a small copy of each value)
+         *   The page view is freed after decoding. Rust frees the page later.
+         *
+         * copyBuffer: false
+         *
+         *   Rust page                       [ hdr | blob A | uuid B | ... ]
+         *          | full page copy
+         *          v
+         *   JS page copy                    [ hdr | blob A | uuid B | ... ]
+         *                                            ^        ^
+         *                                            | slice  | slice
+         *                                   row.a: Buffer  row.b: Uuid
+         *   Each value refers to the JS page copy.
+         *   The full page copy stays in memory while one value refers to it.
+         * ```
+         *
+         * Setting it to `false` does not decrease the number of copied bytes.
+         * It copies the full page, and not only the values of buffer-based types.
+         * It can also keep a full page in memory for one small value.
+         *
          * Default: true.
          *
-         * [TODO: Add support for this field]
+         * @deprecated The value `false` does not decrease memory or copy overhead in this driver.
+         * Do not set this option. The driver can remove it in a future major version.
          */
         copyBuffer?: boolean;
         /**

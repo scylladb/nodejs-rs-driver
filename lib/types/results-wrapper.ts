@@ -24,7 +24,11 @@ export function getRowsFromResultsWrapper(
     result: rust.QueryResultWrapper,
     encoder: Encoder,
 ): Array<Row> | undefined {
-    const data = result.getRows();
+    // The shared page is safe here when buffer-valued cells are copied by the
+    // decoder. With copyBuffer disabled, preserve the independent page buffer.
+    const data = encoder.encodingOptions.copyBuffer
+        ? result.getRowsShared()
+        : result.getRows();
     if (data == null) {
         // Empty results are treated as undefined
         return undefined;
