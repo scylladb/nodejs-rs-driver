@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       publish:
-        description: "Create and publish the release (uncheck for a complete dry run)"
+        description: "Create a signed tag and publish the release (uncheck for a complete dry run)"
         type: boolean
         default: true
 
@@ -62,11 +62,6 @@ jobs:
       - name: Validate release versions
         id: version
         run: bash .github/scripts/check-release-order.sh newer
-      - name: Check for a conflicting release tag
-        env:
-          RELEASE_SHA: ${{ github.sha }}
-          RELEASE_TAG: ${{ steps.version.outputs.tag }}
-        run: bash .github/scripts/check-release-tag.sh optional "$RELEASE_TAG" "$RELEASE_SHA"
       - name: Check for open release blockers
         if: inputs.publish
         env:
@@ -307,8 +302,9 @@ jobs:
       - test-x86_64-unknown-linux-gnu-examples
       - test-aarch64-unknown-linux-gnu-examples
       - package-dry-run
-    name: Create release tag
+    name: Create signed release tag
     runs-on: ubuntu-latest
+    environment: release-signing
     permissions:
       contents: write
       issues: read
@@ -332,11 +328,34 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash .github/scripts/check-release-blockers.sh
-      - name: Recheck and create tag
+      - name: Sign and push release tag
         env:
           RELEASE_SHA: ${{ github.sha }}
           RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
-        run: bash .github/scripts/check-release-tag.sh create "$RELEASE_TAG" "$RELEASE_SHA"
+          RELEASE_GPG_PRIVATE_KEY: ${{ secrets.RELEASE_GPG_PRIVATE_KEY }}
+        run: |
+          if [[ "$(git rev-parse HEAD)" != "$RELEASE_SHA" ]]; then
+            echo "::error::Checked-out commit does not match release commit $RELEASE_SHA."
+            exit 1
+          fi
+          if [[ -n "$(git ls-remote origin "refs/tags/$RELEASE_TAG")" ]]; then
+            bash .github/scripts/check-release-tag.sh "$RELEASE_TAG" "$RELEASE_SHA"
+            exit 0
+          fi
+          if [[ -z "$RELEASE_GPG_PRIVATE_KEY" ]]; then
+            echo "::error::RELEASE_GPG_PRIVATE_KEY secret is missing."
+            exit 1
+          fi
+          export GNUPGHOME
+          GNUPGHOME=$(mktemp -d)
+          trap 'rm -rf "$GNUPGHOME"' EXIT
+          printf '%s\n' "$RELEASE_GPG_PRIVATE_KEY" | gpg --batch --import
+          git -c user.name='ScyllaDB Publisher' \
+            -c user.email='publish.code@scylladb.com' \
+            -c user.signingkey=71A6D22711CDB7C2446D21CFBF4BF97A8D4DF1AA \
+            tag -s "$RELEASE_TAG" "$RELEASE_SHA" -m "Release $RELEASE_TAG"
+          git push origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          bash .github/scripts/check-release-tag.sh "$RELEASE_TAG" "$RELEASE_SHA"
 
   publish:
     needs:
@@ -550,7 +569,7 @@ jobs:
           RELEASE_SHA: ${{ github.sha }}
           RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
         run: |
-          bash .github/scripts/check-release-tag.sh required "$RELEASE_TAG" "$RELEASE_SHA"
+          bash .github/scripts/check-release-tag.sh "$RELEASE_TAG" "$RELEASE_SHA"
           if release_is_draft=$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft' 2>/dev/null); then
             if [[ "$release_is_draft" == "true" ]]; then
               gh release upload "$RELEASE_TAG" artifacts/*.node --clobber
