@@ -143,6 +143,7 @@ class PreparedInfo {
     types: ColumnInfo[];
     statement: string;
     boundParamNames: string[];
+    cacheGeneration: number;
     handle: import("../index").ExternalObject<
         import("../index").PreparedStatementWrapper
     >;
@@ -151,6 +152,7 @@ class PreparedInfo {
         types: ColumnInfo[],
         statement: string,
         boundParamNames: string[],
+        cacheGeneration: number,
         handle: import("../index").ExternalObject<
             import("../index").PreparedStatementWrapper
         >,
@@ -158,6 +160,7 @@ class PreparedInfo {
         this.types = types;
         this.statement = statement;
         this.boundParamNames = boundParamNames;
+        this.cacheGeneration = cacheGeneration;
         this.handle = handle;
     }
 }

@@ -83,60 +83,72 @@ describe("prepared statement handle cache", function () {
         );
     });
 
-    it("keeps unrelated handles after a prepared execution fails", async function () {
-        const { client, prepares } = makeClient();
-        const options = { prepare: true, paged: false };
-        await client.execute("SELECT * FROM a", [], options);
-        await client.execute("SELECT * FROM b", [], options);
-
-        const failedHandle = prepares[0].handle;
-        client.rustClient.executePreparedHandleUnpaged = async (handle) => {
-            if (handle === failedHandle) throw new Error("query failed");
-            return { rows: [] };
-        };
-
-        await assert.rejects(
-            client.execute("SELECT * FROM a", [], options),
-            /query failed/,
-        );
-        await client.execute("SELECT * FROM b", [], options);
-        await client.execute("SELECT * FROM a", [], options);
-        assert.deepStrictEqual(
-            prepares.map((p) => p.query),
-            ["SELECT * FROM a", "SELECT * FROM b", "SELECT * FROM a"],
-        );
-    });
-
-    it("keeps unrelated handles after a parameter encoding error", async function () {
-        const { client, prepares } = makeClient();
-        const options = { prepare: true, paged: false };
-        await client.execute("SELECT * FROM a", [], options);
-        await client.execute("SELECT * FROM b", [], options);
-
-        await assert.rejects(
-            client.execute("SELECT * FROM a", [Symbol()], options),
-        );
-        await client.execute("SELECT * FROM b", [], options);
-        assert.deepStrictEqual(
-            prepares.map((p) => p.query),
-            ["SELECT * FROM a", "SELECT * FROM b", "SELECT * FROM a"],
-        );
-    });
-
-    it("does not reuse a failed handle held by a concurrent caller", async function () {
-        const { client, prepares } = makeClient();
+    it("prepares again after clearing the cache, including a retained handle", async function () {
+        const { client, prepares, executed } = makeClient();
         const options = client.createOptions({ prepare: true, paged: false });
-        const prepared = await client.prepareStatement("SELECT * FROM a");
-        client.rustClient.executePreparedHandleUnpaged = async (handle) => {
-            if (handle === prepares[0].handle) throw new Error("query failed");
-            return { rows: [] };
+        const retained = await client.prepareStatement("SELECT * FROM a");
+
+        await client.rustyExecute(retained, [], options);
+        client.clearPreparedCache();
+        await client.rustyExecute(retained, [], options);
+        await client.rustyExecute("SELECT * FROM a", [], options);
+
+        assert.strictEqual(prepares.length, 2);
+        assert.deepStrictEqual(executed, [
+            prepares[0].handle,
+            prepares[1].handle,
+            prepares[1].handle,
+        ]);
+    });
+
+    it("does not restore a preparation completed after cache clearing", async function () {
+        const { client, prepares } = makeClient();
+        let finishFirst;
+        client.rustClient.prepareStatement = (query) => {
+            const handle = {};
+            prepares.push({ query, handle });
+            if (prepares.length === 1) {
+                return new Promise((resolve) => {
+                    finishFirst = () => resolve([handle, []]);
+                });
+            }
+            return Promise.resolve([handle, []]);
         };
 
-        await assert.rejects(
-            client.rustyExecute(prepared, [], options),
-            /query failed/,
-        );
-        await client.rustyExecute(prepared, [], options);
+        const waiting = client.prepareStatement("SELECT * FROM a");
+        client.clearPreparedCache();
+        finishFirst();
+        const refreshed = await waiting;
+
         assert.strictEqual(prepares.length, 2);
+        assert.strictEqual(refreshed.handle, prepares[1].handle);
+        assert.strictEqual(
+            await client.prepareStatement("SELECT * FROM a"),
+            refreshed,
+        );
+    });
+
+    it("retries a preparation invalidated by clearing the cache", async function () {
+        const { client, prepares } = makeClient();
+        let failFirst;
+        client.rustClient.prepareStatement = (query) => {
+            const handle = {};
+            prepares.push({ query, handle });
+            if (prepares.length === 1) {
+                return new Promise((_, reject) => {
+                    failFirst = () =>
+                        reject(new Error("old preparation failed"));
+                });
+            }
+            return Promise.resolve([handle, []]);
+        };
+
+        const waiting = client.prepareStatement("SELECT * FROM a");
+        client.clearPreparedCache();
+        failFirst();
+
+        const refreshed = await waiting;
+        assert.strictEqual(prepares.length, 2);
+        assert.strictEqual(refreshed.handle, prepares[1].handle);
     });
 });

@@ -91,6 +91,9 @@ export class Client extends events.EventEmitter {
 
   connect(callback: EmptyCallback): void;
 
+  /** Clear cached prepared statements after changing a table or user-defined type they use. */
+  clearPreparedCache(): void;
+
   execute(
     query: string,
     params?: ArrayOrObject,
