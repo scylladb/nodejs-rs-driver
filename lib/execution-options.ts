@@ -214,7 +214,9 @@ class ExecutionOptions {
     }
 
     /**
-     * Gets the query options as provided to the execution method without setting the default values.
+     * Gets the query options stored by this instance without setting default values.
+     * This may be a frozen shallow copy rather than the caller's object,
+     * including on the first execution with plain scalar options.
      */
     getRawQueryOptions(): QueryOptions | undefined {
         return undefined;

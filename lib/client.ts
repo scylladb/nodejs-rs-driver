@@ -40,8 +40,10 @@ import * as metadataModule from "./metadata";
 const { ProfileManager } = executionProfile;
 const description = packageInfo.description;
 const { version } = packageInfo;
+const MAX_EQUIVALENT_OPTIONS = 64;
 
 function snapshotEntries(options: object): [string, unknown][] {
+    // Long is mutable; record a timestamp's value for identity-cache invalidation.
     return Object.entries(options).map(([key, value]) => [
         key,
         Array.isArray(value)
@@ -50,6 +52,39 @@ function snapshotEntries(options: object): [string, unknown][] {
               ? value.toBigInt()
               : value,
     ]);
+}
+
+// Only scalar options can be safely shared using a shallow frozen snapshot.
+// Arrays, buffers and Long values stay on the identity-cache path.
+function scalarOptionsKey(
+    entries: [string, unknown][],
+    buildKey = true,
+): string | undefined {
+    const parts: [string, string, string][] = [];
+    for (const [key, value] of entries) {
+        if (value === null) {
+            if (buildKey) parts.push([key, "null", ""]);
+        } else if (
+            typeof value === "string" ||
+            typeof value === "boolean" ||
+            (typeof value === "number" && Number.isFinite(value)) ||
+            value === undefined
+        ) {
+            if (buildKey) {
+                parts.push([
+                    key,
+                    typeof value,
+                    Object.is(value, -0) ? "-0" : String(value),
+                ]);
+            }
+        } else {
+            return undefined;
+        }
+    }
+    // A stale identity entry only needs the eligibility check, not a map key.
+    if (!buildKey) return "";
+    parts.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    return JSON.stringify(parts);
 }
 
 function sameEntries(
@@ -73,18 +108,45 @@ function sameEntries(
 
 function hasOnlyDataProperties(options: object): boolean {
     return Reflect.ownKeys(options).every((key) => {
+        if (typeof key === "symbol") return false;
         const property = Object.getOwnPropertyDescriptor(options, key);
         return !!property && property.enumerable && "value" in property;
     });
 }
 
+function isCacheableDataObject(options: object, prototype: object): boolean {
+    return (
+        !util.types.isProxy(options) &&
+        Object.getPrototypeOf(options) === prototype &&
+        hasOnlyDataProperties(options)
+    );
+}
+
 type OptionsCacheInputs = {
     queryValues: [string, unknown][];
+    defaults: QueryOptions;
     defaultValues: [string, unknown][];
     profile: executionProfile.ExecutionProfile;
     profileValues: [string, unknown][];
     requestTimeout: number | undefined;
 };
+type OptionsCacheEntry = OptionsCacheInputs & {
+    options: DefaultExecutionOptions;
+    equivalentKey?: string;
+};
+
+function sameClientInputs(
+    cached: OptionsCacheInputs,
+    current: OptionsCacheInputs,
+): boolean {
+    return (
+        cached.defaults === current.defaults &&
+        sameEntries(cached.defaultValues, current.defaultValues) &&
+        cached.profile === current.profile &&
+        sameEntries(cached.profileValues, current.profileValues) &&
+        cached.requestTimeout === current.requestTimeout
+    );
+}
 
 /**
  * Callback used by execution methods.
@@ -132,10 +194,8 @@ const loggingFinalizationRegistry = new FinalizationRegistry(
  * console.log(row['key']);
  */
 class Client extends events.EventEmitter {
-    #executionOptionsCache = new WeakMap<
-        QueryOptions,
-        OptionsCacheInputs & { options: DefaultExecutionOptions }
-    >();
+    #executionOptionsCache = new WeakMap<QueryOptions, OptionsCacheEntry>();
+    #equivalentOptionsCache = new Map<string, OptionsCacheEntry>();
     /**
      * @internal
      * @ignore
@@ -267,8 +327,9 @@ class Client extends events.EventEmitter {
      *
      * Creating those options requires a native call, but they can be reused
      * without any additional native calls, which improves performance
-     * for queries with the same QueryOptions.
-     * Cached instances are shared by executions using the same options object;
+     * for queries with the same or equivalent scalar QueryOptions.
+     * Cached instances are shared by executions using the same object or
+     * equivalent scalar options;
      * request-specific state must not be set on them.
      * @internal
      * @ignore
@@ -279,31 +340,31 @@ class Client extends events.EventEmitter {
             return options;
         }
         let cacheInputs: OptionsCacheInputs | undefined;
-        // Accessors and inherited values can change without changing own data values.
+        // Accessors, inherited values, and proxies can change without changing
+        // the own data-property snapshot used by the cache.
         const queryOptions =
             options &&
             typeof options === "object" &&
-            Object.getPrototypeOf(options) === Object.prototype &&
-            hasOnlyDataProperties(options)
+            isCacheableDataObject(options, Object.prototype)
                 ? options
                 : undefined;
         if (
             queryOptions &&
-            Object.getPrototypeOf(this.options.queryOptions!) ===
-                Object.prototype &&
-            hasOnlyDataProperties(this.options.queryOptions!)
+            isCacheableDataObject(this.options.queryOptions!, Object.prototype)
         ) {
             const profile = this.profileManager.getProfile(
                 queryOptions.executionProfile,
             );
             if (
                 profile &&
-                Object.getPrototypeOf(profile) ===
-                    executionProfile.ExecutionProfile.prototype &&
-                hasOnlyDataProperties(profile)
+                isCacheableDataObject(
+                    profile,
+                    executionProfile.ExecutionProfile.prototype,
+                )
             ) {
                 cacheInputs = {
                     queryValues: snapshotEntries(queryOptions),
+                    defaults: this.options.queryOptions!,
                     defaultValues: snapshotEntries(this.options.queryOptions!),
                     profile,
                     profileValues: snapshotEntries(profile),
@@ -313,28 +374,93 @@ class Client extends events.EventEmitter {
                 if (
                     cached &&
                     sameEntries(cached.queryValues, cacheInputs.queryValues) &&
-                    sameEntries(
-                        cached.defaultValues,
-                        cacheInputs.defaultValues,
-                    ) &&
-                    cached.profile === cacheInputs.profile &&
-                    sameEntries(
-                        cached.profileValues,
-                        cacheInputs.profileValues,
-                    ) &&
-                    cached.requestTimeout === cacheInputs.requestTimeout
+                    sameClientInputs(cached, cacheInputs)
                 ) {
+                    if (
+                        cached.equivalentKey !== undefined &&
+                        this.#equivalentOptionsCache.get(cached.equivalentKey)
+                            ?.options === cached.options
+                    ) {
+                        this.#equivalentOptionsCache.delete(
+                            cached.equivalentKey,
+                        );
+                        this.#equivalentOptionsCache.set(
+                            cached.equivalentKey,
+                            cached,
+                        );
+                    }
                     return cached.options;
                 }
+                // Interned entries use a detached snapshot. Keep that guarantee
+                // if the caller later changes the same options object.
+                const wasDetached =
+                    !!cached &&
+                    cached.options.getRawQueryOptions() !== queryOptions;
+                return this.#createOptionsOnCacheMiss(
+                    queryOptions,
+                    cacheInputs,
+                    cached === undefined,
+                    wasDetached,
+                );
             }
         }
         const fullOptions = DefaultExecutionOptions.create(options, this);
         fullOptions.wrapOptionsIfNotWrappedYet();
-        if (queryOptions && cacheInputs) {
-            this.#executionOptionsCache.set(queryOptions, {
-                ...cacheInputs,
-                options: fullOptions,
-            });
+        return fullOptions;
+    }
+
+    #createOptionsOnCacheMiss(
+        queryOptions: QueryOptions,
+        cacheInputs: OptionsCacheInputs,
+        tryEquivalent: boolean,
+        wasDetached: boolean,
+    ): DefaultExecutionOptions {
+        const equivalentKey = tryEquivalent
+            ? scalarOptionsKey(cacheInputs.queryValues)
+            : undefined;
+        // Keep previously interned entries detached, and detach an entry that
+        // becomes scalar after a mutable option is removed.
+        const copyOnRebuild =
+            !tryEquivalent &&
+            (wasDetached ||
+                scalarOptionsKey(cacheInputs.queryValues, false) !== undefined);
+        if (equivalentKey !== undefined) {
+            const equivalent = this.#equivalentOptionsCache.get(equivalentKey);
+            if (equivalent && sameClientInputs(equivalent, cacheInputs)) {
+                this.#equivalentOptionsCache.delete(equivalentKey);
+                this.#equivalentOptionsCache.set(equivalentKey, equivalent);
+                this.#executionOptionsCache.set(queryOptions, {
+                    ...equivalent,
+                    queryValues: cacheInputs.queryValues,
+                });
+                return equivalent.options;
+            }
+        }
+        // Equivalent entries need a copy because another caller can later mutate
+        // the original object; identity entries recheck its values on each hit.
+        const fullOptions = DefaultExecutionOptions.create(
+            equivalentKey !== undefined
+                ? Object.freeze(Object.fromEntries(cacheInputs.queryValues))
+                : copyOnRebuild
+                  ? Object.freeze({ ...queryOptions })
+                  : queryOptions,
+            this,
+        );
+        fullOptions.wrapOptionsIfNotWrappedYet();
+        const entry = {
+            ...cacheInputs,
+            options: fullOptions,
+            equivalentKey,
+        };
+        this.#executionOptionsCache.set(queryOptions, entry);
+        if (equivalentKey !== undefined) {
+            this.#equivalentOptionsCache.delete(equivalentKey);
+            this.#equivalentOptionsCache.set(equivalentKey, entry);
+            if (this.#equivalentOptionsCache.size > MAX_EQUIVALENT_OPTIONS) {
+                this.#equivalentOptionsCache.delete(
+                    this.#equivalentOptionsCache.keys().next().value!,
+                );
+            }
         }
         return fullOptions;
     }

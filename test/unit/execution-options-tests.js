@@ -47,7 +47,7 @@ describe("Client.createOptions()", () => {
 
         assert.strictEqual(second, first);
         assert.strictEqual(second.getRustOptions(), first.getRustOptions());
-        assert.notStrictEqual(client.createOptions({ prepare: true }), first);
+        assert.strictEqual(client.createOptions({ prepare: true }), first);
     });
 
     it("rebuilds options after a query option changes", () => {
