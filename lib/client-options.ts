@@ -376,8 +376,6 @@ export interface ClientOptions {
          * Setting it to false will cause less overhead and the reference of the network buffer to be maintained until the row
          * / result set are de-referenced.
          * Default: true.
-         *
-         * [TODO: Add support for this field]
          */
         copyBuffer?: boolean;
         /**
