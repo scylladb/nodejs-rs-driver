@@ -5,7 +5,7 @@ const rust = require("../../index");
 
 require("../../lib/client");
 
-rust.testsCasyncResolveImmediate().then(
+rust.testsCasyncResolveDelayed(50).then(
     (value) => parentPort.postMessage({ value }),
     (error) => parentPort.postMessage({ error: error.message }),
 );

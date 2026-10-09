@@ -142,39 +142,37 @@ describe("casync bridge", function () {
     });
 
     describe("environment and conversion", function () {
-        it("initializes the bridge in a worker after the main thread", async function () {
+        it("settles delayed worker work and exits naturally", async function () {
             this.timeout(10000);
             const worker = new Worker(
                 path.resolve(__dirname, "casync-worker.js.worker"),
             );
-            try {
-                const result = await new Promise((resolve, reject) => {
-                    const timeout = setTimeout(
-                        () =>
-                            reject(new Error("worker promise did not settle")),
-                        5000,
-                    );
-                    worker.once("message", (value) => {
-                        clearTimeout(timeout);
-                        resolve(value);
-                    });
-                    worker.once("error", (error) => {
-                        clearTimeout(timeout);
-                        reject(error);
-                    });
-                    worker.once("exit", (code) => {
-                        if (code !== 0) {
-                            clearTimeout(timeout);
-                            reject(
-                                new Error(`worker exited with code ${code}`),
-                            );
-                        }
-                    });
+            const result = await new Promise((resolve, reject) => {
+                let message;
+                const timeout = setTimeout(() => {
+                    worker.terminate();
+                    reject(new Error("worker did not settle and exit"));
+                }, 5000);
+                worker.once("message", (value) => {
+                    message = value;
                 });
-                assert.deepEqual(result, { value: 42 });
-            } finally {
-                await worker.terminate();
-            }
+                worker.once("error", (error) => {
+                    clearTimeout(timeout);
+                    worker.terminate();
+                    reject(error);
+                });
+                worker.once("exit", (code) => {
+                    clearTimeout(timeout);
+                    if (code !== 0) {
+                        reject(new Error(`worker exited with code ${code}`));
+                    } else if (!message) {
+                        reject(new Error("worker exited before settling"));
+                    } else {
+                        resolve(message);
+                    }
+                });
+            });
+            assert.deepEqual(result, { value: 50 });
         });
 
         it("permits future submission during value conversion", async function () {
