@@ -130,6 +130,12 @@ where
     }
 }
 
+impl std::fmt::Display for ConvertedError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.name, self.msg)
+    }
+}
+
 impl ToNapiValue for ConvertedError {
     /// # Safety
     ///
@@ -150,7 +156,9 @@ impl ToNapiValue for ConvertedError {
 /// Allows to run a block of code that returns Result<T, ConvertedError>,
 /// with automatic conversion to JsResult<T>. This allows to use the `?` operator,
 /// while still returning JsResult<T> from the function.
-/// Version for async functions
+/// Version for async functions. Only test helpers use it: the driver bridges
+/// its async functions through `async_bridge::submit_future`.
+#[cfg(feature = "tests")]
 pub(crate) async fn with_custom_error_async<T, C, In>(code: C) -> JsResult<T>
 where
     C: AsyncFnOnce() -> In,

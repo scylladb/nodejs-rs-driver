@@ -2,9 +2,11 @@ use napi::bindgen_prelude::{Buffer, FnArgs, ToNapiValue};
 use napi::{Env, sys};
 use scylla::observability::tracing::{TracingEvent, TracingInfo};
 use std::net::IpAddr;
+use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::errors::{ConvertedError, ConvertedResult, JsResult, with_custom_error_async};
+use crate::async_bridge::{JsAsyncResult, submit_future};
+use crate::errors::{ConvertedError, ConvertedResult, with_custom_error_sync};
 use crate::session::SessionWrapper;
 use crate::utils::js_ctor::{
     QueryTraceCtorArgs, TracingEventCtorArgs, build_query_trace, build_tracing_event,
@@ -110,17 +112,22 @@ impl SessionWrapper {
     /// Retrieves the tracing information for a previously executed, traced query,
     /// given the tracing id returned by that query's result.
     #[napi(ts_return_type = "Promise<import('./lib/metadata/query-trace').QueryTrace>")]
-    pub async fn get_tracing_info(&self, tracing_id: Buffer) -> JsResult<TracingInfoResult> {
-        with_custom_error_async(async || {
+    pub fn get_tracing_info(
+        &self,
+        env: Env,
+        tracing_id: Buffer,
+    ) -> JsAsyncResult<TracingInfoResult> {
+        with_custom_error_sync(|| {
             let tracing_id = Uuid::from_slice(tracing_id.as_ref()).map_err(ConvertedError::from)?;
-            let info = self
-                .inner
-                .get_session()
-                .get_tracing_info(&tracing_id)
-                .await
-                .map_err(ConvertedError::from)?;
-            ConvertedResult::Ok(TracingInfoResult { inner: info })
+            let inner = Arc::clone(&self.inner);
+            submit_future(&env, async move {
+                let info = inner
+                    .get_session()
+                    .get_tracing_info(&tracing_id)
+                    .await
+                    .map_err(ConvertedError::from)?;
+                ConvertedResult::Ok(TracingInfoResult { inner: info })
+            })
         })
-        .await
     }
 }
