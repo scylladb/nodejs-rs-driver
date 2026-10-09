@@ -811,6 +811,18 @@ function extend(baseOptions?: any, userOptions?: any): ClientOptions {
 
     validateApplicationInfo(options);
 
+    if (
+        options.maxPrepared !== null &&
+        options.maxPrepared !== undefined &&
+        (!Number.isInteger(options.maxPrepared) ||
+            options.maxPrepared < 0 ||
+            options.maxPrepared > 0xffffffff)
+    ) {
+        throw new TypeError(
+            "maxPrepared must be an integer from 0 to 4294967295",
+        );
+    }
+
     if (options.driverConfigReportingEnabled === undefined) {
         options.driverConfigReportingEnabled = true;
     } else if (typeof options.driverConfigReportingEnabled !== "boolean") {
