@@ -36,6 +36,12 @@ its cache of prepared statements if the statement is present, or prepares the qu
 The driver keeps a cache of the last `ClientOptions.maxPrepared` statements. This cache ensures you can take full advantage of prepared statements.
 
 :::{caution}
+The bind types and parameter names of a prepared statement remain fixed for as long as its cached handle is reused, as in the Rust driver. A schema change does not automatically refresh this metadata. If you change a table or user-defined type used by a prepared statement, create a new `Client` before executing that statement with the changed schema.
+
+The driver may reprepare after an encoding or execution error, but a stale bind type can also encode successfully, so errors are not a reliable change signal.
+:::
+
+:::{caution}
 **Ensure sufficient cache size.** If you execute more than `ClientOptions.maxPrepared` different statements, you will experience cache flickering, defeating the purpose of prepared
 statements and significantly decreasing driver performance.
 :::
