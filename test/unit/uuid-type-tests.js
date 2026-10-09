@@ -19,6 +19,30 @@ function withFreshModule(path, check) {
     }
 }
 
+function withSnapshotCallbacks(path, check) {
+    const building = sinon
+        .stub(v8.startupSnapshot, "isBuildingSnapshot")
+        .returns(true);
+    const serialize = sinon.stub(v8.startupSnapshot, "addSerializeCallback");
+    const deserialize = sinon.stub(
+        v8.startupSnapshot,
+        "addDeserializeCallback",
+    );
+    const fill = sinon.spy(crypto, "randomFillSync");
+    try {
+        withFreshModule(path, (Type) => {
+            assert.strictEqual(serialize.callCount, 1);
+            assert.strictEqual(deserialize.callCount, 1);
+            check(Type, { serialize, deserialize, fill });
+        });
+    } finally {
+        fill.restore();
+        deserialize.restore();
+        serialize.restore();
+        building.restore();
+    }
+}
+
 describe("Uuid", function () {
     describe("constructor", function () {
         it("should validate the Buffer length", function () {
@@ -175,40 +199,22 @@ describe("Uuid", function () {
         });
         it("should discard cached entropy before serializing a startup snapshot", function () {
             const uuidPath = require.resolve("../../lib/types/uuid");
-            const building = sinon
-                .stub(v8.startupSnapshot, "isBuildingSnapshot")
-                .returns(true);
-            const register = sinon.stub(
-                v8.startupSnapshot,
-                "addSerializeCallback",
-            );
-            const registerDeserialize = sinon.stub(
-                v8.startupSnapshot,
-                "addDeserializeCallback",
-            );
-            const fill = sinon.spy(crypto, "randomFillSync");
-            try {
-                withFreshModule(uuidPath, (SnapshotUuid) => {
-                    assert.strictEqual(register.callCount, 1);
-                    assert.strictEqual(registerDeserialize.callCount, 1);
+            withSnapshotCallbacks(
+                uuidPath,
+                (SnapshotUuid, { serialize, deserialize, fill }) => {
                     const first = SnapshotUuid.random();
                     const firstBytes = Buffer.from(first.buffer);
                     assert.strictEqual(fill.callCount, 1);
-                    register.firstCall.args[0]();
+                    serialize.firstCall.args[0]();
                     const second = SnapshotUuid.random();
                     assert.strictEqual(fill.callCount, 2);
-                    registerDeserialize.firstCall.args[0]();
+                    deserialize.firstCall.args[0]();
                     SnapshotUuid.random();
                     assert.strictEqual(fill.callCount, 3);
                     assert.deepStrictEqual(first.buffer, firstBytes);
                     assert.strictEqual(second.buffer[6] >> 4, 4);
-                });
-            } finally {
-                fill.restore();
-                register.restore();
-                registerDeserialize.restore();
-                building.restore();
-            }
+                },
+            );
         });
         it("should reuse random fills without sharing output buffers", function () {
             const fill = sinon.spy(crypto, "randomFillSync");
@@ -494,37 +500,19 @@ describe("TimeUuid", function () {
         });
         it("should discard TimeUuid entropy before a startup snapshot", function () {
             const timeUuidPath = require.resolve("../../lib/types/time-uuid");
-            const building = sinon
-                .stub(v8.startupSnapshot, "isBuildingSnapshot")
-                .returns(true);
-            const register = sinon.stub(
-                v8.startupSnapshot,
-                "addSerializeCallback",
-            );
-            const registerDeserialize = sinon.stub(
-                v8.startupSnapshot,
-                "addDeserializeCallback",
-            );
-            const fill = sinon.spy(crypto, "randomFillSync");
-            try {
-                withFreshModule(timeUuidPath, (CachedTimeUuid) => {
-                    assert.strictEqual(register.callCount, 1);
-                    assert.strictEqual(registerDeserialize.callCount, 1);
+            withSnapshotCallbacks(
+                timeUuidPath,
+                (CachedTimeUuid, { serialize, deserialize, fill }) => {
                     CachedTimeUuid.now();
                     assert.strictEqual(fill.callCount, 1);
-                    register.firstCall.args[0]();
+                    serialize.firstCall.args[0]();
                     CachedTimeUuid.now();
                     assert.strictEqual(fill.callCount, 2);
-                    registerDeserialize.firstCall.args[0]();
+                    deserialize.firstCall.args[0]();
                     CachedTimeUuid.now();
                     assert.strictEqual(fill.callCount, 3);
-                });
-            } finally {
-                fill.restore();
-                register.restore();
-                registerDeserialize.restore();
-                building.restore();
-            }
+                },
+            );
         });
         it("should generate based on the parameters", function () {
             // Gregorian calendar epoch
