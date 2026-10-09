@@ -1,10 +1,11 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::future::Future;
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::ptr;
+use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Wake, Waker};
@@ -103,40 +104,50 @@ impl Wake for WakerInner {
     }
 }
 
-/// FutureRegistry — thread-local, lives on the Node main thread
+/// FutureRegistry — one per N-API environment, accessed on its JavaScript thread.
 struct FutureRegistry {
-    futures: HashMap<u64, FutureEntry>,
-    next_id: u64,
+    futures: RefCell<HashMap<u64, FutureEntry>>,
+    next_id: Cell<u64>,
+    active_count: Cell<usize>,
     bridge: Arc<WakerBridge>,
-    tokio_rt: Option<tokio::runtime::Runtime>,
+    tokio_rt: RefCell<Option<tokio::runtime::Runtime>>,
 }
 
-static INITIALIZED: AtomicBool = AtomicBool::new(false);
-static INITIALIZATION_STARTED: AtomicBool = AtomicBool::new(false);
-
 impl FutureRegistry {
-    fn new() -> Self {
+    fn new(rt: tokio::runtime::Runtime) -> Self {
         let bridge = Arc::new(WakerBridge::new());
         Self {
-            futures: HashMap::new(),
-            next_id: 0,
+            futures: RefCell::new(HashMap::new()),
+            next_id: Cell::new(0),
+            active_count: Cell::new(0),
             bridge,
-            tokio_rt: None,
+            tokio_rt: RefCell::new(Some(rt)),
         }
     }
 
-    fn insert(&mut self, env: &Env, future: BridgedFuture, deferred: DeferredPtr) -> Result<u64> {
-        let was_empty = self.futures.is_empty();
+    fn insert(&self, env: &Env, future: BridgedFuture, deferred: DeferredPtr) -> Result<u64> {
+        let active_count = self.active_count.get();
 
-        let id = self.next_id;
-        self.next_id += 1;
+        // Ref before registering the future. If this fails, no work is left
+        // queued behind a promise that could not be returned to JavaScript.
+        if active_count == 0 {
+            let guard = self.bridge.tsfn.lock().unwrap();
+            let tsfn = guard
+                .as_ref()
+                .ok_or_else(|| napi::Error::from_reason("Poll bridge is not initialized"))?;
+            // SAFETY: Env guarantees a valid `napi_env` for the current call.
+            unsafe { check_status!(sys::napi_ref_threadsafe_function(env.raw(), tsfn.raw()))? };
+        }
+
+        let id = self.next_id.get();
+        self.next_id.set(id + 1);
 
         let waker = Waker::from(Arc::new(WakerInner {
             future_id: id,
             bridge: Arc::clone(&self.bridge),
         }));
 
-        self.futures.insert(
+        self.futures.borrow_mut().insert(
             id,
             FutureEntry {
                 future,
@@ -145,15 +156,7 @@ impl FutureRegistry {
             },
         );
 
-        // If this is the first outstanding future, ref the TSFN so Node
-        // keeps its event loop alive until all futures have settled.
-        if was_empty {
-            let guard = self.bridge.tsfn.lock().unwrap();
-            if let Some(ref tsfn) = *guard {
-                // SAFETY: Env guarantees a valid `napi_env` for the current call.
-                unsafe { check_status!(sys::napi_ref_threadsafe_function(env.raw(), tsfn.raw()))? };
-            } // Else branches can happen only during shutdown
-        }
+        self.active_count.set(active_count + 1);
 
         // Schedule the mandatory first poll.
         self.bridge.wake(id);
@@ -161,9 +164,8 @@ impl FutureRegistry {
         Ok(id)
     }
 
-    /// Called on the main thread when the TSFN fires.
-    /// `raw_env` is valid only for this invocation (from the TSFN callback).
-    fn poll_woken(&mut self, env: Env) {
+    /// Called on the environment's JavaScript thread when the TSFN fires.
+    fn poll_woken(&self, env: Env) {
         self.bridge.signaled.store(false, Ordering::Release);
 
         let woken: Vec<u64> = {
@@ -171,70 +173,70 @@ impl FutureRegistry {
             std::mem::take(&mut *ids)
         };
 
-        // Take-and-process: remove entries before polling so that a polled
-        // future can register *new* futures without hitting RefCell deadlock.
-        let entries: Vec<(u64, FutureEntry)> = woken
-            .iter()
-            .filter_map(|&id| self.futures.remove(&id).map(|e| (id, e)))
-            .collect();
+        // Release the map borrow before polling or converting values: conversion
+        // can invoke JavaScript, which may submit another future synchronously.
+        let entries: Vec<(u64, FutureEntry)> = {
+            let mut futures = self.futures.borrow_mut();
+            woken
+                .iter()
+                .filter_map(|&id| futures.remove(&id).map(|entry| (id, entry)))
+                .collect()
+        };
 
         // Enter the Tokio runtime context so tokio::net, tokio::time, etc.
         // register with the reactor when polled.
-        let _guard = self.tokio_rt.as_ref().map(|rt| rt.enter());
+        let runtime = self.tokio_rt.borrow();
+        let _guard = runtime.as_ref().map(|rt| rt.enter());
 
         for (id, mut entry) in entries {
             let mut cx = Context::from_waker(&entry.waker);
             match entry.future.as_mut().poll(&mut cx) {
                 Poll::Ready(settle_fn) => {
                     settle_fn(env, entry.deferred);
+                    let remaining = self.active_count.get() - 1;
+                    self.active_count.set(remaining);
+                    if remaining == 0 {
+                        let guard = self.bridge.tsfn.lock().unwrap();
+                        if let Some(ref tsfn) = *guard {
+                            // SAFETY: Env belongs to this registry's N-API environment.
+                            let status = unsafe {
+                                check_status!(sys::napi_unref_threadsafe_function(
+                                    env.raw(),
+                                    tsfn.raw()
+                                ))
+                            };
+                            if let Err(e) = status {
+                                panic!("Failed to unref TSFN in poll_woken: {}", e.reason);
+                            }
+                        }
+                    }
                 }
                 Poll::Pending => {
-                    self.futures.insert(id, entry);
-                }
-            }
-        }
-
-        // If every future has settled, unref the TSFN so Node can exit
-        // naturally.  The check happens *after* all polls so that a future
-        // completing synchronously and submitting a new future in its settle
-        // callback won't cause a premature unref.
-        if self.futures.is_empty() {
-            let guard = self.bridge.tsfn.lock().unwrap();
-            if let Some(ref tsfn) = *guard {
-                // SAFETY: Env guarantees a valid `napi_env` for the current call.
-                //  `tsfn.raw()` is live because we hold the Mutex lock.
-                let status = unsafe {
-                    check_status!(sys::napi_unref_threadsafe_function(env.raw(), tsfn.raw()))
-                };
-                if let Err(e) = status {
-                    // We should fail here only in extreme cases (e.g. TSFN already unrefed, env invalid, etc.) — panic is warranted.
-                    panic!(
-                        "Failed to unref TSFN in poll_woken. This may indicate either a bug in the driver or a severe runtime error.\nRoot cause:\n {}",
-                        e.reason
-                    );
+                    self.futures.borrow_mut().insert(id, entry);
                 }
             }
         }
     }
 
     // This function is registered in the startup to be called during node cleanup process.
-    fn shutdown(&mut self) {
-        self.futures.clear();
+    fn shutdown(&self) {
+        self.futures.borrow_mut().clear();
+        self.active_count.set(0);
         *self.bridge.tsfn.lock().unwrap() = None;
-        if let Some(rt) = self.tokio_rt.take() {
+        if let Some(rt) = self.tokio_rt.borrow_mut().take() {
             rt.shutdown_background();
         }
     }
 }
 
 thread_local! {
-  static REGISTRY: RefCell<FutureRegistry> = RefCell::new(FutureRegistry::new());
+    static REGISTRIES: RefCell<HashMap<usize, Rc<FutureRegistry>>> = RefCell::new(HashMap::new());
 }
 
 fn create_promise(env: &Env) -> Result<(DeferredPtr, sys::napi_value)> {
     let mut deferred = ptr::null_mut();
     let mut promise = ptr::null_mut();
-    // SAFETY: `raw_env` is taken from Env, which is guaranteed to be valid for the lifetime of the current napi call.
+    // SAFETY: Env is guaranteed to be valid for the lifetime of the current N-API call.
     unsafe {
         check_status!(sys::napi_create_promise(
             env.raw(),
@@ -256,7 +258,7 @@ fn reject_with_reason(env: Env, deferred: DeferredPtr, reason: &str) -> Result<(
     let mut msg: sys::napi_value = std::ptr::null_mut();
     let mut error: sys::napi_value = std::ptr::null_mut();
 
-    // SAFETY: Env guarantees that raw pointer is a valid main-thread env.
+    // SAFETY: Env guarantees a valid environment on its JavaScript thread.
     // Remaining arguments are created in this function and are valid for the whole duration.
     unsafe {
         check_status!(sys::napi_create_string_utf8(
@@ -276,13 +278,32 @@ fn reject_with_reason(env: Env, deferred: DeferredPtr, reason: &str) -> Result<(
     Ok(())
 }
 
+fn reject_conversion_error(env: Env, deferred: DeferredPtr, error: napi::Error) -> Result<()> {
+    let mut pending = false;
+    // A JS constructor used by ToNapiValue may have thrown. Node-API cannot
+    // create an error or settle a promise until that exception is cleared.
+    unsafe { check_status!(sys::napi_is_exception_pending(env.raw(), &mut pending))? };
+    if pending {
+        let mut exception = ptr::null_mut();
+        unsafe {
+            check_status!(sys::napi_get_and_clear_last_exception(
+                env.raw(),
+                &mut exception
+            ))?;
+            deferred.resolve(env, exception, ResolveOrReject::Reject)
+        }
+    } else {
+        reject_with_reason(env, deferred, &error.reason)
+    }
+}
+
 #[napi(no_export)]
 fn noop_callback() {
     // No-op callback for creating the ThreadsafeFunction.
 }
 
-/// Initialize the direct-poll bridge.  Must be called once before any
-/// bridged async function. Calls after the first one do nothing.
+/// Initialize the direct-poll bridge for this N-API environment. Calls from
+/// the same environment after the first successful initialization do nothing.
 ///
 /// Creates a dedicated `multi_thread(1)` Tokio runtime whose single worker
 /// thread drives the reactor (epoll/kqueue). A single weak TSFN is used
@@ -291,11 +312,8 @@ fn noop_callback() {
 #[napi]
 pub fn init_poll_bridge(env: Env) -> JsResult<()> {
     with_custom_error_sync(|| {
-        if INITIALIZATION_STARTED.swap(true, Ordering::SeqCst) {
-            // The bridge is already set up. A second call can happen when a module loader
-            // evaluates `lib/client` again (for example, proxyquire in unit tests).
-            // We are very unlikely to recover from startup failure.
-            // This means we do not worry about allowing to re-call this function on failure.
+        let key = env.raw() as usize;
+        if REGISTRIES.with(|registries| registries.borrow().contains_key(&key)) {
             return ConvertedResult::Ok(());
         }
 
@@ -303,6 +321,7 @@ pub fn init_poll_bridge(env: Env) -> JsResult<()> {
             .worker_threads(1)
             .enable_all()
             .build()?;
+        let registry = Rc::new(FutureRegistry::new(rt));
 
         // Create the TSFN from any c callback. This callback will be replaced in the build_callback step,
         // but we still need to provide c function, to use napi-rs callback builder.
@@ -315,27 +334,28 @@ pub fn init_poll_bridge(env: Env) -> JsResult<()> {
             // We will manually ref/unref this tsfn based on whether we have outstanding futures.
             .weak::<true>()
             .build_callback(|ctx| {
-                let raw_env = ctx.env;
-                REGISTRY.with(|r| {
-                    r.borrow_mut().poll_woken(raw_env);
-                });
+                let env = ctx.env;
+                let key = env.raw() as usize;
+                let registry = REGISTRIES.with(|registries| registries.borrow().get(&key).cloned());
+                if let Some(registry) = registry {
+                    registry.poll_woken(env);
+                }
                 Ok(())
             })?;
-
-        REGISTRY.with(|r| {
-            let mut reg = r.borrow_mut();
-            reg.tokio_rt = Some(rt);
-            reg.bridge.set_tsfn(tsfn);
-        });
+        registry.bridge.set_tsfn(tsfn);
 
         // Cleanup hook — shut down the runtime when Node exits.
-        env.add_env_cleanup_hook((), |_| {
-            REGISTRY.with(|r| {
-                r.borrow_mut().shutdown();
+        env.add_env_cleanup_hook(key, |key| {
+            REGISTRIES.with(|registries| {
+                let registry = registries.borrow_mut().remove(&key);
+                if let Some(registry) = registry {
+                    registry.shutdown();
+                }
             });
         })?;
-
-        INITIALIZED.store(true, Ordering::SeqCst);
+        REGISTRIES.with(|registries| {
+            registries.borrow_mut().insert(key, registry);
+        });
 
         Ok(())
     })
@@ -351,11 +371,13 @@ where
     F: Future<Output = std::result::Result<T, ConvertedError>> + Send + 'static,
     T: napi::bindgen_prelude::ToNapiValue + Send + 'static,
 {
-    // This is a driver error, so panic is warranted here. There is no reasonable way to recover.
-    assert!(
-        INITIALIZED.load(Ordering::Relaxed),
-        "init_poll_bridge must be called before submit_future. This is a bug in the driver."
-    );
+    let registry = REGISTRIES
+        .with(|registries| registries.borrow().get(&(env.raw() as usize)).cloned())
+        .ok_or_else(|| {
+            ConvertedError::from(napi::Error::from_reason(
+                "init_poll_bridge must be called before submit_future",
+            ))
+        })?;
 
     let (deferred, promise) = create_promise(env)?;
 
@@ -363,7 +385,7 @@ where
         let result = fut.await;
         Box::new(move |env: Env, deferred: DeferredPtr| unsafe {
             // SAFETY: This closure is only ever invoked from `poll_woken`, which runs
-            // on the Node main thread inside the TSFN callback - the only place where
+            // on the environment's JavaScript thread inside the TSFN callback - where
             // `env` is a valid napi_env. `deferred` is consumed exactly once here,
             // satisfying the napi contract that each deferred is resolved or rejected
             // exactly once. `to_napi_value` receives the same valid `env`.
@@ -377,7 +399,7 @@ where
 
             let status = match js_val {
                 Ok(v) => deferred.resolve(env, v, resolve),
-                Err(e) => reject_with_reason(env, deferred, &e.reason),
+                Err(e) => reject_conversion_error(env, deferred, e),
             };
 
             if let Err(e) = status {
@@ -389,6 +411,6 @@ where
         }) as SettleCallback
     });
 
-    REGISTRY.with(|r| r.borrow_mut().insert(env, boxed, deferred))?;
+    registry.insert(env, boxed, deferred)?;
     Ok(JsPromise(promise, PhantomData))
 }

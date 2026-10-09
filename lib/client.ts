@@ -41,7 +41,7 @@ const { ProfileManager } = executionProfile;
 const description = packageInfo.description;
 const { version } = packageInfo;
 
-// Initialize the direct-poll bridge once per process.
+// Initialize the direct-poll bridge for this Node.js environment.
 // This sets up the Tokio reactor thread and the wake mechanism used by all
 // bridged async Rust functions (session queries, paging, etc.).
 rust.initPollBridge();
