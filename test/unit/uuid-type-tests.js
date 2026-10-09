@@ -383,6 +383,149 @@ describe("Uuid", function () {
 
 describe("TimeUuid", function () {
     describe("constructor()", function () {
+        it("should reject invalid supplied ID lengths", function () {
+            assert.throws(
+                () => new TimeUuid(null, null, Buffer.alloc(5)),
+                /Node identifier must have 6 bytes/,
+            );
+            assert.throws(
+                () => new TimeUuid(null, null, "host01", Buffer.alloc(1)),
+                /Clock identifier must have 2 bytes/,
+            );
+            assert.throws(
+                () => new TimeUuid(null, null, "", "02"),
+                /Node identifier must have 6 bytes/,
+            );
+        });
+        it("should cache random bytes for missing IDs", function () {
+            const timeUuidPath = require.resolve("../../lib/types/time-uuid");
+            const fill = sinon.spy(crypto, "randomFillSync");
+            try {
+                withFreshModule(timeUuidPath, (CachedTimeUuid) => {
+                    const value = new CachedTimeUuid();
+                    assert.strictEqual(fill.callCount, 1);
+                    assert.strictEqual(fill.firstCall.args[0].length, 128 * 8);
+                    assert.strictEqual(value.buffer[6] >> 4, 1);
+                    assert.strictEqual(value.buffer[8] >> 6, 2);
+
+                    const withNode = new CachedTimeUuid(null, null, "host01");
+                    assert.strictEqual(fill.callCount, 1);
+                    assert.strictEqual(withNode.getNodeIdString(), "host01");
+
+                    const withClock = new CachedTimeUuid(
+                        null,
+                        null,
+                        null,
+                        "02",
+                    );
+                    assert.strictEqual(fill.callCount, 1);
+                    assert.strictEqual(
+                        withClock.getClockId()[1],
+                        "2".charCodeAt(0),
+                    );
+
+                    new CachedTimeUuid(null, null, "host01", "02");
+                    assert.strictEqual(fill.callCount, 1);
+
+                    for (let i = 0; i < 126; i++) new CachedTimeUuid();
+                    assert.strictEqual(fill.callCount, 1);
+                    new CachedTimeUuid();
+                    assert.strictEqual(fill.callCount, 2);
+                });
+            } finally {
+                fill.restore();
+            }
+        });
+        it("should refill before an uneven cache remainder is reused", function () {
+            const timeUuidPath = require.resolve("../../lib/types/time-uuid");
+            const fill = sinon.stub(crypto, "randomFillSync");
+            fill.callsFake((buffer) =>
+                buffer.fill(fill.callCount === 1 ? 0x11 : 0x22),
+            );
+            try {
+                withFreshModule(timeUuidPath, (CachedTimeUuid) => {
+                    const clockOnly = CachedTimeUuid.now("host01");
+                    assert.strictEqual(clockOnly.getClockId()[1], 0x11);
+                    for (let i = 0; i < 127; i++) {
+                        const value = CachedTimeUuid.now();
+                        assert.deepStrictEqual(
+                            value.getNodeId(),
+                            Buffer.alloc(6, 0x11),
+                        );
+                    }
+                    assert.strictEqual(fill.callCount, 1);
+                    const afterRefill = CachedTimeUuid.now();
+                    assert.strictEqual(fill.callCount, 2);
+                    assert.deepStrictEqual(
+                        afterRefill.getNodeId(),
+                        Buffer.alloc(6, 0x22),
+                    );
+                    assert.strictEqual(afterRefill.getClockId()[1], 0x22);
+                });
+            } finally {
+                fill.restore();
+            }
+        });
+        it("should retry a failed TimeUuid cache refill", function () {
+            const timeUuidPath = require.resolve("../../lib/types/time-uuid");
+            const originalFill = crypto.randomFillSync;
+            const failure = new Error("random fill failed");
+            let fills = 0;
+            const fill = sinon
+                .stub(crypto, "randomFillSync")
+                .callsFake((buffer) => {
+                    if (fills++ === 0) throw failure;
+                    return originalFill(buffer);
+                });
+            try {
+                withFreshModule(timeUuidPath, (CachedTimeUuid) => {
+                    assert.throws(
+                        () => new CachedTimeUuid(),
+                        (err) => err === failure,
+                    );
+                    const value = new CachedTimeUuid();
+                    assert.strictEqual(fill.callCount, 2);
+                    assert.strictEqual(value.buffer[6] >> 4, 1);
+                    assert.strictEqual(value.buffer[8] >> 6, 2);
+                });
+            } finally {
+                fill.restore();
+            }
+        });
+        it("should discard TimeUuid entropy before a startup snapshot", function () {
+            const timeUuidPath = require.resolve("../../lib/types/time-uuid");
+            const building = sinon
+                .stub(v8.startupSnapshot, "isBuildingSnapshot")
+                .returns(true);
+            const register = sinon.stub(
+                v8.startupSnapshot,
+                "addSerializeCallback",
+            );
+            const registerDeserialize = sinon.stub(
+                v8.startupSnapshot,
+                "addDeserializeCallback",
+            );
+            const fill = sinon.spy(crypto, "randomFillSync");
+            try {
+                withFreshModule(timeUuidPath, (CachedTimeUuid) => {
+                    assert.strictEqual(register.callCount, 1);
+                    assert.strictEqual(registerDeserialize.callCount, 1);
+                    CachedTimeUuid.now();
+                    assert.strictEqual(fill.callCount, 1);
+                    register.firstCall.args[0]();
+                    CachedTimeUuid.now();
+                    assert.strictEqual(fill.callCount, 2);
+                    registerDeserialize.firstCall.args[0]();
+                    CachedTimeUuid.now();
+                    assert.strictEqual(fill.callCount, 3);
+                });
+            } finally {
+                fill.restore();
+                register.restore();
+                registerDeserialize.restore();
+                building.restore();
+            }
+        });
         it("should generate based on the parameters", function () {
             // Gregorian calendar epoch
             let val = new TimeUuid(
@@ -547,6 +690,19 @@ describe("TimeUuid", function () {
             it("should support callback as second parameter", (done) =>
                 TimeUuid.fromDate(date, assertTimeUuidFunction(1, done)));
 
+            it("should preserve a Buffer date with a callback", (done) => {
+                const source = TimeUuid.now().getBuffer();
+                TimeUuid.fromDate(source, (err, value) => {
+                    try {
+                        assert.ifError(err);
+                        assert.deepStrictEqual(value.getBuffer(), source);
+                        done();
+                    } catch (e) {
+                        done(e);
+                    }
+                });
+            });
+
             it("should support callback as third parameter", (done) =>
                 TimeUuid.fromDate(
                     date,
@@ -614,6 +770,9 @@ describe("TimeUuid", function () {
             const startDate = new Date();
             const nodeId = "aHost1";
             const clockId = "ab";
+            const sandbox = sinon.createSandbox();
+
+            afterEach(() => sandbox.restore());
 
             function assertTimeUuidFunction(portions, callback) {
                 return function assertTimeUuid(err, id) {
@@ -639,6 +798,205 @@ describe("TimeUuid", function () {
 
             it("should support callback as first parameter", (done) =>
                 TimeUuid.now(assertTimeUuidFunction(0, done)));
+
+            it("should fill both random IDs in one async request", (done) => {
+                const fill = sandbox.spy(crypto, "randomFill");
+                TimeUuid.now((err, value) => {
+                    try {
+                        assert.ifError(err);
+                        assert.strictEqual(fill.callCount, 1);
+                        assert.strictEqual(
+                            fill.firstCall.args[0],
+                            value.buffer,
+                        );
+                        assert.deepStrictEqual(
+                            fill.firstCall.args.slice(1, 3),
+                            [8, 8],
+                        );
+                        assert.strictEqual(value.buffer[6] >> 4, 1);
+                        assert.strictEqual(value.buffer[8] >> 6, 2);
+                        done();
+                    } catch (e) {
+                        done(e);
+                    }
+                });
+            });
+
+            it("should fill only the missing node ID", (done) => {
+                const fill = sandbox.spy(crypto, "randomFill");
+                TimeUuid.fromDate(new Date(0), 0, null, "02", (err, value) => {
+                    try {
+                        assert.ifError(err);
+                        assert.strictEqual(fill.callCount, 1);
+                        assert.strictEqual(
+                            fill.firstCall.args[0],
+                            value.buffer,
+                        );
+                        assert.deepStrictEqual(
+                            fill.firstCall.args.slice(1, 3),
+                            [10, 6],
+                        );
+                        assert.strictEqual(
+                            value.getClockId()[1],
+                            "2".charCodeAt(0),
+                        );
+                        done();
+                    } catch (e) {
+                        done(e);
+                    }
+                });
+            });
+
+            it("should fill only the missing clock ID", (done) => {
+                const fill = sandbox.spy(crypto, "randomFill");
+                TimeUuid.now("host01", (err, value) => {
+                    try {
+                        assert.ifError(err);
+                        assert.strictEqual(fill.callCount, 1);
+                        assert.strictEqual(
+                            fill.firstCall.args[0],
+                            value.buffer,
+                        );
+                        assert.deepStrictEqual(
+                            fill.firstCall.args.slice(1, 3),
+                            [8, 2],
+                        );
+                        assert.strictEqual(value.getNodeIdString(), "host01");
+                        done();
+                    } catch (e) {
+                        done(e);
+                    }
+                });
+            });
+
+            it("should read supplied ID buffers when asynchronous generation finishes", async () => {
+                const nodeId = Buffer.from("host01");
+                const withNode = new Promise((resolve, reject) => {
+                    TimeUuid.now(nodeId, (err, value) =>
+                        err ? reject(err) : resolve(value),
+                    );
+                });
+                nodeId.write("host02");
+                assert.strictEqual(
+                    (await withNode).getNodeIdString(),
+                    "host02",
+                );
+
+                const clockId = Buffer.from("02");
+                const withClock = new Promise((resolve, reject) => {
+                    TimeUuid.now(null, clockId, (err, value) =>
+                        err ? reject(err) : resolve(value),
+                    );
+                });
+                clockId.write("03");
+                assert.strictEqual(
+                    (await withClock).getClockId()[1],
+                    "3".charCodeAt(0),
+                );
+            });
+
+            it("should treat an empty-string ID as missing", (done) => {
+                const fill = sandbox.spy(crypto, "randomFill");
+                TimeUuid.now("", "02", (err, value) => {
+                    try {
+                        assert.ifError(err);
+                        assert.strictEqual(fill.callCount, 1);
+                        assert.deepStrictEqual(
+                            fill.firstCall.args.slice(1, 3),
+                            [10, 6],
+                        );
+                        assert.strictEqual(
+                            value.getClockId()[1],
+                            "2".charCodeAt(0),
+                        );
+                        done();
+                    } catch (e) {
+                        done(e);
+                    }
+                });
+            });
+
+            it("should pass random-fill failures to the callback", (done) => {
+                const failure = new Error("random fill failed");
+                sandbox
+                    .stub(crypto, "randomFill")
+                    .callsFake((buffer, offset, length, callback) => {
+                        process.nextTick(() => callback(failure));
+                    });
+                TimeUuid.now((err, value) => {
+                    try {
+                        assert.strictEqual(err, failure);
+                        assert.strictEqual(value, undefined);
+                        done();
+                    } catch (e) {
+                        done(e);
+                    }
+                });
+            });
+
+            it("should report an invalid ID asynchronously once", (done) => {
+                let returned = false;
+                let calls = 0;
+                TimeUuid.now(Buffer.alloc(5), (err, value) => {
+                    calls++;
+                    try {
+                        assert.strictEqual(returned, true);
+                        assert.strictEqual(calls, 1);
+                        assert.match(
+                            err.message,
+                            /Node identifier must have 6 bytes/,
+                        );
+                        assert.strictEqual(value, undefined);
+                        done();
+                    } catch (e) {
+                        done(e);
+                    }
+                });
+                returned = true;
+            });
+
+            it("should report an invalid clock ID asynchronously when the node ID is missing", (done) => {
+                let returned = false;
+                TimeUuid.now(null, Buffer.alloc(1), (err, value) => {
+                    try {
+                        assert.strictEqual(returned, true);
+                        assert.match(
+                            err.message,
+                            /Clock identifier must have 2 bytes/,
+                        );
+                        assert.strictEqual(value, undefined);
+                        done();
+                    } catch (e) {
+                        done(e);
+                    }
+                });
+                returned = true;
+            });
+
+            it("should report an invalid ID synchronously when both IDs are supplied", () => {
+                let called = false;
+                TimeUuid.now(Buffer.alloc(5), Buffer.alloc(2), (err, value) => {
+                    called = true;
+                    assert.match(
+                        err.message,
+                        /Node identifier must have 6 bytes/,
+                    );
+                    assert.strictEqual(value, undefined);
+                });
+                assert.strictEqual(called, true);
+            });
+
+            it("should use no random fill when both IDs are supplied", () => {
+                const fill = sandbox.spy(crypto, "randomFill");
+                let called = false;
+                TimeUuid.now("host01", "02", (err, value) => {
+                    assert.ifError(err);
+                    assert.strictEqual(value.getNodeIdString(), "host01");
+                    called = true;
+                });
+                assert.strictEqual(called, true);
+                assert.strictEqual(fill.callCount, 0);
+            });
 
             it("should support callback as second parameter", (done) =>
                 TimeUuid.now(nodeId, assertTimeUuidFunction(1, done)));

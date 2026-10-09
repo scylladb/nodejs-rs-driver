@@ -3,6 +3,7 @@ import crypto = require("crypto");
 import Long = require("long");
 
 import Uuid = require("./uuid");
+import { registerEntropyCacheSnapshotReset } from "./entropy-cache-snapshot";
 import utils = require("../utils");
 import { ValueCallback } from "../..";
 
@@ -24,6 +25,32 @@ const minNodeId = utils.allocBufferFromString("808080808080", "hex");
 const minClockId = utils.allocBufferFromString("8080", "hex");
 const maxNodeId = utils.allocBufferFromString("7f7f7f7f7f7f", "hex");
 const maxClockId = utils.allocBufferFromString("7f7f", "hex");
+
+// Cache entropy for synchronous generation without pointing outputs at the cache.
+const timeUuidEntropyCache = Buffer.alloc(128 * 8);
+let timeUuidEntropyOffset = timeUuidEntropyCache.length;
+
+registerEntropyCacheSnapshotReset(timeUuidEntropyCache, () => {
+    timeUuidEntropyOffset = timeUuidEntropyCache.length;
+});
+
+function fillRandomTimeUuidBytes(
+    buffer: Buffer,
+    offset: number,
+    length: number,
+): void {
+    if (timeUuidEntropyOffset + length > timeUuidEntropyCache.length) {
+        crypto.randomFillSync(timeUuidEntropyCache);
+        timeUuidEntropyOffset = 0;
+    }
+    timeUuidEntropyCache.copy(
+        buffer,
+        offset,
+        timeUuidEntropyOffset,
+        timeUuidEntropyOffset + length,
+    );
+    timeUuidEntropyOffset += length;
+}
 
 /**
  * Counter used to generate up to 10000 different timeuuid values with the same Date
@@ -51,16 +78,15 @@ class TimeUuid extends Uuid {
      * If any of the arguments is not provided, it will be randomly generated,
      * except for the date that will use the current date.
      *
-     * If nodeId and/or clockId portions are not provided, the constructor will generate them using
-     * `crypto.randomBytes()`. As it's possible that `crypto.randomBytes()` might block, it's
-     * recommended that you use the callback-based version of the static methods `fromDate()` or
-     * `now()`in that case.
+     * If nodeId and/or clockId portions are not provided, the constructor uses cached random bytes.
+     * A cache refill calls `crypto.randomFillSync()` and might block. Use the callback-based version
+     * of `fromDate()` or `now()` if blocking is a concern.
      *
      * @param date The date for the instance. If not provided, current Date will be used.
      * @param ticks A number from 0 to 10000 representing the 100-nanoseconds units for this instance to fill in
      * the information not available in the Date, as Ecmascript Dates have only milliseconds precision.
      * @param nodeId A 6-length Buffer or string of 6 ascii characters representing the node identifier, ie: 'host01'.
-     * @param clockId A 2-length Buffer or string of 6 ascii characters representing the clock identifier.
+     * @param clockId A 2-length Buffer or string of 2 ascii characters representing the clock identifier.
      */
     constructor(
         date?: Date | Buffer | null,
@@ -94,15 +120,14 @@ class TimeUuid extends Uuid {
      *  the information not available in the Date, as Ecmascript Dates have only milliseconds precision.
      * @param nodeId A 6-length Buffer or string of 6 ascii characters representing the node identifier, ie: 'host01'.
      * If not provided, a random nodeId will be generated.
-     * @param clockId A 2-length Buffer or string of 6 ascii characters representing the clock identifier.
+     * @param clockId A 2-length Buffer or string of 2 ascii characters representing the clock identifier.
      * If not provided a random clockId will be generated.
      * @param callback An optional callback to be invoked with the error as first parameter and the created
      * `TimeUuid` as second parameter. When a callback is provided, the random portions of the
      * `TimeUuid` instance are created asynchronously.
      *
-     *  When nodeId and/or clockId portions are not provided, this method will generate them using
-     *  `crypto.randomBytes()`. As it's possible that `crypto.randomBytes()` might block, it's
-     *  recommended that you use the callback-based version of this method in that case.
+     *  Without a callback, missing nodeId and/or clockId portions use cached random bytes.
+     *  A synchronous cache refill might block; use the callback-based version in that case.
      *
      * @example <caption>Generate a TimeUuid from a ECMAScript Date</caption>
      * const timeuuid = TimeUuid.fromDate(new Date());
@@ -164,15 +189,14 @@ class TimeUuid extends Uuid {
      * Generates a TimeUuid instance based on the current date using random node and clock values.
      * @param nodeId A 6-length Buffer or string of 6 ascii characters representing the node identifier, ie: 'host01'.
      * If not provided, a random nodeId will be generated.
-     * @param clockId A 2-length Buffer or string of 6 ascii characters representing the clock identifier.
+     * @param clockId A 2-length Buffer or string of 2 ascii characters representing the clock identifier.
      * If not provided a random clockId will be generated.
      * @param callback An optional callback to be invoked with the error as first parameter and the created
      * `TimeUuid` as second parameter. When a callback is provided, the random portions of the
      * `TimeUuid` instance are created asynchronously.
      *
-     * When nodeId and/or clockId portions are not provided, this method will generate them using
-     * `crypto.randomBytes()`. As it's possible that `crypto.randomBytes()` might block, it's
-     * recommended that you use the callback-based version of this method in that case.
+     * Without a callback, missing nodeId and/or clockId portions use cached random bytes.
+     * A synchronous cache refill might block; use the callback-based version in that case.
      *
      * @example <caption>Generate a TimeUuid from a Date without any random portion</caption>
      * const timeuuid = TimeUuid.now('host01', '02');
@@ -291,8 +315,8 @@ function fromDateInternal(
     }
 
     const resolvedTicks = ticks as number | null | undefined;
-    let resolvedNodeId = nodeId as string | Buffer | null | undefined;
-    let resolvedClockId = clockId as string | Buffer | null | undefined;
+    const resolvedNodeId = nodeId as string | Buffer | null | undefined;
+    const resolvedClockId = clockId as string | Buffer | null | undefined;
 
     if (!callback) {
         return new TimeUuid(
@@ -304,37 +328,59 @@ function fromDateInternal(
     }
 
     const done = callback as unknown as TimeUuidCallback;
-    utils.parallel(
-        [
-            (next: (err: Error | null, value?: Buffer) => void) =>
-                getOrGenerateRandom(resolvedNodeId, 6, (err, buffer) =>
-                    next(err, (resolvedNodeId = buffer)),
-                ),
-            (next: (err: Error | null, value?: Buffer) => void) =>
-                getOrGenerateRandom(resolvedClockId, 2, (err, buffer) =>
-                    next(err, (resolvedClockId = buffer)),
-                ),
-        ],
-        (err?: Error | null) => {
-            if (err) {
-                return done(err);
-            }
+    let nodeIdBuffer: Buffer | null;
+    let clockIdBuffer: Buffer | null;
+    try {
+        // The callback API has historically treated empty-string IDs as missing.
+        nodeIdBuffer = resolvedNodeId
+            ? getProvidedNodeId(resolvedNodeId)
+            : null;
+        clockIdBuffer = resolvedClockId
+            ? getProvidedClockId(resolvedClockId)
+            : null;
+    } catch (e) {
+        // A missing ID makes validation errors asynchronous in the callback API.
+        if (!resolvedNodeId || !resolvedClockId) {
+            return process.nextTick(() => done(e as Error));
+        }
+        return done(e as Error);
+    }
 
-            let timeUuid;
-            try {
-                timeUuid = new TimeUuid(
-                    date,
-                    resolvedTicks,
-                    resolvedNodeId,
-                    resolvedClockId,
+    const buffer = utils.allocBufferUnsafe(16);
+    const finish = (err?: Error | null): void => {
+        if (err) return done(err);
+        let timeUuid: TimeUuid;
+        try {
+            // Preserve the callback API's handling of mutable supplied IDs:
+            // copy them after asynchronous randomness is ready.
+            if (clockIdBuffer) clockIdBuffer.copy(buffer, 8);
+            if (nodeIdBuffer) nodeIdBuffer.copy(buffer, 10);
+            // The constructor also accepts a Buffer at runtime. Preserve that
+            // behavior when fromDate is called with one and a callback.
+            if (date instanceof Buffer) {
+                timeUuid = new TimeUuid(date);
+            } else {
+                // For the callback API, take the time after randomness is ready.
+                writeTimeAndUuidBits(
+                    buffer,
+                    getTimeWithTicks(date, resolvedTicks),
                 );
-            } catch (e) {
-                return done(e as Error);
+                timeUuid = new TimeUuid(buffer);
             }
+        } catch (e) {
+            return done(e as Error);
+        }
+        done(null, timeUuid);
+    };
 
-            done(null, timeUuid);
-        },
-    );
+    if (nodeIdBuffer && clockIdBuffer) return finish();
+    const randomOffset = clockIdBuffer ? 10 : 8;
+    const randomLength = clockIdBuffer ? 6 : nodeIdBuffer ? 2 : 8;
+    try {
+        crypto.randomFill(buffer, randomOffset, randomLength, finish);
+    } catch (e) {
+        done(e as Error);
+    }
 }
 
 function writeTime(buffer: Buffer, time: number, ticks: number): void {
@@ -349,16 +395,15 @@ function writeTime(buffer: Buffer, time: number, ticks: number): void {
 }
 
 /**
- * Returns a buffer of length 2 representing the clock identifier
+ * Validates a provided clock identifier, or returns null if it is missing.
  * @private
  */
-function getClockId(clockId?: string | Buffer | null): Buffer {
+function getProvidedClockId(clockId?: string | Buffer | null): Buffer | null {
     let buffer: Buffer;
     if (typeof clockId === "string") {
         buffer = utils.allocBufferFromString(clockId, "ascii");
     } else if (!(clockId instanceof Buffer)) {
-        // Generate
-        return getRandomBytes(2);
+        return null;
     } else {
         buffer = clockId;
     }
@@ -369,16 +414,15 @@ function getClockId(clockId?: string | Buffer | null): Buffer {
 }
 
 /**
- * Returns a buffer of length 6 representing the clock identifier
+ * Validates a provided node identifier, or returns null if it is missing.
  * @private
  */
-function getNodeId(nodeId?: string | Buffer | null): Buffer {
+function getProvidedNodeId(nodeId?: string | Buffer | null): Buffer | null {
     let buffer: Buffer;
     if (typeof nodeId === "string") {
         buffer = utils.allocBufferFromString(nodeId, "ascii");
     } else if (!(nodeId instanceof Buffer)) {
-        // Generate
-        return getRandomBytes(6);
+        return null;
     } else {
         buffer = nodeId;
     }
@@ -429,21 +473,6 @@ function getTimeWithTicks(
     };
 }
 
-function getRandomBytes(length: number): Buffer {
-    return crypto.randomBytes(length);
-}
-
-function getOrGenerateRandom(
-    id: string | Buffer | null | undefined,
-    length: number,
-    callback: (err: Error | null, buffer?: Buffer) => void,
-): void {
-    if (id) {
-        return callback(null, id as Buffer);
-    }
-    crypto.randomBytes(length, callback);
-}
-
 /**
  * Generates a 16-length Buffer instance
  * @private
@@ -455,15 +484,30 @@ function generateBuffer(
     clockId?: string | Buffer | null,
 ): Buffer {
     const timeWithTicks = getTimeWithTicks(date, ticks);
-    const nodeIdBuffer = getNodeId(nodeId);
-    const clockIdBuffer = getClockId(clockId);
+    const nodeIdBuffer = getProvidedNodeId(nodeId);
+    const clockIdBuffer = getProvidedClockId(clockId);
     const buffer = utils.allocBufferUnsafe(16);
+    // Clock ID occupies bytes 8-9; node ID occupies bytes 10-15.
+    if (clockIdBuffer) clockIdBuffer.copy(buffer, 8);
+    if (nodeIdBuffer) nodeIdBuffer.copy(buffer, 10);
+    if (!nodeIdBuffer || !clockIdBuffer) {
+        const randomOffset = clockIdBuffer ? 10 : 8;
+        const randomLength = clockIdBuffer ? 6 : nodeIdBuffer ? 2 : 8;
+        fillRandomTimeUuidBytes(buffer, randomOffset, randomLength);
+    }
+    writeTimeAndUuidBits(buffer, timeWithTicks);
+    return buffer;
+}
+
+/** Writes the timestamp and sets UUID version/variant bits on a filled buffer.
+ * @private
+ */
+function writeTimeAndUuidBits(
+    buffer: Buffer,
+    timeWithTicks: { time: number; ticks: number },
+): void {
     // Positions 0-7 Timestamp
     writeTime(buffer, timeWithTicks.time, timeWithTicks.ticks);
-    // Position 8-9 Clock
-    clockIdBuffer.copy(buffer, 8, 0);
-    // Positions 10-15 Node
-    nodeIdBuffer.copy(buffer, 10, 0);
     // Version Byte: Time based
     // 0001xxxx
     // turn off first 4 bits
@@ -477,7 +521,6 @@ function generateBuffer(
     buffer[8] = buffer[8] & 0x3f;
     // turn on first bit
     buffer[8] = buffer[8] | 0x80;
-    return buffer;
 }
 
 export = TimeUuid;
