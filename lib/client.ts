@@ -41,6 +41,58 @@ const { ProfileManager } = executionProfile;
 const description = packageInfo.description;
 const { version } = packageInfo;
 
+function snapshotEntries(options: object): [string, unknown][] {
+    return Object.entries(options).map(([key, value]) => [
+        key,
+        Array.isArray(value)
+            ? value.slice()
+            : key === "timestamp" && value instanceof types.Long
+              ? value.toBigInt()
+              : value,
+    ]);
+}
+
+function sameEntries(left: [string, unknown][], right: object): boolean {
+    const keys = Object.keys(right);
+    return (
+        left.length === keys.length &&
+        left.every(([key, value], index) => {
+            const otherValue = (right as Record<string, unknown>)[key];
+            return (
+                key === keys[index] &&
+                (Array.isArray(value) && Array.isArray(otherValue)
+                    ? value.length === otherValue.length &&
+                      value.every((item, i) => Object.is(item, otherValue[i]))
+                    : Object.is(
+                          value,
+                          key === "timestamp" &&
+                              otherValue instanceof types.Long
+                              ? otherValue.toBigInt()
+                              : otherValue,
+                      ))
+            );
+        })
+    );
+}
+
+function isCacheableObject(options: object, prototype: object): boolean {
+    return (
+        Object.getPrototypeOf(options) === prototype &&
+        Reflect.ownKeys(options).every((key) => {
+            const property = Object.getOwnPropertyDescriptor(options, key);
+            return !!property && property.enumerable && "value" in property;
+        })
+    );
+}
+
+type OptionsCacheInputs = {
+    queryValues: [string, unknown][];
+    defaultValues: [string, unknown][];
+    profile: executionProfile.ExecutionProfile;
+    profileValues: [string, unknown][];
+    requestTimeout: number | undefined;
+};
+
 /**
  * Callback used by execution methods.
  * @param err Error occurred in the execution of the query.
@@ -87,6 +139,10 @@ const loggingFinalizationRegistry = new FinalizationRegistry(
  * console.log(row['key']);
  */
 class Client extends events.EventEmitter {
+    #executionOptionsCache = new WeakMap<
+        QueryOptions,
+        OptionsCacheInputs & { options: DefaultExecutionOptions }
+    >();
     /**
      * @internal
      * @ignore
@@ -219,6 +275,8 @@ class Client extends events.EventEmitter {
      * Creating those options requires a native call, but they can be reused
      * without any additional native calls, which improves performance
      * for queries with the same QueryOptions.
+     * Cached instances are shared by executions using the same options object;
+     * request-specific state must not be set on them.
      * @internal
      * @ignore
      */
@@ -227,8 +285,59 @@ class Client extends events.EventEmitter {
             options.wrapOptionsIfNotWrappedYet();
             return options;
         }
-        let fullOptions = DefaultExecutionOptions.create(options, this);
+        let cacheInputs: OptionsCacheInputs | undefined;
+        // Accessors and inherited values can change without changing own data values.
+        const queryOptions =
+            options &&
+            typeof options === "object" &&
+            isCacheableObject(options, Object.prototype)
+                ? options
+                : undefined;
+        if (
+            queryOptions &&
+            isCacheableObject(this.options.queryOptions!, Object.prototype)
+        ) {
+            const profile = this.profileManager.getProfile(
+                queryOptions.executionProfile,
+            );
+            if (
+                profile &&
+                isCacheableObject(
+                    profile,
+                    executionProfile.ExecutionProfile.prototype,
+                )
+            ) {
+                const cached = this.#executionOptionsCache.get(queryOptions);
+                if (
+                    cached &&
+                    cached.profile === profile &&
+                    cached.requestTimeout === this.options.requestTimeout &&
+                    sameEntries(cached.queryValues, queryOptions) &&
+                    sameEntries(
+                        cached.defaultValues,
+                        this.options.queryOptions!,
+                    ) &&
+                    sameEntries(cached.profileValues, profile)
+                ) {
+                    return cached.options;
+                }
+                cacheInputs = {
+                    queryValues: snapshotEntries(queryOptions),
+                    defaultValues: snapshotEntries(this.options.queryOptions!),
+                    profile,
+                    profileValues: snapshotEntries(profile),
+                    requestTimeout: this.options.requestTimeout,
+                };
+            }
+        }
+        const fullOptions = DefaultExecutionOptions.create(options, this);
         fullOptions.wrapOptionsIfNotWrappedYet();
+        if (queryOptions && cacheInputs) {
+            this.#executionOptionsCache.set(queryOptions, {
+                ...cacheInputs,
+                options: fullOptions,
+            });
+        }
         return fullOptions;
     }
 
