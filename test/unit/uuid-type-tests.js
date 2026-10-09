@@ -1,10 +1,23 @@
 "use strict";
 
 const assert = require("assert");
+const crypto = require("crypto");
+const sinon = require("sinon");
+const v8 = require("v8");
 const helper = require("../test-helper");
 const utils = require("../../lib/utils");
 const Uuid = require("../../lib/types").Uuid;
 const TimeUuid = require("../../lib/types").TimeUuid;
+
+function withFreshModule(path, check) {
+    const originalModule = require.cache[path];
+    try {
+        delete require.cache[path];
+        check(require(path));
+    } finally {
+        require.cache[path] = originalModule;
+    }
+}
 
 describe("Uuid", function () {
     describe("constructor", function () {
@@ -147,6 +160,81 @@ describe("Uuid", function () {
     });
     describe("random()", function () {
         this.timeout(20000);
+        it("should set version and variant bits across cache refills", function () {
+            const fill = sinon.spy(crypto, "randomFillSync");
+            try {
+                for (let i = 0; i < 256; i++) {
+                    const value = Uuid.random();
+                    assert.strictEqual(value.buffer[6] >> 4, 4);
+                    assert.strictEqual(value.buffer[8] >> 6, 2);
+                }
+                assert.ok(fill.callCount >= 2);
+            } finally {
+                fill.restore();
+            }
+        });
+        it("should discard cached entropy before serializing a startup snapshot", function () {
+            const uuidPath = require.resolve("../../lib/types/uuid");
+            const building = sinon
+                .stub(v8.startupSnapshot, "isBuildingSnapshot")
+                .returns(true);
+            const register = sinon.stub(
+                v8.startupSnapshot,
+                "addSerializeCallback",
+            );
+            const registerDeserialize = sinon.stub(
+                v8.startupSnapshot,
+                "addDeserializeCallback",
+            );
+            const fill = sinon.spy(crypto, "randomFillSync");
+            try {
+                withFreshModule(uuidPath, (SnapshotUuid) => {
+                    assert.strictEqual(register.callCount, 1);
+                    assert.strictEqual(registerDeserialize.callCount, 1);
+                    const first = SnapshotUuid.random();
+                    const firstBytes = Buffer.from(first.buffer);
+                    assert.strictEqual(fill.callCount, 1);
+                    register.firstCall.args[0]();
+                    const second = SnapshotUuid.random();
+                    assert.strictEqual(fill.callCount, 2);
+                    registerDeserialize.firstCall.args[0]();
+                    SnapshotUuid.random();
+                    assert.strictEqual(fill.callCount, 3);
+                    assert.deepStrictEqual(first.buffer, firstBytes);
+                    assert.strictEqual(second.buffer[6] >> 4, 4);
+                });
+            } finally {
+                fill.restore();
+                register.restore();
+                registerDeserialize.restore();
+                building.restore();
+            }
+        });
+        it("should reuse random fills without sharing output buffers", function () {
+            const fill = sinon.spy(crypto, "randomFillSync");
+            try {
+                let first;
+                for (let i = 0; i < 129 && !first; i++) {
+                    const value = Uuid.random();
+                    if (fill.callCount === 1) first = value;
+                }
+                assert.ok(first);
+                const second = Uuid.random();
+                const secondBytes = Buffer.from(second.buffer);
+                assert.strictEqual(first.buffer.byteOffset, 0);
+                assert.strictEqual(first.buffer.buffer.byteLength, 16);
+                first.buffer.fill(0);
+                assert.deepStrictEqual(second.buffer, secondBytes);
+                for (let i = 0; i < 126; i++) Uuid.random();
+                assert.strictEqual(fill.callCount, 1);
+                Uuid.random();
+                assert.strictEqual(fill.callCount, 2);
+                assert.deepStrictEqual(first.buffer, Buffer.alloc(16));
+                assert.deepStrictEqual(second.buffer, secondBytes);
+            } finally {
+                fill.restore();
+            }
+        });
         it("should return a Uuid instance", function () {
             helper.assertInstanceOf(Uuid.random(), Uuid);
         });
@@ -179,6 +267,46 @@ describe("Uuid", function () {
 
     describe("random(cb)", function () {
         this.timeout(20000);
+        it("should report a failed cache refill and retry on the next call", function () {
+            const failure = new Error("random fill failed");
+            const originalFill = crypto.randomFillSync;
+            let fills = 0;
+            const fill = sinon
+                .stub(crypto, "randomFillSync")
+                .callsFake((buffer) => {
+                    if (fills++ === 0) throw failure;
+                    return originalFill(buffer);
+                });
+            try {
+                let observedError;
+                for (let i = 0; i < 129 && !observedError; i++) {
+                    Uuid.random((err) => {
+                        if (err) observedError = err;
+                    });
+                }
+                assert.strictEqual(observedError, failure);
+                assert.strictEqual(fill.callCount, 1);
+                const recovered = Uuid.random();
+                assert.strictEqual(recovered.buffer[6] >> 4, 4);
+                assert.strictEqual(recovered.buffer[8] >> 6, 2);
+                assert.strictEqual(fill.callCount, 2);
+            } finally {
+                fill.restore();
+            }
+        });
+        it("should not invoke a throwing callback twice", function () {
+            const failure = new Error("callback failure");
+            let calls = 0;
+            assert.throws(
+                () =>
+                    Uuid.random(() => {
+                        calls++;
+                        throw failure;
+                    }),
+                (err) => err === failure,
+            );
+            assert.strictEqual(calls, 1);
+        });
         it("should return a Uuid instance", function (done) {
             Uuid.random(function (err, uuid) {
                 helper.assertInstanceOf(uuid, Uuid);

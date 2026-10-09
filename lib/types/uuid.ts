@@ -1,6 +1,7 @@
+import crypto = require("crypto");
 import utils = require("../utils");
-import rust = require("../../index");
 import { ValueCallback } from "../..";
+import { registerEntropyCacheSnapshotReset } from "./entropy-cache-snapshot";
 
 /** @module types */
 
@@ -60,13 +61,12 @@ class Uuid {
     /**
      * Creates a new random (version 4) Uuid.
      * @param callback Optional callback to be invoked with the error as
-     * first parameter and the created Uuid as second parameter.
+     * first parameter and the created Uuid as second parameter. The callback
+     * runs synchronously. A cache refill may block while obtaining random bytes.
      */
     static random(callback: ValueCallback<Uuid>): void;
     static random(): Uuid;
     static random(callback?: ValueCallback<Uuid>): Uuid | void {
-        // While in theory nothing should throw here, there may be some edge cases,
-        // where napi layer will thrown an error, which we need to catch and pass to the callback.
         if (callback) {
             // The callback is actually invoked either with an error and no
             // value, or with no error and the new instance, which the stricter
@@ -75,13 +75,15 @@ class Uuid {
                 err: Error | null,
                 uuid?: Uuid,
             ) => void;
+            let uuid: Uuid;
             try {
-                return done(null, new Uuid(rust.getRandomUuidV4()));
+                uuid = new Uuid(randomUuidBuffer());
             } catch (err) {
                 return done(err as Error);
             }
+            return done(null, uuid);
         }
-        return new Uuid(rust.getRandomUuidV4());
+        return new Uuid(randomUuidBuffer());
     }
 
     /**
@@ -144,6 +146,30 @@ class Uuid {
     getInternal(): Buffer {
         return this.#raw;
     }
+}
+
+// Refill entropy for 128 UUIDs at once to avoid a call from Node into Rust
+// and a Buffer conversion for every value. Node crypto still obtains the
+// randomness natively. Benchmark before restoring per-value native calls.
+const uuidEntropyCache = Buffer.alloc(128 * 16);
+let uuidEntropyOffset = uuidEntropyCache.length;
+
+registerEntropyCacheSnapshotReset(uuidEntropyCache, () => {
+    uuidEntropyOffset = uuidEntropyCache.length;
+});
+
+/** @private */
+function randomUuidBuffer(): Buffer {
+    if (uuidEntropyOffset === uuidEntropyCache.length) {
+        crypto.randomFillSync(uuidEntropyCache);
+        uuidEntropyOffset = 0;
+    }
+    const buffer = Buffer.allocUnsafeSlow(16); // Give each UUID its own ArrayBuffer.
+    uuidEntropyCache.copy(buffer, 0, uuidEntropyOffset, uuidEntropyOffset + 16);
+    uuidEntropyOffset += 16;
+    buffer[6] = (buffer[6] & 0x0f) | 0x40;
+    buffer[8] = (buffer[8] & 0x3f) | 0x80;
+    return buffer;
 }
 
 export = Uuid;
