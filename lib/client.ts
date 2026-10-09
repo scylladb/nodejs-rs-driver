@@ -21,6 +21,7 @@ import { ExecutionOptions, DefaultExecutionOptions } from "./execution-options";
 import promiseUtils = require("./promise-utils");
 import rust = require("../index");
 import ResultSet = require("./types/result-set");
+import { ResultMetadataCache } from "./types/results-wrapper";
 import {
     encodeParams,
     convertComplexType,
@@ -93,6 +94,7 @@ class Client extends events.EventEmitter {
      */
     rustClient: rust.SessionWrapper | undefined;
     #encoder: Encoder;
+    #resultMetadataCache = new ResultMetadataCache();
     #loggingId: number | undefined;
 
     /**
@@ -508,7 +510,18 @@ class Client extends events.EventEmitter {
         let resultPageState = resultTuple[0];
         let executor = resultTuple[2];
 
-        let resultSet = new ResultSet(result, this.#encoder, resultPageState);
+        let resultSet = new ResultSet(
+            result,
+            this.#encoder,
+            resultPageState,
+            execOptions.isPrepared()
+                ? {
+                      cache: this.#resultMetadataCache,
+                      statement:
+                          typeof query === "string" ? query : query.statement,
+                  }
+                : undefined,
+        );
         if (resultPageState) {
             // If resultPageState then executor must be defined according to type definition.
             assert(executor instanceof rust.QueryExecutor);

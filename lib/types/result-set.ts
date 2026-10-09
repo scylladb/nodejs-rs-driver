@@ -4,7 +4,7 @@ import utils = require("../utils");
 import errors = require("../errors");
 import rust = require("../../index");
 import resultsWrapper = require("./results-wrapper");
-import { ColumnMetadata } from "./results-wrapper";
+import { ColumnMetadata, ResultMetadataContext } from "./results-wrapper";
 import Uuid = require("./uuid");
 import Row = require("./row");
 import Encoder = require("../encoder");
@@ -119,6 +119,19 @@ class ResultSet {
         result: rust.QueryResultWrapper,
         encoder: Encoder,
         pagingState?: rust.PagingStateWrapper | null,
+    );
+    /** @internal Cache context applies only to this result, not to later pages. */
+    constructor(
+        result: rust.QueryResultWrapper,
+        encoder: Encoder,
+        pagingState: rust.PagingStateWrapper | null | undefined,
+        cacheContext: ResultMetadataContext | undefined,
+    );
+    constructor(
+        result: rust.QueryResultWrapper,
+        encoder: Encoder,
+        pagingState?: rust.PagingStateWrapper | null,
+        cacheContext?: ResultMetadataContext,
     ) {
         // Old constructor logic only for purpose of unit tests.
         if (!(result instanceof rust.QueryResultWrapper)) {
@@ -150,7 +163,11 @@ class ResultSet {
             }
             return;
         }
-        this.rows = resultsWrapper.getRowsFromResultsWrapper(result, encoder);
+        this.rows = resultsWrapper.getRowsFromResultsWrapper(
+            result,
+            encoder,
+            cacheContext,
+        );
 
         this.rowLength = this.rows ? this.rows.length : 0;
 

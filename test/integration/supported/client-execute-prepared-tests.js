@@ -7,6 +7,7 @@ const util = require("util");
 const helper = require("../../test-helper");
 const Client = require("../../../lib/client");
 const types = require("../../../lib/types");
+const rust = require("../../../index");
 const utils = require("../../../lib/utils");
 const loadBalancing = require("../../../lib/policies/load-balancing");
 const vit = helper.vit;
@@ -2353,16 +2354,9 @@ describe("Client @SERVER_API", function () {
                 });
         }); */
         describe("With schema changes made while querying", () => {
-            // Note: Since the driver does not make use of result metadata on prepared statement
-            // it should inheritently be resilient to schema changes since it uses the metadata
-            // in the rows responses.  However, if NODEJS-433 is implemented the driver will
-            // need to be more deliberate in handling schema changes made at runtime.
+            // The result metadata ID controls reuse of converted column names and types when available.
+            // Without an ID, each rows response supplies fresh column metadata.
 
-            // Test with two clients to ensure that a client can handle update the prepared metadata cache
-            // in the following the following cases:
-            //  1) it reprepares the statement on schema change and that updates the cache
-            //  2) server responds with rows response containing new_metadata_id that prompts updating
-            //      the cache.
             const client = setupInfo.client;
             const client2 = newInstance({ keyspace: commonKs });
             let table;
@@ -2390,11 +2384,10 @@ describe("Client @SERVER_API", function () {
             });
             after((done) => client2.shutdown(done));
             it("should be resilient to schema change between queries", (done) => {
+                // After another client executes this query across a schema change,
+                // resuming this client's prepared read must use current columns.
                 const query = util.format("select * from %s", table);
                 let pageState;
-                let originalResultId;
-                let originalResultId2;
-                let finalResultId2;
 
                 utils.series(
                     [
@@ -2489,6 +2482,132 @@ describe("Client @SERVER_API", function () {
                     ],
                     done,
                 );
+            });
+
+            it("should refresh a cached result type when the column name stays the same", async () => {
+                const query = util.format(
+                    "SELECT c FROM %s WHERE k = ? AND a = ?",
+                    table,
+                );
+                const original =
+                    rust.QueryResultWrapper.prototype.getResultMetadataId;
+                const originalTypes =
+                    rust.QueryResultWrapper.prototype.getColumnsTypes;
+                const ids = [];
+                let typeReads = 0;
+                rust.QueryResultWrapper.prototype.getResultMetadataId =
+                    function () {
+                        const id = original.call(this);
+                        ids.push(id && id.toString("hex"));
+                        return id;
+                    };
+                rust.QueryResultWrapper.prototype.getColumnsTypes =
+                    function () {
+                        typeReads++;
+                        return originalTypes.call(this);
+                    };
+
+                try {
+                    const before = await client.execute(query, [0, 0], {
+                        prepare: true,
+                    });
+                    assert.strictEqual(before.first().c, 0);
+                    const repeated = await client.execute(query, [0, 0], {
+                        prepare: true,
+                    });
+                    assert.strictEqual(repeated.first().c, 0);
+                    const hasMetadataId = ids[0] != null;
+                    assert.strictEqual(typeReads, hasMetadataId ? 1 : 2);
+
+                    await client.execute(util.format("DROP TABLE %s", table));
+                    await client.rustClient.waitForSchemaAgreement();
+                    await client.execute(
+                        util.format(
+                            "CREATE TABLE %s (k int, a int, c text, primary key (k, a))",
+                            table,
+                        ),
+                    );
+                    await client.rustClient.waitForSchemaAgreement();
+                    await client.execute(
+                        util.format(
+                            "INSERT INTO %s (k, a, c) VALUES (0, 0, 'zero')",
+                            table,
+                        ),
+                    );
+
+                    const after = await client.execute(query, [0, 0], {
+                        prepare: true,
+                    });
+                    assert.strictEqual(after.first().c, "zero");
+                    assert.strictEqual(typeReads, hasMetadataId ? 2 : 3);
+                    if (hasMetadataId) {
+                        assert.ok(ids[0]);
+                        assert.ok(ids[1]);
+                        assert.ok(ids[2]);
+                        assert.strictEqual(ids[0], ids[1]);
+                        assert.notStrictEqual(ids[1], ids[2]);
+                    } else {
+                        assert.deepStrictEqual(ids, [null, null, null]);
+                    }
+                } finally {
+                    rust.QueryResultWrapper.prototype.getResultMetadataId =
+                        original;
+                    rust.QueryResultWrapper.prototype.getColumnsTypes =
+                        originalTypes;
+                }
+            });
+
+            it("should refresh cached result columns after ALTER TABLE ADD", async () => {
+                const query = util.format(
+                    "SELECT * FROM %s WHERE k = ? AND a = ?",
+                    table,
+                );
+                const original =
+                    rust.QueryResultWrapper.prototype.getResultMetadataId;
+                const ids = [];
+                rust.QueryResultWrapper.prototype.getResultMetadataId =
+                    function () {
+                        const id = original.call(this);
+                        ids.push(id && id.toString("hex"));
+                        return id;
+                    };
+
+                try {
+                    const before = await client.execute(query, [0, 0], {
+                        prepare: true,
+                    });
+                    assert.deepStrictEqual(before.first().keys(), [
+                        "k",
+                        "a",
+                        "c",
+                    ]);
+                    await client.execute(query, [0, 0], { prepare: true });
+
+                    await client.execute(
+                        util.format("ALTER TABLE %s ADD b text", table),
+                    );
+                    await client.rustClient.waitForSchemaAgreement();
+                    const after = await client.execute(query, [0, 0], {
+                        prepare: true,
+                    });
+                    assert.deepStrictEqual(after.first().keys(), [
+                        "k",
+                        "a",
+                        "b",
+                        "c",
+                    ]);
+                    assert.strictEqual(after.first().b, null);
+                    if (ids[0] != null) {
+                        assert.ok(ids[0]);
+                        assert.strictEqual(ids[0], ids[1]);
+                        assert.notStrictEqual(ids[1], ids[2]);
+                    } else {
+                        assert.deepStrictEqual(ids, [null, null, null]);
+                    }
+                } finally {
+                    rust.QueryResultWrapper.prototype.getResultMetadataId =
+                        original;
+                }
             });
         });
     });
