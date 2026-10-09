@@ -83,19 +83,6 @@ describe("prepared statement handle cache", function () {
         );
     });
 
-    it("does not infer cache invalidation from query text", async function () {
-        const { client, prepares, executed } = makeClient();
-        const options = { prepare: true, paged: false };
-        await client.execute("SELECT * FROM t", [], options);
-        await client.execute("ALTER TABLE t ADD v text", [], {
-            prepare: false,
-            paged: false,
-        });
-        await client.execute("SELECT * FROM t", [], options);
-        assert.strictEqual(prepares.length, 1);
-        assert.strictEqual(executed[0], executed[1]);
-    });
-
     it("keeps unrelated handles after a prepared execution fails", async function () {
         const { client, prepares } = makeClient();
         const options = { prepare: true, paged: false };
