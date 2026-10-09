@@ -138,19 +138,27 @@ function ensure64SignedInteger(number: bigint, name: string): void {
     }
 }
 
+/** A native prepared handle and the bind metadata captured when it was prepared. */
 class PreparedInfo {
     types: ColumnInfo[];
     statement: string;
     boundParamNames: string[];
+    handle: import("../index").ExternalObject<
+        import("../index").PreparedStatementWrapper
+    >;
 
     constructor(
         types: ColumnInfo[],
         statement: string,
         boundParamNames: string[],
+        handle: import("../index").ExternalObject<
+            import("../index").PreparedStatementWrapper
+        >,
     ) {
         this.types = types;
         this.statement = statement;
         this.boundParamNames = boundParamNames;
+        this.handle = handle;
     }
 }
 

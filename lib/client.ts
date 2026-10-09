@@ -94,7 +94,10 @@ class Client extends events.EventEmitter {
     rustClient: rust.SessionWrapper | undefined;
     #encoder: Encoder;
     #loggingId: number | undefined;
-
+    // Map insertion order determines which prepared handle is evicted first.
+    #preparedCache = new Map<string, PreparedInfo>();
+    // Share one preparation among concurrent calls for the same statement.
+    #preparing = new Map<string, Promise<PreparedInfo>>();
     /**
      * @internal
      * @ignore
@@ -233,16 +236,54 @@ class Client extends events.EventEmitter {
     }
 
     /**
-     * Manually prepare query into prepared statement.
+     * Reuse a prepared handle and its bind metadata for the same statement.
+     * Bind metadata is fixed for the lifetime of the handle, as in the Rust driver.
      * @internal
      * @ignore
      */
     async prepareStatement(statement: string): Promise<PreparedInfo> {
-        // This will be called only after checking that client is connected
-        let expectedTypes = await this.rustClient!.prepareStatement(statement);
-        let types = expectedTypes.map((t) => convertComplexType(t[0]));
-        let boundParamNames = expectedTypes.map((t) => t[1].toLowerCase());
-        return new PreparedInfo(types, statement, boundParamNames);
+        const cached = this.#preparedCache.get(statement);
+        if (cached) {
+            // Move a cache hit to the end; the first entry is the LRU victim.
+            this.#preparedCache.delete(statement);
+            this.#preparedCache.set(statement, cached);
+            return cached;
+        }
+        const inFlight = this.#preparing.get(statement);
+        if (inFlight) return inFlight;
+
+        const preparing = (async () => {
+            const preparedResult =
+                await this.rustClient!.prepareStatement(statement);
+            const handle = preparedResult[0];
+            const expectedTypes = preparedResult[1];
+            const types = expectedTypes.map((t) => convertComplexType(t[0]));
+            const boundParamNames = expectedTypes.map((t) =>
+                t[1].toLowerCase(),
+            );
+            const prepared = new PreparedInfo(
+                types,
+                statement,
+                boundParamNames,
+                handle,
+            );
+            const limit = this.options.maxPrepared || 512;
+            if (this.#preparedCache.size >= limit) {
+                this.#preparedCache.delete(
+                    this.#preparedCache.keys().next().value!,
+                );
+            }
+            this.#preparedCache.set(statement, prepared);
+            return prepared;
+        })();
+        this.#preparing.set(statement, preparing);
+        try {
+            return await preparing;
+        } finally {
+            if (this.#preparing.get(statement) === preparing) {
+                this.#preparing.delete(statement);
+            }
+        }
     }
 
     /**
@@ -530,7 +571,8 @@ class Client extends events.EventEmitter {
                 prepared = await this.prepareStatement(query);
                 break;
             case query instanceof PreparedInfo:
-                prepared = query;
+                // A paged caller may retain a handle after cache eviction.
+                prepared = this.#preparedCache.get(query.statement) || query;
                 break;
             default:
                 throw new TypeError(
@@ -545,15 +587,15 @@ class Client extends events.EventEmitter {
             unifiedParams = utils.adaptNamedParamsPrepared(params, prepared);
         }
 
-        let encoded = encodeParams(
+        const encoded = encodeParams(
             prepared.types,
             unifiedParams,
             this.#encoder,
         );
 
         if (paged) {
-            return this.rustClient!.executeSinglePage(
-                prepared.statement,
+            return this.rustClient!.executePreparedHandleSinglePage(
+                prepared.handle,
                 encoded,
                 rustOptions,
                 pageState,
@@ -562,8 +604,8 @@ class Client extends events.EventEmitter {
         // We add the undefined values here to make the value match PagingResultWithExecutor type
         return [
             undefined,
-            await this.rustClient!.executePreparedUnpaged(
-                prepared.statement,
+            await this.rustClient!.executePreparedHandleUnpaged(
+                prepared.handle,
                 encoded,
                 rustOptions,
             ),

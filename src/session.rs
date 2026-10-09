@@ -257,22 +257,25 @@ impl SessionWrapper {
     }
 
     /// Prepares a statement through rust driver for a given session.
-    /// Returns (expected type, variable name) pairs for the prepared statement.
-    #[napi(ts_return_type = "Promise<Array<[ComplexType, string]>>")]
+    /// Returns the native prepared handle and its bind metadata. The bind metadata
+    /// remains fixed for this handle even if the schema changes.
+    #[napi(
+        ts_return_type = "Promise<[ExternalObject<PreparedStatementWrapper>, Array<[ComplexType, string]>]>"
+    )]
     pub async fn prepare_statement(
         &self,
         statement: String,
-    ) -> JsResult<Vec<(ComplexType<'static>, String)>> {
+    ) -> JsResult<(
+        External<PreparedStatementWrapper>,
+        Vec<(ComplexType<'static>, String)>,
+    )> {
         with_custom_error_async(async || {
             let statement: Statement = statement.into();
-            let w = PreparedStatementWrapper {
-                prepared: self
-                    .inner
-                    .add_prepared_statement(&statement) // TODO: change for add_prepared_statement_to_owned after it is made public
-                    .await?,
+            let handle = PreparedStatementWrapper {
+                prepared: self.inner.get_session().prepare(statement).await?,
             };
-            let types = w.get_expected_types();
-            ConvertedResult::Ok(types)
+            let expected_types = handle.get_expected_types();
+            ConvertedResult::Ok((External::new(handle), expected_types))
         })
         .await
     }
