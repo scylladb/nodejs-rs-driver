@@ -84,6 +84,25 @@ const optionsV2 = {
 };
 
 describe("Client options", function () {
+    describe("maxPrepared", function () {
+        it("accepts the default sentinel and valid cache sizes", function () {
+            for (const maxPrepared of [null, 0, 1, 0xffffffff]) {
+                assert.doesNotThrow(() =>
+                    extend({ contactPoints: ["127.0.0.1"], maxPrepared }),
+                );
+            }
+        });
+
+        it("rejects values the native cache cannot represent", function () {
+            for (const maxPrepared of [-1, 1.5, 0x100000000, "512"]) {
+                assert.throws(
+                    () => extend({ contactPoints: ["127.0.0.1"], maxPrepared }),
+                    /maxPrepared must be an integer/,
+                );
+            }
+        });
+    });
+
     it("should correctly convert client options", function () {
         rust.testsCheckClientOption(setRustOptions(options), 1);
         rust.testsCheckClientOption(setRustOptions(optionsV2), 3);
