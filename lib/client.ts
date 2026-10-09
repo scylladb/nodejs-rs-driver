@@ -52,30 +52,37 @@ function snapshotEntries(options: object): [string, unknown][] {
     ]);
 }
 
-function sameEntries(
-    left: [string, unknown][],
-    right: [string, unknown][],
-): boolean {
+function sameEntries(left: [string, unknown][], right: object): boolean {
+    const keys = Object.keys(right);
     return (
-        left.length === right.length &&
+        left.length === keys.length &&
         left.every(([key, value], index) => {
-            const [otherKey, otherValue] = right[index];
+            const otherValue = (right as Record<string, unknown>)[key];
             return (
-                key === otherKey &&
+                key === keys[index] &&
                 (Array.isArray(value) && Array.isArray(otherValue)
                     ? value.length === otherValue.length &&
                       value.every((item, i) => Object.is(item, otherValue[i]))
-                    : Object.is(value, otherValue))
+                    : Object.is(
+                          value,
+                          key === "timestamp" &&
+                              otherValue instanceof types.Long
+                              ? otherValue.toBigInt()
+                              : otherValue,
+                      ))
             );
         })
     );
 }
 
-function hasOnlyDataProperties(options: object): boolean {
-    return Reflect.ownKeys(options).every((key) => {
-        const property = Object.getOwnPropertyDescriptor(options, key);
-        return !!property && property.enumerable && "value" in property;
-    });
+function isCacheableObject(options: object, prototype: object): boolean {
+    return (
+        Object.getPrototypeOf(options) === prototype &&
+        Reflect.ownKeys(options).every((key) => {
+            const property = Object.getOwnPropertyDescriptor(options, key);
+            return !!property && property.enumerable && "value" in property;
+        })
+    );
 }
 
 type OptionsCacheInputs = {
@@ -283,25 +290,37 @@ class Client extends events.EventEmitter {
         const queryOptions =
             options &&
             typeof options === "object" &&
-            Object.getPrototypeOf(options) === Object.prototype &&
-            hasOnlyDataProperties(options)
+            isCacheableObject(options, Object.prototype)
                 ? options
                 : undefined;
         if (
             queryOptions &&
-            Object.getPrototypeOf(this.options.queryOptions!) ===
-                Object.prototype &&
-            hasOnlyDataProperties(this.options.queryOptions!)
+            isCacheableObject(this.options.queryOptions!, Object.prototype)
         ) {
             const profile = this.profileManager.getProfile(
                 queryOptions.executionProfile,
             );
             if (
                 profile &&
-                Object.getPrototypeOf(profile) ===
-                    executionProfile.ExecutionProfile.prototype &&
-                hasOnlyDataProperties(profile)
+                isCacheableObject(
+                    profile,
+                    executionProfile.ExecutionProfile.prototype,
+                )
             ) {
+                const cached = this.#executionOptionsCache.get(queryOptions);
+                if (
+                    cached &&
+                    cached.profile === profile &&
+                    cached.requestTimeout === this.options.requestTimeout &&
+                    sameEntries(cached.queryValues, queryOptions) &&
+                    sameEntries(
+                        cached.defaultValues,
+                        this.options.queryOptions!,
+                    ) &&
+                    sameEntries(cached.profileValues, profile)
+                ) {
+                    return cached.options;
+                }
                 cacheInputs = {
                     queryValues: snapshotEntries(queryOptions),
                     defaultValues: snapshotEntries(this.options.queryOptions!),
@@ -309,23 +328,6 @@ class Client extends events.EventEmitter {
                     profileValues: snapshotEntries(profile),
                     requestTimeout: this.options.requestTimeout,
                 };
-                const cached = this.#executionOptionsCache.get(queryOptions);
-                if (
-                    cached &&
-                    sameEntries(cached.queryValues, cacheInputs.queryValues) &&
-                    sameEntries(
-                        cached.defaultValues,
-                        cacheInputs.defaultValues,
-                    ) &&
-                    cached.profile === cacheInputs.profile &&
-                    sameEntries(
-                        cached.profileValues,
-                        cacheInputs.profileValues,
-                    ) &&
-                    cached.requestTimeout === cacheInputs.requestTimeout
-                ) {
-                    return cached.options;
-                }
             }
         }
         const fullOptions = DefaultExecutionOptions.create(options, this);
