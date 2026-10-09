@@ -196,3 +196,15 @@ pub fn tests_casync_conversion_error_with_null_byte(
         })
     })
 }
+
+/// Emits a warning before resolving, like a failed schema-agreement check.
+#[napi(ts_return_type = "Promise<boolean>")]
+pub fn tests_casync_log_then_resolve(env: Env) -> JsResult<JsPromise<bool>> {
+    with_custom_error_sync(|| {
+        submit_future(&env, async {
+            tracing::warn!("schema agreement logging order probe");
+            tokio::time::sleep(Duration::from_millis(1)).await;
+            Ok(false)
+        })
+    })
+}

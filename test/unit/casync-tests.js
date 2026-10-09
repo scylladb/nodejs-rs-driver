@@ -195,5 +195,27 @@ describe("casync bridge", function () {
                 "[Unknown error] Error message contained illegal null byte",
             );
         });
+
+        it("delivers a Rust warning before its promise settles", async function () {
+            const warnings = [];
+            const loggingId = rust.setupLogging((level, _target, message) => {
+                if (level === "warning") warnings.push(message);
+            }, "warning");
+            try {
+                assert.strictEqual(
+                    await rust.testsCasyncLogThenResolve(),
+                    false,
+                );
+                assert.isTrue(
+                    warnings.some((message) =>
+                        message.includes(
+                            "schema agreement logging order probe",
+                        ),
+                    ),
+                );
+            } finally {
+                rust.removeLogging(loggingId);
+            }
+        });
     });
 });

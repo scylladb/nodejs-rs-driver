@@ -217,6 +217,9 @@ impl SessionWrapper {
                         tracing::warn!(
                             "There was an error while checking the schema agreement: {err}"
                         );
+                        // Logging reaches JavaScript through another TSFN. Give its
+                        // callback a turn before settling this promise.
+                        tokio::time::sleep(Duration::from_millis(1)).await;
                         false
                     }
                 })
