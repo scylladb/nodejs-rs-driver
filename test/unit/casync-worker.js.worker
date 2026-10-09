@@ -1,0 +1,11 @@
+"use strict";
+
+const { parentPort } = require("worker_threads");
+const rust = require("../../index");
+
+require("../../lib/client");
+
+rust.testsCasyncResolveImmediate().then(
+    (value) => parentPort.postMessage({ value }),
+    (error) => parentPort.postMessage({ error: error.message }),
+);

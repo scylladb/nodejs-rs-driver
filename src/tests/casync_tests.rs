@@ -1,6 +1,8 @@
 use std::time::Duration;
+use std::{ffi::CString, ptr};
 
 use napi::bindgen_prelude::*;
+use napi::sys;
 
 use crate::async_bridge::{JsPromise, submit_future};
 use crate::errors::{ConvertedError, JsResult, with_custom_error_sync};
@@ -11,7 +13,7 @@ use crate::errors::{ConvertedError, JsResult, with_custom_error_sync};
 
 /// Resolves with 42 on the very first poll (no Pending).
 /// Tests the synchronous-completion fast path.
-#[napi]
+#[napi(ts_return_type = "Promise<number>")]
 pub fn tests_casync_resolve_immediate(env: Env) -> JsResult<JsPromise<i32>> {
     with_custom_error_sync(|| submit_future(&env, async move { Ok::<i32, ConvertedError>(42) }))
 }
@@ -20,7 +22,7 @@ pub fn tests_casync_resolve_immediate(env: Env) -> JsResult<JsPromise<i32>> {
 /// The sleep causes the future to return Pending on the first poll; the Tokio
 /// reactor fires the waker from its worker thread when the timer expires,
 /// exercising the cross-thread waker → TSFN → poll_woken path.
-#[napi]
+#[napi(ts_return_type = "Promise<number>")]
 pub fn tests_casync_resolve_delayed(env: Env, millis: u32) -> JsResult<JsPromise<i32>> {
     with_custom_error_sync(|| {
         submit_future(&env, async move {
@@ -33,7 +35,7 @@ pub fn tests_casync_resolve_delayed(env: Env, millis: u32) -> JsResult<JsPromise
 /// Resolves with a String value.
 /// Tests a different ToNapiValue type so that type erasure in BoxFuture does
 /// not silently confuse return types.
-#[napi]
+#[napi(ts_return_type = "Promise<string>")]
 pub fn tests_casync_resolve_string(env: Env) -> JsResult<JsPromise<String>> {
     with_custom_error_sync(|| {
         submit_future(&env, async move {
@@ -43,7 +45,7 @@ pub fn tests_casync_resolve_string(env: Env) -> JsResult<JsPromise<String>> {
 }
 
 /// Resolves with a bool.
-#[napi]
+#[napi(ts_return_type = "Promise<boolean>")]
 pub fn tests_casync_resolve_bool(env: Env, value: bool) -> JsResult<JsPromise<bool>> {
     with_custom_error_sync(|| submit_future(&env, async move { Ok::<bool, ConvertedError>(value) }))
 }
@@ -54,7 +56,7 @@ pub fn tests_casync_resolve_bool(env: Env, value: bool) -> JsResult<JsPromise<bo
 
 /// Rejects with a ConvertedError produced from a real scylla error.
 /// The JS side can assert `.message` and `.name` on the rejection value.
-#[napi]
+#[napi(ts_return_type = "Promise<number>")]
 pub fn tests_casync_reject(env: Env) -> JsResult<JsPromise<i32>> {
     with_custom_error_sync(|| {
         submit_future(&env, async move {
@@ -64,7 +66,7 @@ pub fn tests_casync_reject(env: Env) -> JsResult<JsPromise<i32>> {
 }
 
 /// Rejects after a delay, exercising the waker path on the error branch.
-#[napi]
+#[napi(ts_return_type = "Promise<number>")]
 pub fn tests_casync_reject_delayed(env: Env, millis: u32) -> JsResult<JsPromise<i32>> {
     with_custom_error_sync(|| {
         submit_future(&env, async move {
@@ -83,7 +85,7 @@ pub fn tests_casync_reject_delayed(env: Env, millis: u32) -> JsResult<JsPromise<
 /// `Err::<i32, ConvertedError>(NullByteError.into())`. More practically, it
 /// validates that a ConvertedError with a null byte does NOT crash the process
 /// - the promise is simply rejected with a fallback message.
-#[napi]
+#[napi(ts_return_type = "Promise<number>")]
 pub fn tests_casync_reject_null_byte(env: Env) -> JsResult<JsPromise<i32>> {
     /// An error whose Display contains an interior null byte.
     struct NullByteError;
@@ -120,7 +122,7 @@ pub fn tests_casync_reject_null_byte(env: Env) -> JsResult<JsPromise<i32>> {
 /// the waker may still be queued, exercising the coalesced-wake path in
 /// WakerBridge::signal (the signaled AtomicBool prevents duplicate TSFN calls).
 /// The promise must still resolve exactly once with the correct value.
-#[napi]
+#[napi(ts_return_type = "Promise<number>")]
 pub fn tests_casync_multi_wake(env: Env) -> JsResult<JsPromise<i32>> {
     with_custom_error_sync(|| {
         submit_future(&env, async move {
@@ -138,5 +140,46 @@ pub fn tests_casync_multi_wake(env: Env) -> JsResult<JsPromise<i32>> {
             notify.notified().await;
             Ok::<i32, ConvertedError>(99)
         })
+    })
+}
+
+/// Test value that submits another future during conversion.
+pub struct NestedPromise;
+
+impl ToNapiValue for NestedPromise {
+    unsafe fn to_napi_value(env: sys::napi_env, _: Self) -> napi::Result<sys::napi_value> {
+        let env_wrapper = Env::from_raw(env);
+        let promise = submit_future(&env_wrapper, async { Ok::<i32, ConvertedError>(42) })
+            .map_err(|error| napi::Error::from_reason(error.to_string()))?;
+        unsafe { JsPromise::<i32>::to_napi_value(env, promise) }
+    }
+}
+
+/// Exercises future submission while another future is being converted to JS.
+#[napi(ts_return_type = "Promise<number>")]
+pub fn tests_casync_nested_promise(env: Env) -> JsResult<JsPromise<NestedPromise>> {
+    with_custom_error_sync(|| submit_future(&env, async { Ok::<_, ConvertedError>(NestedPromise) }))
+}
+
+/// Test value that leaves a pending JavaScript exception during conversion.
+pub struct ThrowingConversion;
+
+impl ToNapiValue for ThrowingConversion {
+    unsafe fn to_napi_value(env: sys::napi_env, _: Self) -> napi::Result<sys::napi_value> {
+        let message = CString::new("conversion failed").unwrap();
+        // SAFETY: The message remains valid for this Node-API call.
+        let status = unsafe { sys::napi_throw_error(env, ptr::null(), message.as_ptr()) };
+        if status != sys::Status::napi_ok {
+            return Err(napi::Error::from_status(status.into()));
+        }
+        Err(napi::Error::from_reason("conversion failed"))
+    }
+}
+
+/// Exercises promise rejection after a conversion leaves a JS exception pending.
+#[napi(ts_return_type = "Promise<void>")]
+pub fn tests_casync_throwing_conversion(env: Env) -> JsResult<JsPromise<ThrowingConversion>> {
+    with_custom_error_sync(|| {
+        submit_future(&env, async { Ok::<_, ConvertedError>(ThrowingConversion) })
     })
 }

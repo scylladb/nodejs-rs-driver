@@ -1,6 +1,8 @@
 "use strict";
 
 const { assert } = require("chai");
+const { Worker } = require("worker_threads");
+const path = require("path");
 const rust = require("../../index");
 const helper = require("../test-helper");
 
@@ -146,6 +148,56 @@ describe("casync bridge", function () {
                 rust.testsCasyncMultiWake(),
             ]);
             results.forEach((v) => assert.strictEqual(v, 99));
+        });
+    });
+
+    describe("environment and conversion", function () {
+        it("initializes the bridge in a worker after the main thread", async function () {
+            this.timeout(10000);
+            const worker = new Worker(
+                path.resolve(__dirname, "casync-worker.js.worker"),
+            );
+            try {
+                const result = await new Promise((resolve, reject) => {
+                    const timeout = setTimeout(
+                        () =>
+                            reject(new Error("worker promise did not settle")),
+                        5000,
+                    );
+                    worker.once("message", (value) => {
+                        clearTimeout(timeout);
+                        resolve(value);
+                    });
+                    worker.once("error", (error) => {
+                        clearTimeout(timeout);
+                        reject(error);
+                    });
+                    worker.once("exit", (code) => {
+                        if (code !== 0) {
+                            clearTimeout(timeout);
+                            reject(
+                                new Error(`worker exited with code ${code}`),
+                            );
+                        }
+                    });
+                });
+                assert.deepEqual(result, { value: 42 });
+            } finally {
+                await worker.terminate();
+            }
+        });
+
+        it("permits future submission during value conversion", async function () {
+            assert.strictEqual(await rust.testsCasyncNestedPromise(), 42);
+        });
+
+        it("rejects a conversion exception without aborting Node", async function () {
+            try {
+                await rust.testsCasyncThrowingConversion();
+                assert.fail("Promise should have been rejected");
+            } catch (error) {
+                assert.strictEqual(error.message, "conversion failed");
+            }
         });
     });
 });
