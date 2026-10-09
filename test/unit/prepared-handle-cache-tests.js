@@ -95,4 +95,61 @@ describe("prepared statement handle cache", function () {
         assert.strictEqual(prepares.length, 1);
         assert.strictEqual(executed[0], executed[1]);
     });
+
+    it("keeps unrelated handles after a prepared execution fails", async function () {
+        const { client, prepares } = makeClient();
+        const options = { prepare: true, paged: false };
+        await client.execute("SELECT * FROM a", [], options);
+        await client.execute("SELECT * FROM b", [], options);
+
+        const failedHandle = prepares[0].handle;
+        client.rustClient.executePreparedHandleUnpaged = async (handle) => {
+            if (handle === failedHandle) throw new Error("query failed");
+            return { rows: [] };
+        };
+
+        await assert.rejects(
+            client.execute("SELECT * FROM a", [], options),
+            /query failed/,
+        );
+        await client.execute("SELECT * FROM b", [], options);
+        await client.execute("SELECT * FROM a", [], options);
+        assert.deepStrictEqual(
+            prepares.map((p) => p.query),
+            ["SELECT * FROM a", "SELECT * FROM b", "SELECT * FROM a"],
+        );
+    });
+
+    it("keeps unrelated handles after a parameter encoding error", async function () {
+        const { client, prepares } = makeClient();
+        const options = { prepare: true, paged: false };
+        await client.execute("SELECT * FROM a", [], options);
+        await client.execute("SELECT * FROM b", [], options);
+
+        await assert.rejects(
+            client.execute("SELECT * FROM a", [Symbol()], options),
+        );
+        await client.execute("SELECT * FROM b", [], options);
+        assert.deepStrictEqual(
+            prepares.map((p) => p.query),
+            ["SELECT * FROM a", "SELECT * FROM b", "SELECT * FROM a"],
+        );
+    });
+
+    it("does not reuse a failed handle held by a concurrent caller", async function () {
+        const { client, prepares } = makeClient();
+        const options = client.createOptions({ prepare: true, paged: false });
+        const prepared = await client.prepareStatement("SELECT * FROM a");
+        client.rustClient.executePreparedHandleUnpaged = async (handle) => {
+            if (handle === prepares[0].handle) throw new Error("query failed");
+            return { rows: [] };
+        };
+
+        await assert.rejects(
+            client.rustyExecute(prepared, [], options),
+            /query failed/,
+        );
+        await client.rustyExecute(prepared, [], options);
+        assert.strictEqual(prepares.length, 2);
+    });
 });

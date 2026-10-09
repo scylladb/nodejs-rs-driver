@@ -98,6 +98,17 @@ class Client extends events.EventEmitter {
     #preparedCache = new Map<string, PreparedInfo>();
     // Share one preparation among concurrent calls for the same statement.
     #preparing = new Map<string, Promise<PreparedInfo>>();
+    // Reject handles retained by callers after an encoding or execution failure.
+    #stalePrepared = new WeakSet<PreparedInfo>();
+
+    // Called after encoding or execution fails, so the next use prepares again.
+    #evictPrepared(prepared: PreparedInfo): void {
+        if (this.#preparedCache.get(prepared.statement) === prepared) {
+            this.#preparedCache.delete(prepared.statement);
+        }
+        this.#stalePrepared.add(prepared);
+    }
+
     /**
      * @internal
      * @ignore
@@ -571,8 +582,13 @@ class Client extends events.EventEmitter {
                 prepared = await this.prepareStatement(query);
                 break;
             case query instanceof PreparedInfo:
-                // A paged caller may retain a handle after cache eviction.
-                prepared = this.#preparedCache.get(query.statement) || query;
+                // A paged caller may retain an old handle after eviction. Prefer
+                // the current cache entry, and reprepare if that handle failed.
+                prepared =
+                    this.#preparedCache.get(query.statement) ||
+                    (!this.#stalePrepared.has(query)
+                        ? query
+                        : await this.prepareStatement(query.statement));
                 break;
             default:
                 throw new TypeError(
@@ -587,30 +603,51 @@ class Client extends events.EventEmitter {
             unifiedParams = utils.adaptNamedParamsPrepared(params, prepared);
         }
 
-        const encoded = encodeParams(
-            prepared.types,
-            unifiedParams,
-            this.#encoder,
-        );
-
-        if (paged) {
-            return this.rustClient!.executePreparedHandleSinglePage(
-                prepared.handle,
-                encoded,
-                rustOptions,
-                pageState,
+        let encoded: ReturnType<typeof encodeParams>;
+        try {
+            encoded = encodeParams(
+                prepared.types,
+                unifiedParams,
+                this.#encoder,
+            );
+        } catch (err) {
+            // Cached bind types may be stale after a schema change. Reprepare once
+            // if encoding fails, before sending a request.
+            this.#evictPrepared(prepared);
+            prepared = await this.prepareStatement(prepared.statement);
+            unifiedParams = Array.isArray(params)
+                ? params
+                : utils.adaptNamedParamsPrepared(params, prepared);
+            encoded = encodeParams(
+                prepared.types,
+                unifiedParams,
+                this.#encoder,
             );
         }
-        // We add the undefined values here to make the value match PagingResultWithExecutor type
-        return [
-            undefined,
-            await this.rustClient!.executePreparedHandleUnpaged(
-                prepared.handle,
-                encoded,
-                rustOptions,
-            ),
-            undefined,
-        ];
+
+        try {
+            if (paged) {
+                return await this.rustClient!.executePreparedHandleSinglePage(
+                    prepared.handle,
+                    encoded,
+                    rustOptions,
+                    pageState,
+                );
+            }
+            // We add the undefined values here to make the value match PagingResultWithExecutor type
+            return [
+                undefined,
+                await this.rustClient!.executePreparedHandleUnpaged(
+                    prepared.handle,
+                    encoded,
+                    rustOptions,
+                ),
+                undefined,
+            ];
+        } catch (err) {
+            this.#evictPrepared(prepared);
+            throw err;
+        }
     }
 
     async #rustyExecuteUnprepared(
