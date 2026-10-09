@@ -402,6 +402,9 @@ export interface ClientOptions {
          * It can also keep a full page in memory for one small value.
          *
          * Default: true.
+         *
+         * @deprecated The value `false` does not decrease memory or copy overhead in this driver.
+         * Do not set this option. The driver can remove it in a future major version.
          */
         copyBuffer?: boolean;
         /**
