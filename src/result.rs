@@ -200,6 +200,22 @@ impl QueryResultWrapper {
         .collect()
     }
 
+    /// Returns the result metadata ID supplied by Scylla's metadata-ID protocol extension.
+    /// Returns None for non-row results and absent or empty IDs; callers must then read
+    /// the columns from this result.
+    #[napi]
+    pub fn get_result_metadata_id(&self) -> Option<Buffer> {
+        match &self.inner {
+            QueryResultVariant::RowsResult(v) => v
+                .raw_rows_with_metadata()
+                .metadata()
+                .id()
+                .filter(|id| !id.is_empty())
+                .map(Buffer::from),
+            QueryResultVariant::EmptyResult(_) => None,
+        }
+    }
+
     /// Get the coordinator that answered the query
     #[napi]
     pub fn get_coordinator(&self) -> String {
