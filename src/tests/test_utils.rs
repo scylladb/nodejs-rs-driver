@@ -1,5 +1,11 @@
 use scylla::client::session::Session;
 
+use std::sync::Arc;
+
+use napi::Env;
+
+use crate::async_bridge::{BridgedPromise, JsAsyncResult};
+use crate::errors::ConvertedResult;
 use crate::session::SessionWrapper;
 
 pub(crate) async fn supports_feature(session: &Session, feature: &str) -> bool {
@@ -36,9 +42,14 @@ pub(crate) async fn supports_feature(session: &Session, feature: &str) -> bool {
         .any(|f| f == feature)
 }
 
-#[napi]
-pub async fn scylla_supports_tablets(session: &SessionWrapper) -> bool {
-    supports_feature(session.inner.get_session(), "TABLETS").await
+#[napi(ts_return_type = "Promise<boolean>")]
+pub fn scylla_supports_tablets(env: Env, session: &SessionWrapper) -> JsAsyncResult<bool> {
+    let session = Arc::clone(&session.inner);
+    BridgedPromise::spawn(&env, || {
+        Ok(
+            async move { ConvertedResult::Ok(supports_feature(session.get_session(), "TABLETS").await) },
+        )
+    })
 }
 
 /// Returns the number of connections a newly built session is expected to open:
