@@ -4,6 +4,7 @@ import Row = require("./row");
 import { ColumnInfo, convertComplexType } from "./cql-utils";
 import Encoder = require("../encoder");
 import rust = require("../../index");
+import assert = require("assert");
 
 /**
  * Column metadata as exposed by {@link ResultSet#columns}.
@@ -15,14 +16,58 @@ export interface ColumnMetadata {
     type: ColumnInfo;
 }
 
+interface ResultColumns {
+    names: Array<string>;
+    types: Array<ColumnInfo>;
+}
+
+/**
+ * Converted result columns of one prepared statement handle.
+ *
+ * Goal: cache the converted result metadata (column names and types) on the JS side.
+ * Converting it from Rust to JS takes many N-API calls per column. Without the cache,
+ * this conversion runs for each result. With it, it runs only when the result metadata
+ * of the prepared statement changes.
+ *
+ * Rust tags each result of the handle with a metadata generation.
+ * The same generation means the same column names and types,
+ * so the converted columns are reused until the generation changes.
+ * @internal
+ */
+export class ResultColumnsCache {
+    #generation: number | undefined;
+    #columns: ResultColumns | undefined;
+
+    /** Returns the columns of the result, converting them only when the generation changes. */
+    get(result: rust.QueryResultWrapper): ResultColumns {
+        const generation = result.getMetadataGeneration();
+        // Rust tags every rows result of a prepared handle with a generation.
+        assert(generation != null);
+        if (generation !== this.#generation || !this.#columns) {
+            this.#columns = readColumns(result);
+            this.#generation = generation;
+        }
+        return this.#columns;
+    }
+}
+
+function readColumns(result: rust.QueryResultWrapper): ResultColumns {
+    return {
+        names: result.getColumnsNames(),
+        types: result.getColumnsTypes().map((typ) => convertComplexType(typ)),
+    };
+}
+
 /**
  * Simple way of getting results from rust driver.
  * Calls the driver, decoding the whole page at once.
+ * @param columnsCache Converted columns of the prepared handle that produced the result, when available.
  * @returns Returns array of rows if the result is of the RowsResult kind, and undefined otherwise
  */
 export function getRowsFromResultsWrapper(
     result: rust.QueryResultWrapper,
     encoder: Encoder,
+    columnsCache?: ResultColumnsCache,
 ): Array<Row> | undefined {
     // The shared page is safe here when buffer-valued cells are copied by the
     // decoder. With copyBuffer disabled, preserve the independent page buffer.
@@ -36,12 +81,11 @@ export function getRowsFromResultsWrapper(
     const rawPage = data[0];
     const rowLength = data[1];
 
-    const colNames = result.getColumnsNames();
-    const types = result
-        .getColumnsTypes()
-        .map((typ) => convertComplexType(typ));
+    const columns = columnsCache
+        ? columnsCache.get(result)
+        : readColumns(result);
 
-    return encoder.decodeRows(rawPage, rowLength, colNames, types);
+    return encoder.decodeRows(rawPage, rowLength, columns.names, columns.types);
 }
 
 export function getColumnsMetadata(

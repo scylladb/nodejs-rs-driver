@@ -4,6 +4,7 @@ import { inspect } from "util";
 
 import Long = require("long");
 import { ColumnInfo } from "./types/cql-utils";
+import { ResultColumnsCache } from "./types/results-wrapper";
 import type { ExecutionOptions } from "./execution-options";
 import type { ExternalObject, PreparedStatementWrapper } from "../index";
 
@@ -145,6 +146,11 @@ class PreparedInfo {
     statement: string;
     boundParamNames: string[];
     handle: ExternalObject<PreparedStatementWrapper>;
+    /**
+     * Converted result columns, reused while the result metadata of the handle stays the same.
+     * Goal: avoid N-API conversion cost of result metadata. See {@link ResultColumnsCache}.
+     */
+    resultColumns = new ResultColumnsCache();
 
     constructor(
         types: ColumnInfo[],
