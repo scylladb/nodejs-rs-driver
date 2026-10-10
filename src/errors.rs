@@ -150,7 +150,9 @@ impl ToNapiValue for ConvertedError {
 /// Allows to run a block of code that returns Result<T, ConvertedError>,
 /// with automatic conversion to JsResult<T>. This allows to use the `?` operator,
 /// while still returning JsResult<T> from the function.
-/// Version for async functions
+/// Version for async functions. Only test helpers use it: the driver bridges
+/// its async functions through `BridgedPromise::spawn`.
+#[cfg(feature = "tests")]
 pub(crate) async fn with_custom_error_async<T, C, In>(code: C) -> JsResult<T>
 where
     C: AsyncFnOnce() -> In,
