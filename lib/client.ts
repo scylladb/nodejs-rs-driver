@@ -245,10 +245,11 @@ class Client extends events.EventEmitter {
      */
     async prepareStatement(statement: string): Promise<PreparedInfo> {
         // This will be called only after checking that client is connected
-        let expectedTypes = await this.rustClient!.prepareStatement(statement);
+        let [handle, expectedTypes] =
+            await this.rustClient!.prepareStatement(statement);
         let types = expectedTypes.map((t) => convertComplexType(t[0]));
         let boundParamNames = expectedTypes.map((t) => t[1].toLowerCase());
-        return new PreparedInfo(types, statement, boundParamNames);
+        return new PreparedInfo(types, statement, boundParamNames, handle);
     }
 
     /**
@@ -570,7 +571,7 @@ class Client extends events.EventEmitter {
 
         if (paged) {
             return this.rustClient!.executePreparedSinglePage(
-                prepared.statement,
+                prepared.handle,
                 encoded,
                 rustOptions,
                 pageState,
@@ -580,7 +581,7 @@ class Client extends events.EventEmitter {
         return [
             undefined,
             await this.rustClient!.executePreparedUnpaged(
-                prepared.statement,
+                prepared.handle,
                 encoded,
                 rustOptions,
             ),

@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use config::SessionOptions;
 use napi::Env;
+use napi::bindgen_prelude::External;
 use scylla::client::caching_session::CachingSession;
 use scylla::errors::{ExecutionError, RequestAttemptError};
 use scylla::response::{PagingState, PagingStateResponse};
@@ -59,6 +60,12 @@ enum QueryValues {
         statement: PreparedStatement,
     },
 }
+
+/// A native prepared handle and its bind metadata: (expected type, variable name) pairs.
+type PreparedHandleWithBindMetadata = (
+    External<PreparedStatementWrapper>,
+    Vec<(ComplexType<'static>, String)>,
+);
 
 fn validate_value_count(
     prepared: &PreparedStatement,
@@ -145,19 +152,15 @@ impl QueryExecutor {
 impl SessionWrapper {
     async fn execute_unpaged_serialized(
         session: &CachingSession,
-        statement: Statement,
+        prepared: &PreparedStatement,
         params: &SerializedValuesWrapper,
     ) -> ConvertedResult<QueryResultWrapper> {
-        let prepared = session
-            .add_prepared_statement(&statement)
-            .await
-            .map_err(ExecutionError::from)?;
-        validate_value_count(&prepared, params)?;
+        validate_value_count(prepared, params)?;
         // The unstable interop API accepts already-owned SerializedValues. This
         // avoids sending JS buffers or per-value Vec copies across an await.
         let (result, paging_state) = session
             .get_session()
-            .execute_unstable(&prepared, &params.inner, false, PagingState::start())
+            .execute_unstable(prepared, &params.inner, false, PagingState::start())
             .await?;
         if !matches!(paging_state, PagingStateResponse::NoMorePages) {
             tracing::error!("Unpaged prepared query returned a non-empty paging state");
@@ -266,24 +269,27 @@ impl SessionWrapper {
     }
 
     /// Prepares a statement through rust driver for a given session.
-    /// Returns (expected type, variable name) pairs for the prepared statement.
-    #[napi(ts_return_type = "Promise<Array<[ComplexType, string]>>")]
+    /// Returns the native prepared handle and its bind metadata. The bind metadata
+    /// remains fixed for this handle even if the schema changes.
+    #[napi(
+        ts_return_type = "Promise<[ExternalObject<PreparedStatementWrapper>, Array<[ComplexType, string]>]>"
+    )]
     pub fn prepare_statement(
         &self,
         env: Env,
         statement: String,
-    ) -> JsAsyncResult<Vec<(ComplexType<'static>, String)>> {
+    ) -> JsAsyncResult<PreparedHandleWithBindMetadata> {
         BridgedPromise::spawn(&env, || {
             let statement: Statement = statement.into();
             let inner = Arc::clone(&self.inner);
             Ok(async move {
-                let w = PreparedStatementWrapper {
+                let handle = PreparedStatementWrapper {
                     prepared: inner
                         .add_prepared_statement(&statement) // TODO: change for add_prepared_statement_to_owned after it is made public
                         .await?,
                 };
-                let types = w.get_expected_types();
-                ConvertedResult::Ok(types)
+                let expected_types = handle.get_expected_types();
+                ConvertedResult::Ok((External::new(handle), expected_types))
             })
         })
     }
@@ -299,14 +305,15 @@ impl SessionWrapper {
     pub fn execute_prepared_unpaged(
         &self,
         env: Env,
-        query: String,
+        handle: &External<PreparedStatementWrapper>,
         params: SerializedValuesWrapper,
         options: &QueryOptionsWrapper,
     ) -> JsAsyncResult<QueryResultWrapper> {
         BridgedPromise::spawn(&env, || {
-            let query = self.apply_statement_options(query.into(), &options.options)?;
+            let statement =
+                self.apply_prepared_statement_options(handle.prepared.clone(), &options.options)?;
             let inner = Arc::clone(&self.inner);
-            Ok(async move { Self::execute_unpaged_serialized(&inner, query, &params).await })
+            Ok(async move { Self::execute_unpaged_serialized(&inner, &statement, &params).await })
         })
     }
 
@@ -367,24 +374,21 @@ impl SessionWrapper {
     pub fn execute_prepared_single_page(
         &self,
         env: Env,
-        query: String,
+        handle: &External<PreparedStatementWrapper>,
         params: SerializedValuesWrapper,
         options: &QueryOptionsWrapper,
         paging_state: Option<&PagingStateWrapper>,
     ) -> JsAsyncResult<PagingResultWithExecutor> {
         BridgedPromise::spawn(&env, || {
-            let statement = self.apply_statement_options(query.into(), &options.options)?;
+            let statement =
+                self.apply_prepared_statement_options(handle.prepared.clone(), &options.options)?;
+            validate_value_count(&statement, &params)?;
             let paging_state = paging_state.map(|p| p.inner.clone());
             let inner = Arc::clone(&self.inner);
             Ok(async move {
-                let prepared = inner
-                    .add_prepared_statement(&statement)
-                    .await
-                    .map_err(ExecutionError::from)?;
-                validate_value_count(&prepared, &params)?;
                 let executor = QueryExecutor::new(QueryValues::Prepared {
                     values: params,
-                    statement: prepared,
+                    statement,
                 });
 
                 let res =
@@ -615,4 +619,9 @@ macro_rules! make_non_batch_apply_options {
 }
 
 make_non_batch_apply_options!(Statement, apply_statement_options, statement_opt_partial);
+make_non_batch_apply_options!(
+    PreparedStatement,
+    apply_prepared_statement_options,
+    prepared_statement_opt_partial
+);
 make_apply_options!(Batch, apply_batch_options);

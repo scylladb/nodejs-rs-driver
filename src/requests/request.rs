@@ -3,7 +3,7 @@ use scylla::statement::prepared::PreparedStatement;
 
 use crate::types::type_wrappers::ComplexType;
 
-pub(crate) struct PreparedStatementWrapper {
+pub struct PreparedStatementWrapper {
     pub(crate) prepared: PreparedStatement,
 }
 
