@@ -10,9 +10,7 @@ use tracing::field::{Field, Visit};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::{Layer, Registry};
 
-use crate::errors::{
-    ConvertedError, ConvertedResult, JsResult, make_js_error, with_custom_error_sync,
-};
+use crate::errors::{ConvertedError, ConvertedResult, JsResult, make_js_error, with_custom_error};
 
 /// Shorthand for the NAPI callback type.
 ///
@@ -182,7 +180,7 @@ impl<S: tracing::Subscriber> Layer<S> for JsForwardingLayer {
 /// client shuts down, so the callback can be unregistered.
 #[napi(ts_return_type = "number")]
 pub fn setup_logging(callback: LogCallback, min_level: String) -> JsResult<i64> {
-    with_custom_error_sync(|| {
+    with_custom_error(|| {
         let level = parse_js_level_to_rust(&min_level).ok_or(ConvertedError::from(
             make_js_error(format!("Unknown logging level: {min_level}")),
         ))?;

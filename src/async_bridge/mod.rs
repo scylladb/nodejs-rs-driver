@@ -89,7 +89,7 @@ use napi::bindgen_prelude::ToNapiValue;
 use napi::{Env, Result, sys};
 use napi_derive::napi;
 
-use crate::errors::{ConvertedError, ConvertedResult, JsResult, with_custom_error_sync};
+use crate::errors::{ConvertedError, ConvertedResult, JsResult, with_custom_error};
 use js_thread::{FutureRegistry, REGISTRIES};
 
 /// A JS Promise that a future on the bridge's Tokio runtime settles.
@@ -120,7 +120,7 @@ fn noop_callback() {
 /// It is ABI-stable, cross-platform, and has no direct libuv dependency.
 #[napi(ts_return_type = "void")]
 pub fn init_async_bridge(env: Env) -> JsResult<()> {
-    with_custom_error_sync(|| {
+    with_custom_error(|| {
         let key = env.raw() as usize;
         if REGISTRIES.with(|registries| registries.borrow().contains_key(&key)) {
             return ConvertedResult::Ok(());
@@ -187,7 +187,7 @@ where
         P: FnOnce() -> ConvertedResult<F>,
         F: Future<Output = ConvertedResult<T>> + Send + 'static,
     {
-        with_custom_error_sync(|| {
+        with_custom_error(|| {
             let fut = Box::pin(prepare()?);
             let registry = FutureRegistry::get(env).ok_or_else(|| {
                 ConvertedError::from(napi::Error::from_reason(

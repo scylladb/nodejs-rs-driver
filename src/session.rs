@@ -15,9 +15,7 @@ use scylla::statement::prepared::PreparedStatement;
 use scylla::statement::{Consistency, SerialConsistency, Statement};
 
 use crate::async_bridge::{BridgedPromise, JsAsyncResult};
-use crate::errors::{
-    ConvertedError, ConvertedResult, JsResult, make_js_error, with_custom_error_sync,
-};
+use crate::errors::{ConvertedError, ConvertedResult, JsResult, make_js_error, with_custom_error};
 use crate::metadata::state::ClusterSnapshot;
 use crate::paging::{PagingResult, PagingResultWithExecutor, PagingStateWrapper};
 use crate::requests::request::{QueryOptionsObj, QueryOptionsWrapper};
@@ -408,7 +406,7 @@ impl SessionWrapper {
         statements: Vec<String>,
         options: &QueryOptionsWrapper,
     ) -> JsResult<BatchWrapper> {
-        with_custom_error_sync(|| {
+        with_custom_error(|| {
             let mut batch: Batch = Default::default();
             statements
                 .into_iter()

@@ -6,7 +6,7 @@ use scylla::serialize::row::{RowSerializationContext, SerializeRow};
 use scylla::serialize::value::SerializeValue;
 use scylla::serialize::writers::RowWriter;
 
-use crate::errors::{ConvertedError, ConvertedResult, JsResult, with_custom_error_sync};
+use crate::errors::{ConvertedError, ConvertedResult, JsResult, with_custom_error};
 use crate::session::SessionWrapper;
 use crate::types::encoded_data::EncodedValuesWrapper;
 use crate::utils::js_ctor::{build_token, js_constructible_class};
@@ -53,7 +53,7 @@ impl SessionWrapper {
         keyspace: String,
         table: String,
     ) -> JsResult<JsInstance<'env, js_constructible_class::Token>> {
-        with_custom_error_sync(|| {
+        with_custom_error(|| {
             self.with_cluster_snapshot(env, |snapshot| {
                 let partition_key = PreSerializedPartitionKey(components);
                 let token = snapshot
@@ -75,7 +75,7 @@ impl SessionWrapper {
         &self,
         env: &'env Env,
     ) -> JsResult<Vec<JsInstance<'env, js_constructible_class::Token>>> {
-        with_custom_error_sync(|| {
+        with_custom_error(|| {
             self.with_cluster_snapshot(env, |snapshot| {
                 snapshot
                     .inner

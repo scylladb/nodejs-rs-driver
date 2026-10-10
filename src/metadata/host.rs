@@ -7,7 +7,7 @@ use napi::bindgen_prelude::{BigInt, FnArgs};
 use scylla::cluster::{ClusterState, Node};
 use scylla::routing::Token;
 
-use crate::errors::{ConvertedError, ConvertedResult, JsResult, with_custom_error_sync};
+use crate::errors::{ConvertedError, ConvertedResult, JsResult, with_custom_error};
 use crate::metadata::state::{ClusterSnapshot, ReplicaValue};
 use crate::session::SessionWrapper;
 use crate::types::type_helpers::SocketAddrWrapper;
@@ -95,7 +95,7 @@ impl SessionWrapper {
         &self,
         env: &'env Env,
     ) -> JsResult<JsInstance<'env, js_constructible_class::HostMap>> {
-        with_custom_error_sync(|| {
+        with_custom_error(|| {
             self.with_cluster_snapshot(env, |cluster_snapshot: &ClusterSnapshot| {
                 cluster_snapshot
                     .host_map
@@ -118,7 +118,7 @@ impl SessionWrapper {
         table: String,
         token: BigInt,
     ) -> JsResult<Vec<JsInstance<'env, ReplicaValue>>> {
-        with_custom_error_sync(|| {
+        with_custom_error(|| {
             self.with_cluster_snapshot(env, |snapshot| {
                 let token = Token::new(bigint_to_i64(token, "Token value must fit in i64")?);
                 snapshot.replicas(env, &keyspace, &table, token)

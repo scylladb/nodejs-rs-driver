@@ -150,8 +150,7 @@ impl ToNapiValue for ConvertedError {
 /// Allows to run a block of code that returns Result<T, ConvertedError>,
 /// with automatic conversion to JsResult<T>. This allows to use the `?` operator,
 /// while still returning JsResult<T> from the function.
-/// Version for sync functions
-pub(crate) fn with_custom_error_sync<T, C, In>(code: C) -> JsResult<T>
+pub(crate) fn with_custom_error<T, C, In>(code: C) -> JsResult<T>
 where
     C: FnOnce() -> In,
     In: IntoConvertedResult<Final = T>,

@@ -1,6 +1,4 @@
-use crate::errors::{
-    ConvertedError, ConvertedResult, JsResult, make_js_error, with_custom_error_sync,
-};
+use crate::errors::{ConvertedError, ConvertedResult, JsResult, make_js_error, with_custom_error};
 use crate::metadata::host::cache_hosts;
 use crate::session::SessionWrapper;
 use crate::types::type_wrappers::ComplexType;
@@ -418,7 +416,7 @@ impl SessionWrapper {
         keyspace: String,
         table: String,
     ) -> JsResult<Option<JsInstance<'env, js_constructible_class::TableMetadata>>> {
-        with_custom_error_sync(|| {
+        with_custom_error(|| {
             self.with_cluster_snapshot(env, |snapshot| {
                 let Some(ks) = snapshot.keyspace_wrapper(env, &keyspace)? else {
                     return ConvertedResult::Ok(None);
@@ -440,7 +438,7 @@ impl SessionWrapper {
         keyspace: String,
         view: String,
     ) -> JsResult<Option<JsInstance<'env, js_constructible_class::MaterializedView>>> {
-        with_custom_error_sync(|| {
+        with_custom_error(|| {
             self.with_cluster_snapshot(env, |snapshot| {
                 let Some(ks) = snapshot.keyspace_wrapper(env, &keyspace)? else {
                     return ConvertedResult::Ok(None);
@@ -462,7 +460,7 @@ impl SessionWrapper {
         keyspace: String,
         name: String,
     ) -> JsResult<Option<JsInstance<'env, js_constructible_class::Udt>>> {
-        with_custom_error_sync(|| {
+        with_custom_error(|| {
             self.with_cluster_snapshot(env, |snapshot| {
                 let Some(ks) = snapshot.keyspace_wrapper(env, &keyspace)? else {
                     return ConvertedResult::Ok(None);
@@ -482,7 +480,7 @@ impl SessionWrapper {
         env: &Env,
         name: String,
     ) -> JsResult<Option<Reference<KeyspaceWrapper>>> {
-        with_custom_error_sync(|| {
+        with_custom_error(|| {
             self.with_cluster_snapshot(env, |snapshot: &ClusterSnapshot| {
                 snapshot.keyspace_wrapper(env, &name)
             })
@@ -498,7 +496,7 @@ impl SessionWrapper {
         &self,
         env: &'env Env,
     ) -> JsResult<JsInstance<'env, KeyspaceRecord>> {
-        with_custom_error_sync(|| {
+        with_custom_error(|| {
             self.with_cluster_snapshot(env, |snapshot: &ClusterSnapshot| {
                 snapshot.all_keyspaces_record(env)
             })
@@ -517,7 +515,7 @@ impl KeyspaceWrapper {
     /// from Rust, so it is named here explicitly.
     #[napi(getter, ts_return_type = "import('./lib/metadata/strategy').Strategy")]
     pub fn strategy<'env>(&self, env: &'env Env) -> JsResult<JsInstance<'env, StrategyValue>> {
-        with_custom_error_sync(|| {
+        with_custom_error(|| {
             self.strategy_value.get_or_init(env, || {
                 convert_rust_strategy(env, &self.keyspace().strategy).map_err(ConvertedError::from)
             })
@@ -537,7 +535,7 @@ impl KeyspaceWrapper {
         env: &'env Env,
         name: String,
     ) -> JsResult<Option<JsInstance<'env, js_constructible_class::TableMetadata>>> {
-        with_custom_error_sync(|| {
+        with_custom_error(|| {
             let table = self.cached_table(env, name.as_str())?;
             ConvertedResult::Ok(table)
         })
@@ -549,7 +547,7 @@ impl KeyspaceWrapper {
         ts_return_type = "Readonly<Record<string, import('./lib/metadata/table-metadata').TableMetadata>>"
     )]
     pub fn tables<'env>(&self, env: &'env Env) -> JsResult<JsInstance<'env, TableRecord>> {
-        with_custom_error_sync(|| {
+        with_custom_error(|| {
             self.tables_record.get_or_init(env, || {
                 let tables = self.tables.get_or_init_all(env, || {
                     self.keyspace()
@@ -579,7 +577,7 @@ impl KeyspaceWrapper {
         env: &'env Env,
         name: String,
     ) -> JsResult<Option<JsInstance<'env, js_constructible_class::MaterializedView>>> {
-        with_custom_error_sync(|| {
+        with_custom_error(|| {
             let view = self.cached_view(env, name.as_str())?;
             ConvertedResult::Ok(view)
         })
@@ -591,7 +589,7 @@ impl KeyspaceWrapper {
         ts_return_type = "Readonly<Record<string, import('./lib/metadata/materialized-view').MaterializedView>>"
     )]
     pub fn views<'env>(&self, env: &'env Env) -> JsResult<JsInstance<'env, ViewRecord>> {
-        with_custom_error_sync(|| {
+        with_custom_error(|| {
             self.views_record.get_or_init(env, || {
                 let views = self.views.get_or_init_all(env, || {
                     self.keyspace()
@@ -623,7 +621,7 @@ impl KeyspaceWrapper {
         env: &'env Env,
         name: String,
     ) -> JsResult<Option<JsInstance<'env, js_constructible_class::Udt>>> {
-        with_custom_error_sync(|| {
+        with_custom_error(|| {
             let udt = self.cached_udt(env, name.as_str())?;
             ConvertedResult::Ok(udt)
         })
@@ -635,7 +633,7 @@ impl KeyspaceWrapper {
         ts_return_type = "Readonly<Record<string, import('./lib/metadata/user-defined-type').Udt>>"
     )]
     pub fn udts<'env>(&self, env: &'env Env) -> JsResult<JsInstance<'env, UdtRecord>> {
-        with_custom_error_sync(|| {
+        with_custom_error(|| {
             self.udts_record.get_or_init(env, || {
                 let udts = self.udts.get_or_init_all(env, || {
                     self.keyspace()
