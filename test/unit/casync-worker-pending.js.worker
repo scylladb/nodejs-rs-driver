@@ -1,0 +1,21 @@
+"use strict";
+
+const { parentPort } = require("worker_threads");
+const rust = require("../../index");
+
+require("../../lib/client");
+
+// Futures that are still pending when the main thread terminates this worker.
+for (let i = 0; i < 10; i++) {
+    rust.testsCasyncResolveDelayed(60000);
+}
+
+// Futures that complete around the termination, so it can race with
+// completions in the queue and with a running drain.
+// No JavaScript runs after setup: the Promises have no handlers.
+// So no call into the driver can race with the termination.
+for (let millis = 1; millis <= 100; millis++) {
+    rust.testsCasyncResolveDelayed(millis);
+}
+
+parentPort.postMessage("started");
