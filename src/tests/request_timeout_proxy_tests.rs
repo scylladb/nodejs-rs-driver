@@ -32,11 +32,7 @@ fn running_proxy() -> &'static Mutex<Option<RunningProxy>> {
 /// session default.
 #[napi]
 pub fn tests_set_session_default_request_timeout(session: &SessionWrapper, timeout_ms: u32) {
-    let mut handle = session
-        .inner
-        .get_session()
-        .get_default_execution_profile_handle()
-        .clone();
+    let mut handle = session.inner.get_default_execution_profile_handle().clone();
     let profile = handle
         .pointee_to_builder()
         .request_timeout(Some(Duration::from_millis(timeout_ms.into())))

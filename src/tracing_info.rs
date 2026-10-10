@@ -122,7 +122,6 @@ impl SessionWrapper {
             let inner = Arc::clone(&self.inner);
             Ok(async move {
                 let info = inner
-                    .get_session()
                     .get_tracing_info(&tracing_id)
                     .await
                     .map_err(ConvertedError::from)?;

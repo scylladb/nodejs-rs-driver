@@ -7,7 +7,7 @@ use std::time::Duration;
 use config::SessionOptions;
 use napi::Env;
 use napi::bindgen_prelude::{External, ExternalRef};
-use scylla::client::caching_session::CachingSession;
+use scylla::client::session::Session;
 use scylla::errors::{ExecutionError, RequestAttemptError};
 use scylla::response::{PagingState, PagingStateResponse};
 use scylla::serialize::row::{BuiltinTypeCheckError, BuiltinTypeCheckErrorKind};
@@ -27,8 +27,6 @@ use crate::utils::bigint_to_i64;
 use crate::utils::js_thread_only::JsThreadOnly;
 use crate::{requests::request::PreparedStatementWrapper, result::QueryResultWrapper};
 
-const DEFAULT_CACHE_SIZE: u32 = 512;
-
 #[napi]
 pub struct BatchWrapper {
     inner: Arc<Batch>,
@@ -36,7 +34,7 @@ pub struct BatchWrapper {
 
 #[napi]
 pub struct SessionWrapper {
-    pub(crate) inner: Arc<CachingSession>,
+    pub(crate) inner: Arc<Session>,
     /// Cache of the last `ClusterSnapshot` that was computed, alongside the `Arc<ClusterState>`
     /// pointer it was built from.
     cluster_snapshot: Mutex<Option<JsThreadOnly<ClusterSnapshot>>>,
@@ -96,7 +94,7 @@ impl QueryExecutor {
 
 impl QueryExecutor {
     async fn fetch_next_page_internal(
-        session: &CachingSession,
+        session: &Session,
         values: &QueryValues,
         paging_state: Option<PagingState>,
     ) -> ConvertedResult<PagingResult> {
@@ -105,13 +103,11 @@ impl QueryExecutor {
         let (result, paging_state_response) = match values {
             QueryValues::Prepared { values, statement } => {
                 session
-                    .get_session()
                     .execute_unstable(statement, &values.inner, true, paging_state)
                     .await
             }
             QueryValues::Unprepared { params, statement } => {
                 session
-                    .get_session()
                     .query_single_page(statement.clone(), params, paging_state)
                     .await
             }
@@ -151,7 +147,7 @@ impl QueryExecutor {
 #[napi]
 impl SessionWrapper {
     async fn execute_unpaged_serialized(
-        session: &CachingSession,
+        session: &Session,
         prepared: &PreparedStatement,
         params: &SerializedValuesWrapper,
     ) -> ConvertedResult<QueryResultWrapper> {
@@ -159,7 +155,6 @@ impl SessionWrapper {
         // The unstable interop API accepts already-owned SerializedValues. This
         // avoids sending JS buffers or per-value Vec copies across an await.
         let (result, paging_state) = session
-            .get_session()
             .execute_unstable(prepared, &params.inner, false, PagingState::start())
             .await?;
         if !matches!(paging_state, PagingStateResponse::NoMorePages) {
@@ -176,12 +171,10 @@ impl SessionWrapper {
     pub fn create_session(env: Env, options: SessionOptions) -> JsAsyncResult<SessionWrapper> {
         BridgedPromise::spawn(&env, || {
             Ok(async move {
-                let cache_size = options.cache_size.unwrap_or(DEFAULT_CACHE_SIZE) as usize;
                 let local_datacenter = options.local_datacenter.clone();
                 let builder = configure_session_builder(options)?;
                 let session = builder.build().await?;
                 validate_local_datacenter(&session, local_datacenter.as_deref())?;
-                let session: CachingSession = CachingSession::from(session, cache_size);
                 Ok(SessionWrapper {
                     inner: Arc::new(session),
                     cluster_snapshot: Mutex::new(None),
@@ -193,11 +186,7 @@ impl SessionWrapper {
     /// Returns the name of the current keyspace
     #[napi]
     pub fn get_keyspace(&self) -> Option<String> {
-        self.inner
-            .get_session()
-            .get_keyspace()
-            .as_deref()
-            .map(ToOwned::to_owned)
+        self.inner.get_keyspace().as_deref().map(ToOwned::to_owned)
     }
 
     /// Checks whether all nodes that are currently up agree on the schema version.
@@ -212,7 +201,7 @@ impl SessionWrapper {
         BridgedPromise::spawn(&env, || {
             let inner = Arc::clone(&self.inner);
             Ok(async move {
-                Ok(match inner.get_session().check_schema_agreement().await {
+                Ok(match inner.check_schema_agreement().await {
                     Ok(agreed_version) => agreed_version.is_some(),
                     Err(err) => {
                         tracing::warn!(
@@ -236,7 +225,7 @@ impl SessionWrapper {
         BridgedPromise::spawn(&env, || {
             let inner = Arc::clone(&self.inner);
             Ok(async move {
-                inner.get_session().await_schema_agreement().await?;
+                inner.await_schema_agreement().await?;
                 Ok(())
             })
         })
@@ -262,7 +251,7 @@ impl SessionWrapper {
                 self.apply_statement_options(query.into(), &options.options)?;
             let inner = Arc::clone(&self.inner);
             Ok(async move {
-                let result = inner.get_session().query_unpaged(statement, params).await?;
+                let result = inner.query_unpaged(statement, params).await?;
                 QueryResultWrapper::from_query(result)
             })
         })
@@ -284,9 +273,7 @@ impl SessionWrapper {
             let inner = Arc::clone(&self.inner);
             Ok(async move {
                 let handle = PreparedStatementWrapper {
-                    prepared: inner
-                        .add_prepared_statement(&statement) // TODO: change for add_prepared_statement_to_owned after it is made public
-                        .await?,
+                    prepared: inner.prepare(statement).await?,
                 };
                 let expected_types = handle.get_expected_types();
                 ConvertedResult::Ok((External::new(handle), expected_types))
@@ -526,7 +513,7 @@ impl SessionWrapper {
             .cluster_snapshot
             .lock()
             .expect("poisoning impossible due to process-aborting panics");
-        let rust_cluster_state = self.inner.get_session().get_cluster_state();
+        let rust_cluster_state = self.inner.get_cluster_state();
 
         let cached_state = cache_guard.as_ref().map(|cached| cached.get(env));
 

@@ -89,7 +89,7 @@ pub fn ddl(env: Env, session: &SessionWrapper, query: String) -> JsAsyncResult<Q
     let session = Arc::clone(&session.inner);
     BridgedPromise::spawn(&env, || {
         Ok(async move {
-            let inner_session = session.get_session();
+            let inner_session = session;
             let target_host_id = inner_session
                 .get_cluster_state()
                 .get_nodes_info()

@@ -46,9 +46,7 @@ pub(crate) async fn supports_feature(session: &Session, feature: &str) -> bool {
 pub fn scylla_supports_tablets(env: Env, session: &SessionWrapper) -> JsAsyncResult<bool> {
     let session = Arc::clone(&session.inner);
     BridgedPromise::spawn(&env, || {
-        Ok(
-            async move { ConvertedResult::Ok(supports_feature(session.get_session(), "TABLETS").await) },
-        )
+        Ok(async move { ConvertedResult::Ok(supports_feature(&session, "TABLETS").await) })
     })
 }
 
@@ -58,7 +56,6 @@ pub fn scylla_supports_tablets(env: Env, session: &SessionWrapper) -> JsAsyncRes
 pub fn tests_expected_connection_count(session: &SessionWrapper) -> u32 {
     let count = 1 + session
         .inner
-        .get_session()
         .get_cluster_state()
         .get_nodes_info()
         .iter()
