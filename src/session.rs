@@ -288,16 +288,13 @@ impl SessionWrapper {
         })
     }
 
-    /// Execute a given prepared statement against the database with provided parameters.
+    /// Execute a given prepared statement against the database with provided parameters,
+    /// without paging.
     ///
     /// Returns a wrapper of the result provided by the rust driver
     ///
-    /// All parameters must be in a type recognizable by ParameterWrapper
-    /// -- each value must be tuple of its ComplexType and the value itself.
-    /// Creating Prepared statement may help to determine required types
-    ///
-    /// Currently `execute_unpaged` from rust driver is used, so no paging is done
-    /// and there is no support for any query options
+    /// All parameters must be already serialized according to the bind metadata
+    /// of the prepared statement.
     #[napi(ts_return_type = "Promise<QueryResultWrapper>")]
     pub fn execute_prepared_unpaged(
         &self,
