@@ -4,6 +4,7 @@ use napi::bindgen_prelude::create_custom_tokio_runtime;
 extern crate napi_derive;
 
 // Link other files
+pub mod async_bridge;
 pub mod errors;
 pub mod logging;
 pub mod metadata;
