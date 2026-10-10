@@ -364,7 +364,7 @@ impl SessionWrapper {
     /// For the following pages you need to provide page state
     /// received from the previous page
     #[napi(ts_return_type = "Promise<PagingResultWithExecutor>")]
-    pub fn execute_single_page(
+    pub fn execute_prepared_single_page(
         &self,
         env: Env,
         query: String,

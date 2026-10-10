@@ -569,7 +569,7 @@ class Client extends events.EventEmitter {
         );
 
         if (paged) {
-            return this.rustClient!.executeSinglePage(
+            return this.rustClient!.executePreparedSinglePage(
                 prepared.statement,
                 encoded,
                 rustOptions,
