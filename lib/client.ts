@@ -26,7 +26,6 @@ import {
     convertComplexType,
     ColumnInfo,
 } from "./types/cql-utils";
-import { PreparedCache } from "./cache";
 import Encoder = require("./encoder");
 import { HostMap } from "./host";
 import type { Replica } from "./host";
@@ -924,9 +923,9 @@ class Client extends events.EventEmitter {
 
         let shouldBePrepared = execOptions.isPrepared();
         let allQueries: string[] = [];
+        let allPrepared: PreparedInfo[] = [];
         let parametersRows: Array<any> = [];
         let hints = execOptions.getHints() || [];
-        let preparedCache = new PreparedCache();
 
         for (let i = 0; i < queries.length; i++) {
             let element = queries[i];
@@ -948,13 +947,10 @@ class Client extends events.EventEmitter {
             isNamedParameters(params, execOptions);
 
             if (shouldBePrepared) {
-                let prepared = preparedCache.getElement(statement);
-                if (!prepared) {
-                    prepared = await this.prepareStatement(statement);
-                    preparedCache.storeElement(statement, prepared);
-                }
+                // prepareStatement reuses cached handles, also for repeated statements in this batch.
+                let prepared = await this.prepareStatement(statement);
                 types = prepared.types;
-                statement = prepared.statement;
+                allPrepared.push(prepared);
 
                 if (Array.isArray(params)) {
                     cleanParams = params;
@@ -979,7 +975,12 @@ class Client extends events.EventEmitter {
         }
 
         let rustOptions = execOptions.getRustOptions();
-        let batch = this.rustClient!.createBatch(allQueries, rustOptions);
+        let batch = shouldBePrepared
+            ? this.rustClient!.createPreparedBatch(
+                  allPrepared.map((prepared) => prepared.handle),
+                  rustOptions,
+              )
+            : this.rustClient!.createBatch(allQueries, rustOptions);
         let wrappedResult = await this.rustClient!.batch(batch, parametersRows);
         return new ResultSet(wrappedResult, this.#encoder);
     }

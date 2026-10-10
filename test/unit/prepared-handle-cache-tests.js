@@ -22,12 +22,20 @@ function makeClient(maxPrepared = 512) {
     });
     const prepares = [];
     const executed = [];
+    const batches = [];
     client.connected = true;
     client.rustClient = {
         prepareStatement: async (query) => {
             const handle = {};
             prepares.push({ query, handle });
-            return [handle, []];
+            // A statement that contains "?" takes one int parameter.
+            const types = query.includes("?") ? [[{ baseType: 9 }, "v"]] : [];
+            return [handle, types];
+        },
+        createPreparedBatch: (handles) => ({ handles }),
+        batch: async (batch, rows) => {
+            batches.push({ handles: batch.handles, rows });
+            return { rows: [] };
         },
         executePreparedUnpaged: async (handle) => {
             executed.push(handle);
@@ -35,7 +43,7 @@ function makeClient(maxPrepared = 512) {
         },
         queryUnpaged: async () => ({ rows: [] }),
     };
-    return { client, prepares, executed };
+    return { client, prepares, executed, batches };
 }
 
 describe("prepared statement handle cache", function () {
@@ -110,5 +118,44 @@ describe("prepared statement handle cache", function () {
         await client.execute("SELECT * FROM t", [], options);
         assert.strictEqual(prepares.length, 1);
         assert.deepStrictEqual(executed, [prepares[0].handle]);
+    });
+
+    describe("in a prepared batch", function () {
+        const queryA = "INSERT INTO a (v) VALUES (?)";
+        const queryB = "INSERT INTO b (v) VALUES (1)";
+        const queries = [
+            { query: queryA, params: [1] },
+            { query: queryB, params: [] },
+            { query: queryA, params: [2] },
+        ];
+
+        it("prepares each distinct statement once", async function () {
+            const { client, prepares } = makeClient();
+            await client.batch(queries, { prepare: true });
+            assert.deepStrictEqual(
+                prepares.map((p) => p.query),
+                [queryA, queryB],
+            );
+        });
+
+        it("keeps handles and parameter rows in statement order", async function () {
+            const { client, prepares, batches } = makeClient();
+            await client.batch(queries, { prepare: true });
+            const [a, b] = prepares.map((p) => p.handle);
+            assert.strictEqual(batches.length, 1);
+            assert.deepStrictEqual(batches[0].handles, [a, b, a]);
+            assert.deepStrictEqual(
+                batches[0].rows.map((row) => row.length),
+                [1, 0, 1],
+            );
+        });
+
+        it("reuses cached handles in a later batch", async function () {
+            const { client, prepares, batches } = makeClient();
+            await client.batch(queries, { prepare: true });
+            await client.batch(queries, { prepare: true });
+            assert.strictEqual(prepares.length, 2);
+            assert.deepStrictEqual(batches[1].handles, batches[0].handles);
+        });
     });
 });

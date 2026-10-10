@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use config::SessionOptions;
 use napi::Env;
-use napi::bindgen_prelude::External;
+use napi::bindgen_prelude::{External, ExternalRef};
 use scylla::client::caching_session::CachingSession;
 use scylla::errors::{ExecutionError, RequestAttemptError};
 use scylla::response::{PagingState, PagingStateResponse};
@@ -412,6 +412,28 @@ impl SessionWrapper {
             statements
                 .into_iter()
                 .for_each(|q| batch.append_statement(q.as_str()));
+
+            batch = self.apply_batch_options(batch, &options.options)?;
+            ConvertedResult::Ok(BatchWrapper {
+                inner: Arc::new(batch),
+            })
+        })
+    }
+
+    /// Creates object representing batch of already prepared statements.
+    #[napi(ts_return_type = "BatchWrapper")]
+    pub fn create_prepared_batch(
+        &self,
+        #[napi(ts_arg_type = "Array<ExternalObject<PreparedStatementWrapper>>")] statements: Vec<
+            ExternalRef<PreparedStatementWrapper>,
+        >,
+        options: &QueryOptionsWrapper,
+    ) -> JsResult<BatchWrapper> {
+        with_custom_error(|| {
+            let mut batch: Batch = Default::default();
+            statements
+                .iter()
+                .for_each(|handle| batch.append_statement(handle.prepared.clone()));
 
             batch = self.apply_batch_options(batch, &options.options)?;
             ConvertedResult::Ok(BatchWrapper {
