@@ -316,8 +316,13 @@ describe("Logging", function () {
         async function connectAndCollectLogs(clientOptions = {}) {
             const events = [];
             // Here we create clients without existing DB, since those clients will also generate logs.
+            // The connection must fail, even when a local cluster listens on the default port.
+            // No process can listen on port 0, so a connection to it always fails.
             const client = new Client(
-                Object.assign({ contactPoints: ["0.0.0.0"] }, clientOptions),
+                Object.assign(
+                    { contactPoints: ["127.0.0.1:0"] },
+                    clientOptions,
+                ),
             );
             client.on("log", (level, target, message, furtherInfo) => {
                 events.push({ level, target, message, furtherInfo });
