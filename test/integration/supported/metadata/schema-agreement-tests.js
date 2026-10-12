@@ -36,24 +36,23 @@ describe("Metadata#checkSchemaAgreement()", function () {
             before((done) => helper.ccmHelper.stopNode(1, done));
             before((done) => helper.ccmHelper.stopNode(2, done));
 
-            it("should return false and log a warning when the check cannot be performed", () => {
+            it("should return false and log a warning when the check cannot be performed", async () => {
                 const warnings = [];
                 const onLog = (level, target, message) => {
                     if (level === "warning") warnings.push(message);
                 };
                 client.on("log", onLog);
 
-                return client.metadata
-                    .checkSchemaAgreement()
-                    .then((agreement) => {
-                        client.removeListener("log", onLog);
-                        assert.strictEqual(agreement, false);
-                        assert.isTrue(
-                            warnings.some((m) =>
-                                m.includes("schema agreement"),
-                            ),
-                        );
-                    });
+                try {
+                    const agreement =
+                        await client.metadata.checkSchemaAgreement();
+                    assert.strictEqual(agreement, false);
+                    await helper.wait.until(() =>
+                        warnings.some((m) => m.includes("schema agreement")),
+                    );
+                } finally {
+                    client.removeListener("log", onLog);
+                }
             });
 
             it("should resolve false rather than reject, when used with a callback", (done) => {
