@@ -17,7 +17,11 @@ import executionProfile = require("./execution-profile");
 import clientOptions = require("./client-options");
 import ClientState = require("./metadata/client-state");
 import packageInfo = require("../package.json");
-import { ExecutionOptions, DefaultExecutionOptions } from "./execution-options";
+import {
+    ExecutionOptions,
+    DefaultExecutionOptions,
+    ReusableQueryOptions,
+} from "./execution-options";
 import promiseUtils = require("./promise-utils");
 import rust = require("../index");
 import ResultSet = require("./types/result-set");
@@ -45,6 +49,14 @@ const { version } = packageInfo;
 // (session queries, paging, etc.), and the thread-safe function
 // that settles their Promises on this thread.
 rust.initAsyncBridge();
+
+function rejectReusableOptionsOutsideExecute(options: unknown): void {
+    if (options instanceof ReusableQueryOptions) {
+        throw new errors.ArgumentError(
+            "Reusable query options are supported only by execute()",
+        );
+    }
+}
 
 /**
  * Callback used by execution methods.
@@ -230,7 +242,12 @@ class Client extends events.EventEmitter {
      * @internal
      * @ignore
      */
-    createOptions(options?: QueryOptions | ExecutionOptions): ExecutionOptions {
+    createOptions(
+        options?: QueryOptions | ExecutionOptions | ReusableQueryOptions,
+    ): ExecutionOptions {
+        if (options instanceof ReusableQueryOptions) {
+            return options.forClient(this);
+        }
         if (options instanceof ExecutionOptions) {
             options.wrapOptionsIfNotWrappedYet();
             return options;
@@ -238,6 +255,27 @@ class Client extends events.EventEmitter {
         let fullOptions = DefaultExecutionOptions.create(options, this);
         fullOptions.wrapOptionsIfNotWrappedYet();
         return fullOptions;
+    }
+
+    /**
+     * Captures query settings for reuse across calls to {@link Client#execute}.
+     * Later changes to the supplied options, client defaults, or profile do not
+     * change the captured settings. Create a new handle to use changed settings.
+     * @param options Plain query settings to capture.
+     * @returns A handle for this client's `execute()` calls.
+     */
+    createReusableOptions(options: QueryOptions): ReusableQueryOptions {
+        if (
+            !options ||
+            typeof options !== "object" ||
+            Array.isArray(options) ||
+            ![Object.prototype, null].includes(Object.getPrototypeOf(options))
+        ) {
+            throw new TypeError(
+                "Reusable query options require a plain object",
+            );
+        }
+        return ReusableQueryOptions.create(this, options);
     }
 
     /**
@@ -424,7 +462,7 @@ class Client extends events.EventEmitter {
      * @param query The query to execute.
      * @param params Array of parameter values or an associative array (object) containing parameter names
      * as keys and its value.
-     * @param options The query options for the execution.
+     * @param options Query options or a handle from `createReusableOptions()`.
      * @param callback Executes callback(err, result) when execution completed. When not defined, the
      * method will return a promise.
      * @example <caption>Promise-based API, using async/await</caption>
@@ -444,7 +482,7 @@ class Client extends events.EventEmitter {
     execute(
         query: string,
         params?: ArrayOrObject | ResultCallback,
-        options?: QueryOptions | ResultCallback,
+        options?: QueryOptions | ReusableQueryOptions | ResultCallback,
         callback?: ResultCallback,
     ): Promise<ResultSet> | void {
         // This method acts as a wrapper for the async method #execute(), replaced by #rustyExecute()
@@ -462,7 +500,7 @@ class Client extends events.EventEmitter {
 
         try {
             const execOptions = this.createOptions(
-                options as QueryOptions | undefined,
+                options as QueryOptions | ReusableQueryOptions | undefined,
             );
             // The rusty execute will take the page state from options, but we need to indicate whether it's a paged query.
             let pageState = execOptions.isPaged() ? null : undefined;
@@ -728,6 +766,7 @@ class Client extends events.EventEmitter {
 
         let execOptions: ExecutionOptions;
         try {
+            rejectReusableOptionsOutsideExecute(options);
             execOptions = DefaultExecutionOptions.create(options, this);
         } catch (e) {
             return cleanCallback(e);
@@ -915,6 +954,8 @@ class Client extends events.EventEmitter {
         if (queries.length === 0) {
             throw new errors.ArgumentError("Queries array should not be empty");
         }
+
+        rejectReusableOptionsOutsideExecute(options);
 
         // Validate options before connecting so invalid options cannot open a session.
         const execOptions = this.createOptions(options);

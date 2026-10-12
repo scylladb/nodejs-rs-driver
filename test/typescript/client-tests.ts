@@ -28,6 +28,9 @@ async function myTest(): Promise<any> {
     result = await client.execute(query, params1);
     result = await client.execute(query, params2);
     result = await client.execute(query, params1, { prepare: true });
+    const reusableOptions = client.createReusableOptions({ prepare: true });
+    await client.execute(query, params1, reusableOptions);
+    client.execute(query, params1, reusableOptions, useResult);
 
     // Callback-based execution
     client.execute(query, useResult);

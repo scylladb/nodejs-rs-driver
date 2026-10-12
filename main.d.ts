@@ -9,7 +9,10 @@ import * as tracker from "./lib/tracker";
 import * as metadata from "./lib/metadata";
 import { Host, HostMap, Replica } from "./lib/host";
 import { Token, TokenRange } from "./lib/token";
-import { ExecutionOptions } from "./lib/execution-options";
+import {
+  ExecutionOptions,
+  ReusableQueryOptions,
+} from "./lib/execution-options";
 import { ClientOptions, SslOptions, ClientRoutesProxy } from "./lib/client-options";
 import { QueryOptions } from "./lib/query-options";
 import { ExecutionProfile } from "./lib/execution-profile";
@@ -23,6 +26,7 @@ export { auth, metadata, metrics, policies, tracker, types };
 export { Host, HostMap };
 export type { Replica };
 export { ExecutionOptions };
+export { ReusableQueryOptions };
 export { ClientOptions, SslOptions, ClientRoutesProxy };
 export { QueryOptions };
 export { ExecutionProfile };
@@ -87,6 +91,12 @@ export class Client extends events.EventEmitter {
 
   constructor(options: ClientOptions);
 
+  /**
+   * Capture settings once for repeated execute() calls on this client.
+   * Later input and default changes require a new handle.
+   */
+  createReusableOptions(options: QueryOptions): ReusableQueryOptions;
+
   connect(): Promise<void>;
 
   connect(callback: EmptyCallback): void;
@@ -94,13 +104,13 @@ export class Client extends events.EventEmitter {
   execute(
     query: string,
     params?: ArrayOrObject,
-    options?: QueryOptions,
+    options?: QueryOptions | ReusableQueryOptions,
   ): Promise<types.ResultSet>;
 
   execute(
     query: string,
     params: ArrayOrObject,
-    options: QueryOptions,
+    options: QueryOptions | ReusableQueryOptions,
     callback: ValueCallback<types.ResultSet>,
   ): void;
 

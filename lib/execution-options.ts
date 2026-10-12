@@ -33,6 +33,11 @@ class ExecutionOptions {
      */
     constructor() {}
 
+    /** @internal */
+    protected setRustWrapper(rustWrapper: _rust.QueryOptionsWrapper): void {
+        this.#rustWrapper = rustWrapper;
+    }
+
     /**
      * Creates rust options wrapper for this execution options unless it already exists.
      * Goal of this function is to avoid wrapping the same options multiple times.
@@ -214,7 +219,7 @@ class ExecutionOptions {
     }
 
     /**
-     * Gets the query options as provided to the execution method without setting the default values.
+     * Gets the query options stored by this instance without setting default values.
      */
     getRawQueryOptions(): QueryOptions | undefined {
         return undefined;
@@ -567,27 +572,11 @@ class DefaultExecutionOptions extends ExecutionOptions {
 
     /** @internal */
     getOrGenerateTimestamp(): types.Long | null | undefined {
-        let result = this.getTimestamp();
-
-        if (result === undefined) {
-            const generator =
-                this.#client.options.policies!.timestampGeneration;
-
-            if (
-                types.protocolVersion.supportsTimestamp(
-                    this.#client.controlConnection.protocolVersion,
-                ) &&
-                generator
-            ) {
-                result = generator.next(this.#client);
-            } else {
-                result = null;
-            }
-        }
-
-        return typeof result === "number"
-            ? types.Long.fromNumber(result)
-            : result;
+        return resolveExecutionTimestamp(
+            this.getTimestamp(),
+            this.#client,
+            () => this.#client.options.policies!.timestampGeneration,
+        );
     }
 
     /** @internal */
@@ -720,4 +709,294 @@ function ifUndefined3(v1: any, v2: any, v3: any): any {
     return v2 !== undefined ? v2 : v3;
 }
 
-export { ExecutionOptions, DefaultExecutionOptions, proxyExecuteKey };
+function resolveExecutionTimestamp(
+    timestamp: number | types.Long | null | undefined,
+    client: any,
+    getGenerator: () => any,
+): types.Long | null | undefined {
+    let result = timestamp;
+    if (result === undefined) {
+        const generator = getGenerator();
+        if (
+            types.protocolVersion.supportsTimestamp(
+                client.controlConnection.protocolVersion,
+            ) &&
+            generator
+        ) {
+            result = generator.next(client);
+        } else {
+            result = null;
+        }
+    }
+    return typeof result === "number" ? types.Long.fromNumber(result) : result;
+}
+
+function snapshotValue(value: any, seen = new WeakMap<object, any>()): any {
+    if (value === null || typeof value !== "object") return value;
+    if (seen.has(value)) return seen.get(value);
+    if (Buffer.isBuffer(value)) {
+        const copy = Buffer.from(value);
+        seen.set(value, copy);
+        return copy;
+    }
+    if (value instanceof types.Long) {
+        const copy = types.Long.fromBits(value.low, value.high, value.unsigned);
+        seen.set(value, copy);
+        return copy;
+    }
+    if (Array.isArray(value)) {
+        const copy: any[] = new Array(value.length);
+        seen.set(value, copy);
+        for (let i = 0; i < value.length; i++) {
+            if (i in value) copy[i] = snapshotValue(value[i], seen);
+        }
+        return copy;
+    }
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype === Object.prototype || prototype === null) {
+        const copy = Object.create(prototype);
+        seen.set(value, copy);
+        for (const key of Reflect.ownKeys(value)) {
+            const property = Object.getOwnPropertyDescriptor(value, key)!;
+            Object.defineProperty(copy, key, {
+                value: snapshotValue(Reflect.get(value, key), seen),
+                enumerable: property.enumerable,
+                writable: true,
+                configurable: true,
+            });
+        }
+        return copy;
+    }
+    // Policy and host instances retain their identity and behavior.
+    return value;
+}
+
+function resolveReusableValues(options: QueryOptions, client: any) {
+    const raw = snapshotValue(options) as QueryOptions;
+    const resolved = DefaultExecutionOptions.create(raw, client);
+    const profile = resolved.getProfile();
+    const profileSnapshot = Object.assign(
+        Object.create(Object.getPrototypeOf(profile)),
+        profile,
+    ) as ExecutionProfile;
+    Object.freeze(profileSnapshot);
+    if (raw.executionProfile === profile) {
+        raw.executionProfile = profileSnapshot;
+    }
+    return {
+        raw,
+        profile: profileSnapshot,
+        captureStackTrace: resolved.getCaptureStackTrace(),
+        consistency: resolved.getConsistency(),
+        customPayload: snapshotValue(resolved.getCustomPayload()),
+        fetchSize: resolved.getFetchSize(),
+        fixedHost: resolved.getFixedHost(),
+        hints: snapshotValue(resolved.getHints()),
+        autoPage: resolved.isAutoPage(),
+        batchCounter: resolved.isBatchCounter(),
+        batchLogged: resolved.isBatchLogged(),
+        idempotent: resolved.isIdempotent(),
+        prepared: resolved.isPrepared(),
+        tracing: resolved.isQueryTracing(),
+        keyspace: resolved.getKeyspace(),
+        loadBalancing: resolved.getLoadBalancingPolicy(),
+        paged: resolved.isPaged(),
+        pageState: snapshotValue(resolved.getPageState()),
+        requestTimeout: resolved.getRequestTimeout(),
+        readTimeout: resolved.getReadTimeout(),
+        retry: resolved.getRetryPolicy(),
+        routingIndexes: snapshotValue(resolved.getRoutingIndexes()),
+        routingKey: snapshotValue(resolved.getRoutingKey()),
+        routingNames: snapshotValue(resolved.getRoutingNames()),
+        serialConsistency: resolved.getSerialConsistency(),
+        timestamp: snapshotValue(resolved.getTimestamp()),
+        timestampGenerator: client.options.policies?.timestampGeneration,
+    };
+}
+
+type ReusableValues = ReturnType<typeof resolveReusableValues>;
+
+class ReusableExecutionOptions extends ExecutionOptions {
+    #values: ReusableValues;
+    #client: any;
+    #customPayload: ReusableValues["customPayload"];
+    #hints: ReusableValues["hints"];
+    #keyspace: ReusableValues["keyspace"];
+    #pageState: ReusableValues["pageState"];
+    #routingIndexes: ReusableValues["routingIndexes"];
+    #routingKey: ReusableValues["routingKey"];
+    #routingNames: ReusableValues["routingNames"];
+    #timestamp: ReusableValues["timestamp"];
+
+    constructor(
+        values: ReusableValues,
+        client: any,
+        rustWrapper?: _rust.QueryOptionsWrapper,
+    ) {
+        super();
+        if (rustWrapper) this.setRustWrapper(rustWrapper);
+        this.#values = values;
+        this.#client = client;
+        this.#customPayload = snapshotValue(values.customPayload);
+        this.#hints = snapshotValue(values.hints);
+        this.#keyspace = values.keyspace;
+        this.#pageState = snapshotValue(values.pageState);
+        this.#routingIndexes = snapshotValue(values.routingIndexes);
+        this.#routingKey = snapshotValue(values.routingKey);
+        this.#routingNames = snapshotValue(values.routingNames);
+        this.#timestamp = snapshotValue(values.timestamp);
+    }
+
+    getCaptureStackTrace() {
+        return this.#values.captureStackTrace;
+    }
+    getConsistency() {
+        return this.#values.consistency;
+    }
+    getCustomPayload() {
+        return this.#customPayload;
+    }
+    getFetchSize() {
+        return this.#values.fetchSize;
+    }
+    getFixedHost() {
+        return this.#values.fixedHost;
+    }
+    getHints() {
+        return this.#hints;
+    }
+    isAutoPage() {
+        return this.#values.autoPage;
+    }
+    isBatchCounter() {
+        return this.#values.batchCounter;
+    }
+    isBatchLogged() {
+        return this.#values.batchLogged;
+    }
+    isIdempotent() {
+        return this.#values.idempotent;
+    }
+    isPrepared() {
+        return this.#values.prepared;
+    }
+    isQueryTracing() {
+        return this.#values.tracing;
+    }
+    getKeyspace() {
+        return this.#keyspace;
+    }
+    getLoadBalancingPolicy() {
+        return this.#values.loadBalancing;
+    }
+    isPaged() {
+        return this.#values.paged;
+    }
+    getPageState() {
+        return this.#pageState;
+    }
+    getProfile() {
+        return this.#values.profile;
+    }
+    /** Returns a copy of the input captured when the handle was created. */
+    getRawQueryOptions() {
+        return snapshotValue(this.#values.raw) as QueryOptions;
+    }
+    getRequestTimeout() {
+        return this.#values.requestTimeout;
+    }
+    getReadTimeout() {
+        return this.#values.readTimeout;
+    }
+    getRetryPolicy() {
+        return this.#values.retry;
+    }
+    getRoutingIndexes() {
+        return this.#routingIndexes;
+    }
+    getRoutingKey() {
+        return this.#routingKey;
+    }
+    getRoutingNames() {
+        return this.#routingNames;
+    }
+    getSerialConsistency() {
+        return this.#values.serialConsistency;
+    }
+    getTimestamp() {
+        return this.#timestamp;
+    }
+
+    getOrGenerateTimestamp(): types.Long | null | undefined {
+        return resolveExecutionTimestamp(
+            this.getTimestamp(),
+            this.#client,
+            () => this.#values.timestampGenerator,
+        );
+    }
+
+    setCustomPayload(payload: CustomPayload): void {
+        this.#customPayload = payload;
+    }
+    setHints(hints: Array<any>): void {
+        this.#hints = hints;
+    }
+    setKeyspace(keyspace: string): void {
+        this.#keyspace = keyspace;
+    }
+    setPageState(pageState?: Buffer): void {
+        this.#pageState = pageState;
+    }
+    setRoutingIndexes(indexes: Array<number>): void {
+        this.#routingIndexes = indexes;
+    }
+    setRoutingKey(value?: Buffer | Array<Buffer> | null): void {
+        this.#routingKey = value;
+    }
+}
+
+/**
+ * A client-owned snapshot of settings for repeated `execute()` calls.
+ * Create it with {@link Client#createReusableOptions} and pass it only to
+ * that client's `execute()` method. Each request receives independent mutable
+ * state while sharing the compiled native query options.
+ */
+class ReusableQueryOptions {
+    #client: any;
+    #values: ReusableValues;
+    #rustWrapper: _rust.QueryOptionsWrapper;
+
+    private constructor(client: any, options: QueryOptions) {
+        this.#client = client;
+        this.#values = resolveReusableValues(options, client);
+        const first = new ReusableExecutionOptions(this.#values, client);
+        first.wrapOptionsIfNotWrappedYet();
+        this.#rustWrapper = first.getRustOptions();
+    }
+
+    /** @internal */
+    static create(client: any, options: QueryOptions): ReusableQueryOptions {
+        return new ReusableQueryOptions(client, options);
+    }
+
+    /** @internal */
+    forClient(client: any): ExecutionOptions {
+        if (client !== this.#client) {
+            throw new errors.ArgumentError(
+                "Reusable query options belong to a different Client",
+            );
+        }
+        return new ReusableExecutionOptions(
+            this.#values,
+            client,
+            this.#rustWrapper,
+        );
+    }
+}
+
+export {
+    ExecutionOptions,
+    DefaultExecutionOptions,
+    ReusableQueryOptions,
+    proxyExecuteKey,
+};
