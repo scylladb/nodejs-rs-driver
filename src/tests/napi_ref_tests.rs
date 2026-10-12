@@ -6,7 +6,7 @@ use std::cell::RefCell;
 use napi::Env;
 use napi::bindgen_prelude::{FnArgs, Object, ToNapiValue};
 
-use crate::errors::{ConvertedResult, JsResult, with_custom_error_sync};
+use crate::errors::{ConvertedResult, JsResult, with_custom_error};
 use crate::utils::js_ctor::{build_test_js_class, js_constructible_class};
 use crate::utils::js_instance::JsInstance;
 use crate::utils::napi_ref::NapiRef;
@@ -25,7 +25,7 @@ pub fn tests_build_test_js_class<'env>(
     value: i32,
     env: &'env Env,
 ) -> JsResult<JsInstance<'env, js_constructible_class::TestJsClass>> {
-    with_custom_error_sync(|| {
+    with_custom_error(|| {
         let instance = build_test_js_class(env, FnArgs::from((name.as_str(), value)))?;
         ConvertedResult::Ok(instance)
     })
@@ -35,7 +35,7 @@ pub fn tests_build_test_js_class<'env>(
 /// current thread's slot - replacing (and therefore dropping) whatever was previously stored.
 #[napi(ts_return_type = "void")]
 pub fn tests_pin_and_store(name: String, value: i32, env: Env) -> JsResult<()> {
-    with_custom_error_sync(|| {
+    with_custom_error(|| {
         let instance = build_test_js_class(&env, FnArgs::from((name.as_str(), value)))?;
         let napi_ref = NapiRef::new(&env, instance)?;
         PINNED.with_borrow_mut(|slot| *slot = Some(napi_ref));
@@ -50,7 +50,7 @@ pub fn tests_pin_and_store(name: String, value: i32, env: Env) -> JsResult<()> {
 pub fn tests_get_pinned<'env>(
     env: &'env Env,
 ) -> JsResult<Option<JsInstance<'env, js_constructible_class::TestJsClass>>> {
-    with_custom_error_sync(|| {
+    with_custom_error(|| {
         let raw = PINNED.with_borrow(|slot| match slot.as_ref() {
             Some(napi_ref) => {
                 let instance = napi_ref.get(env)?;

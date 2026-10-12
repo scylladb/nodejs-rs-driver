@@ -41,6 +41,12 @@ const { ProfileManager } = executionProfile;
 const description = packageInfo.description;
 const { version } = packageInfo;
 
+// Initialize the async bridge for this Node.js environment.
+// This starts the Tokio runtime that runs the driver's futures
+// (session queries, paging, etc.), and the thread-safe function
+// that settles their Promises on this thread.
+rust.initAsyncBridge();
+
 /**
  * Callback used by execution methods.
  * @param err Error occurred in the execution of the query.

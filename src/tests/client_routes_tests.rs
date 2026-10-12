@@ -5,9 +5,7 @@
 //! options are deserialized into the right rust configuration, that the right
 //! session builder kind is selected, and that no option is lost on the way.
 
-use crate::errors::{
-    ConvertedError, ConvertedResult, JsResult, make_js_error, with_custom_error_sync,
-};
+use crate::errors::{ConvertedError, ConvertedResult, JsResult, make_js_error, with_custom_error};
 use crate::session::config::{
     ConfiguredSessionBuilder, SessionOptions, configure_session_builder,
     convert_client_routes_config,
@@ -18,7 +16,7 @@ use crate::session::config::{
 /// side can assert on the message.
 #[napi]
 pub fn tests_session_builder_mode(options: SessionOptions) -> JsResult<String> {
-    with_custom_error_sync(|| {
+    with_custom_error(|| {
         let mode = match configure_session_builder(options)? {
             ConfiguredSessionBuilder::Default(_) => "default",
             ConfiguredSessionBuilder::ClientRoutes(_) => "clientRoutes",
@@ -31,7 +29,7 @@ pub fn tests_session_builder_mode(options: SessionOptions) -> JsResult<String> {
 /// session builder.
 #[napi]
 pub fn tests_session_builder_driver_config_reporting(options: SessionOptions) -> JsResult<bool> {
-    with_custom_error_sync(|| {
+    with_custom_error(|| {
         let enabled = match configure_session_builder(options)? {
             ConfiguredSessionBuilder::Default(builder) => builder.config.driver_config_reporting,
             ConfiguredSessionBuilder::ClientRoutes(builder) => {
@@ -45,7 +43,7 @@ pub fn tests_session_builder_driver_config_reporting(options: SessionOptions) ->
 /// Renders the rust `ClientRoutesConfig` that the given options convert into.
 #[napi]
 pub fn tests_describe_client_routes_config(options: SessionOptions) -> JsResult<String> {
-    with_custom_error_sync(|| {
+    with_custom_error(|| {
         let client_routes_config = options
             .client_routes_config
             .ok_or_else(|| ConvertedError::from(make_js_error("clientRoutesConfig was not set")))?;

@@ -75,9 +75,21 @@ you will still pay the cost of converting all unused fields.
 
 ### Casync (async bridge)
 
-This is an open improvement that attempts to cut the very high CPU cost of synchronization in async functions.
-You can see the benchmarks for this feature in [#414](https://github.com/scylladb/nodejs-rs-driver/pull/414).
-TODO: finish this section once #414 is merged.
+The driver runs bridged Rust futures on a Tokio runtime, one per Node.js environment.
+`lib/client` initializes one bridge per environment, including worker threads.
+The bridge creates a Promise for each spawned future on the JavaScript thread.
+The future runs on the Tokio worker. The Promise's deferred handle travels with
+the Tokio task as an opaque pointer. The worker does not use it.
+
+When a future completes, the worker wraps the deferred and the result in a settle callback.
+It pushes this callback to a completion queue.
+Only the first push after a drain calls the shared thread-safe function.
+The drain runs on the JavaScript thread. It calls all queued settle callbacks in one TSFN callback.
+Each settle callback converts its result to JavaScript and settles its Promise.
+
+The thread-safe function is referenced while futures are outstanding so Node.js stays alive until
+they settle. Conversion errors reject the Promise; a JavaScript exception thrown during conversion
+is cleared and used as the rejection value.
 
 ### JSResults
 

@@ -3,6 +3,9 @@
 const { assert } = require("chai");
 const rust = require("../../index");
 
+// This file can run alone, without lib/client.ts, which initializes the bridge.
+rust.initAsyncBridge();
+
 describe("preserialized input values", function () {
     it("copies the exact encoded bytes and preserves null and unset", async function () {
         const source = Buffer.from([0, 1, 255]);

@@ -7,7 +7,9 @@ use scylla::policies::retry::{RequestInfo, RetryDecision, RetryPolicy, RetrySess
 use scylla::statement::Statement;
 use uuid::Uuid;
 
-use crate::errors::{JsResult, with_custom_error_async};
+use napi::Env;
+
+use crate::async_bridge::{BridgedPromise, JsAsyncResult};
 use crate::result::QueryResultWrapper;
 use crate::session::SessionWrapper;
 use crate::types::encoded_data::EncodedValuesWrapper;
@@ -83,24 +85,26 @@ fn apply_ddl_lbp(statement: &mut Statement, host_id: Uuid) {
 
 /// Helper for executing DDL statements in tests.
 #[napi(ts_return_type = "Promise<QueryResultWrapper>")]
-pub async fn ddl(session: &SessionWrapper, query: String) -> JsResult<QueryResultWrapper> {
-    with_custom_error_async(async || {
-        let inner_session = session.inner.get_session();
-        let target_host_id = inner_session
-            .get_cluster_state()
-            .get_nodes_info()
-            .first()
-            .map(|node| node.host_id);
+pub fn ddl(env: Env, session: &SessionWrapper, query: String) -> JsAsyncResult<QueryResultWrapper> {
+    let session = Arc::clone(&session.inner);
+    BridgedPromise::spawn(&env, || {
+        Ok(async move {
+            let inner_session = session.get_session();
+            let target_host_id = inner_session
+                .get_cluster_state()
+                .get_nodes_info()
+                .first()
+                .map(|node| node.host_id);
 
-        let mut statement: Statement = query.into();
-        if let Some(host_id) = target_host_id {
-            apply_ddl_lbp(&mut statement, host_id);
-        }
+            let mut statement: Statement = query.into();
+            if let Some(host_id) = target_host_id {
+                apply_ddl_lbp(&mut statement, host_id);
+            }
 
-        let result = inner_session
-            .query_unpaged(statement, Vec::<EncodedValuesWrapper>::new())
-            .await?;
-        QueryResultWrapper::from_query(result)
+            let result = inner_session
+                .query_unpaged(statement, Vec::<EncodedValuesWrapper>::new())
+                .await?;
+            QueryResultWrapper::from_query(result)
+        })
     })
-    .await
 }

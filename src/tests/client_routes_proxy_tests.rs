@@ -11,9 +11,10 @@ use std::sync::OnceLock;
 use scylla_proxy::nlb::{NlbFrontend, RunningNlbFrontend};
 use tokio::sync::Mutex;
 
-use crate::errors::{
-    ConvertedError, ConvertedResult, JsResult, make_js_error, with_custom_error_async,
-};
+use napi::Env;
+
+use crate::async_bridge::{BridgedPromise, JsAsyncResult};
+use crate::errors::{ConvertedError, ConvertedResult, make_js_error};
 
 /// A single process-wide slot for tracking running NLBs.
 static RUNNING_NLBS: OnceLock<Mutex<Vec<RunningNlbFrontend>>> = OnceLock::new();
@@ -28,47 +29,59 @@ fn running_nlbs() -> &'static Mutex<Vec<RunningNlbFrontend>> {
 /// Returns the address the driver should be told to connect to for each backend
 /// (via a posted `system.client_routes` row), in the same order as `backends`.
 /// Replaces any NLBs started by a previous call.
-#[napi]
-pub async fn tests_start_client_routes_nlbs(backends: Vec<String>) -> JsResult<Vec<String>> {
-    with_custom_error_async(async || {
-        stop_running_nlbs().await;
+///
+/// The NLBs run on the bridge runtime of the calling env.
+/// They stop working when that env exits, so call this only from the main thread.
+#[napi(ts_return_type = "Promise<Array<string>>")]
+pub fn tests_start_client_routes_nlbs(
+    env: Env,
+    backends: Vec<String>,
+) -> JsAsyncResult<Vec<String>> {
+    BridgedPromise::spawn(&env, || {
+        Ok(async move {
+            stop_running_nlbs().await;
 
-        let mut listen_addrs = Vec::with_capacity(backends.len());
-        let mut started = Vec::with_capacity(backends.len());
+            let mut listen_addrs = Vec::with_capacity(backends.len());
+            let mut started = Vec::with_capacity(backends.len());
 
-        for backend in backends {
-            let backend_addr: SocketAddr = backend.parse().map_err(|err| {
-                ConvertedError::from(make_js_error(format!(
-                    "Invalid backend address {backend:?}: {err}"
-                )))
-            })?;
-
-            let nlb = NlbFrontend::builder()
-                .listen_addr("127.0.0.1:0".parse().unwrap())
-                .backend(backend_addr)
-                .build()
-                .run()
-                .await
-                .map_err(|err| {
+            for backend in backends {
+                let backend_addr: SocketAddr = backend.parse().map_err(|err| {
                     ConvertedError::from(make_js_error(format!(
-                        "Failed to start NLB for {backend_addr}: {err}"
+                        "Invalid backend address {backend:?}: {err}"
                     )))
                 })?;
 
-            listen_addrs.push(nlb.listen_addr().to_string());
-            started.push(nlb);
-        }
+                let nlb = NlbFrontend::builder()
+                    .listen_addr("127.0.0.1:0".parse().unwrap())
+                    .backend(backend_addr)
+                    .build()
+                    .run()
+                    .await
+                    .map_err(|err| {
+                        ConvertedError::from(make_js_error(format!(
+                            "Failed to start NLB for {backend_addr}: {err}"
+                        )))
+                    })?;
 
-        *running_nlbs().lock().await = started;
-        ConvertedResult::Ok(listen_addrs)
+                listen_addrs.push(nlb.listen_addr().to_string());
+                started.push(nlb);
+            }
+
+            *running_nlbs().lock().await = started;
+            ConvertedResult::Ok(listen_addrs)
+        })
     })
-    .await
 }
 
 /// Stops every NLB started by [`tests_start_client_routes_nlbs`].
-#[napi]
-pub async fn tests_stop_client_routes_nlbs() {
-    stop_running_nlbs().await;
+#[napi(ts_return_type = "Promise<void>")]
+pub fn tests_stop_client_routes_nlbs(env: Env) -> JsAsyncResult<()> {
+    BridgedPromise::spawn(&env, || {
+        Ok(async {
+            stop_running_nlbs().await;
+            ConvertedResult::Ok(())
+        })
+    })
 }
 
 async fn stop_running_nlbs() {
