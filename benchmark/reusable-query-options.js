@@ -2,12 +2,14 @@
 
 // Run from any checkout: node benchmark/reusable-query-options.js [checkout]
 // The native module in each checkout must be built with the same flags.
+// Set BENCH_CPU_TIME=1 to measure CPU time instead of elapsed time.
 const path = require("node:path");
 const { performance } = require("node:perf_hooks");
 const root = path.resolve(process.argv[2] || path.join(__dirname, ".."));
 const Client = require(path.join(root, "lib/client"));
-const warmup = 2000;
-const iterations = 60000;
+const warmup = 20000;
+const iterations = 1000000;
+const cpuTime = process.env.BENCH_CPU_TIME === "1";
 
 const scenarios = [
     [
@@ -47,11 +49,18 @@ async function measure(factory) {
     for (let i = 0; i < warmup; i++) {
         await client.execute("SELECT 1", [], options(i));
     }
-    const start = performance.now();
+    const start = cpuTime ? process.cpuUsage() : performance.now();
     for (let i = 0; i < iterations; i++) {
         await client.execute("SELECT 1", [], options(i));
     }
-    return Math.round((iterations * 1000) / (performance.now() - start));
+    let elapsedMs;
+    if (cpuTime) {
+        const usage = process.cpuUsage(start);
+        elapsedMs = (usage.user + usage.system) / 1000;
+    } else {
+        elapsedMs = performance.now() - start;
+    }
+    return Math.round((iterations * 1000) / elapsedMs);
 }
 
 async function main() {
