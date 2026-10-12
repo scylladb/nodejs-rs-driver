@@ -187,34 +187,33 @@ export interface QueryOptions {
 export function queryOptionsIntoWrapper(
     options: ExecutionOptions,
 ): rust.QueryOptionsWrapper {
-    const rustOptions: rust.QueryOptionsObj = Object();
-
     // `counter`, `keyspace`, `logged` and `prepare` are read straight off the
     // execution options rather than through their getters, so they are always
     // undefined here.
     const asProperties = options as any;
 
-    rustOptions.autoPage = options.isAutoPage();
-    rustOptions.captureStackTrace = options.getCaptureStackTrace();
-    rustOptions.consistency = options.getConsistency();
-    rustOptions.counter = asProperties.counter;
-    rustOptions.fetchSize = options.getFetchSize();
-    rustOptions.isIdempotent = options.isIdempotent();
-    rustOptions.keyspace = asProperties.keyspace;
-    rustOptions.logged = asProperties.logged;
-    rustOptions.prepare = asProperties.prepare;
     const requestTimeout = options.getRequestTimeout();
     validateRequestTimeout(requestTimeout, "requestTimeout");
-    rustOptions.requestTimeout = requestTimeout;
-    rustOptions.routingIndexes = options.getRoutingIndexes();
-    rustOptions.routingNames = options.getRoutingNames();
-    rustOptions.serialConsistency = options.getSerialConsistency();
     let timestamp: number | Long | bigint | undefined | null =
         options.getTimestamp();
     if (timestamp instanceof Long) timestamp = timestamp.toBigInt();
     else if (timestamp) timestamp = BigInt(timestamp);
-    rustOptions.timestamp = timestamp as bigint | undefined;
-    rustOptions.traceQuery = options.isQueryTracing();
-    const wrapper = new rust.QueryOptionsWrapper(rustOptions);
-    return wrapper;
+
+    return new rust.QueryOptionsWrapper(
+        options.isAutoPage(),
+        options.getCaptureStackTrace(),
+        options.getConsistency(),
+        asProperties.counter,
+        options.getFetchSize(),
+        options.isIdempotent(),
+        asProperties.keyspace,
+        asProperties.logged,
+        asProperties.prepare,
+        requestTimeout,
+        options.getRoutingIndexes(),
+        options.getRoutingNames(),
+        options.getSerialConsistency(),
+        timestamp as bigint | undefined,
+        options.isQueryTracing(),
+    );
 }
