@@ -1,21 +1,23 @@
 # Query options overview
 
-When a user provides options for a given query, an ``ExecutionOptions`` object is created.
-Before using these options in the Rust part of the driver, they are converted to ``QueryOptionsWrapper``.
+Ordinary `execute()` calls build `ExecutionOptions` and a native
+`QueryOptionsWrapper` from the supplied `QueryOptions`. The wrapper receives
+its fields as positional arguments. `batch()` uses the same creation path.
 
-Because creation of those options requires a number of native calls,
-the process of converting execution options from Node to Rust part is time-consuming.
+## Explicit reuse
 
-## Query options reusing
+`Client.createReusableOptions()` resolves query settings once and returns a
+client-owned handle. It copies query values and captures the effective client
+defaults and execution profile. Each `execute()` call using the handle gets a
+separate `ExecutionOptions` view for request-specific state while sharing the
+native wrapper. A handle from another client is rejected.
 
-To reduce the performance impact of creating identical options instances,
-for the ``executeConcurrent`` interface, driver reuses a single instance of ``ExecutionOptions``
-and the corresponding Rust ``QueryOptionsWrapper``. This is possible because, by design,
-each of the queries provided to ``executeConcurrent`` is executed with the same options.
+Input arrays, plain objects, buffers, and `Long` values are copied when the
+handle is created. Policy and host instances retain their references so their
+behavior remains available. Changes to the source options, defaults, or
+profile do not change captured settings; callers create a new handle to use
+changed settings.
 
-``ExecutionOptions`` are created at the construction of ``ArrayBasedExecutor`` and ``StreamBasedExecutor``,
-and are used for each of the queries done inside given instance of executor. Afterwards, those options
-are dropped with the rest of the information associated with given executor.
-
-This is currently limited to a single call of ``executeConcurrent``,
-meaning new instance of ``ExecutionOptions`` is created for each call to ``executeConcurrent``.
+Plain `QueryOptions` objects do not enter a client cache. `eachRow()` and
+`stream()` continue creating their own execution options. The concurrent
+executors obtain options at construction and reuse them for that executor.

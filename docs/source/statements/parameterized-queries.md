@@ -31,3 +31,21 @@ await client.execute(statement, params, { prepare: true });
 Named parameters are case-insensitive.
 
 Currently named parameters are supported only in prepared statements.
+
+## Reusing query settings
+
+For repeated `execute()` calls with fixed settings, create a reusable options
+handle once:
+
+```javascript
+const options = client.createReusableOptions({ prepare: true });
+for (const params of rows) {
+    await client.execute(statement, params, options);
+}
+```
+
+The handle belongs to the client that created it. It captures query settings,
+client defaults, and the selected execution profile when created. Later changes
+to those values require a new handle. Arrays, plain objects, buffers, and `Long`
+values are copied. Host and policy instances keep their references. Ordinary
+options objects still work and are built for each call.
