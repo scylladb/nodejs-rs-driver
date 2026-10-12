@@ -114,7 +114,6 @@ pub struct SessionOptions {
     client_id, clientId: String,
     credentials_username, credentialsUsername: String,
     credentials_password, credentialsPassword: String,
-    cache_size, cacheSize: u32,
     schema_agreement_timeout_secs, schemaAgreementTimeoutSecs: u32,
     auto_await_schema_agreement, autoAwaitSchemaAgreement: bool,
     metadata_request_serverside_timeout_secs, metadataRequestServersideTimeoutSecs: u32,

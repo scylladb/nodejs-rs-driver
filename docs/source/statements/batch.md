@@ -59,7 +59,12 @@ prepares the statement before execution. This is especially important in batches
 statement with a non-empty list of values, the driver sends a prepare request **sequentially**,
 and results are **not cached** between `client.batch()` calls.
 
-Avoid using unprepared batches unless all statements take no bind markers.
+These prepare requests go only to the connection that executes the batch.
+They do not go to all hosts. Thus, an unprepared batch can be lighter
+than a prepared batch if you execute it only once.
+
+If you execute the same batch many times, use `{ prepare: true }`.
+The driver then prepares each statement once and reuses it.
 :::
 
 Note that batches are not suitable for bulk loading, there are dedicated tools for that. Batches allow you

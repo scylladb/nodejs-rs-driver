@@ -1013,6 +1013,84 @@ describe("Client @SERVER_API", function () {
             },
         );
 
+        it("should match each prepared handle with its parameters", async function () {
+            const client = newInstance();
+            const id = types.Uuid.random();
+            // Both statements bind columns of different types in a different order.
+            // A swap of handles makes the encoding fail or stores wrong values.
+            const queryA = `INSERT INTO ${table1} (id, time, int_sample, text_sample) VALUES (?, ?, ?, ?)`;
+            const queryB = `INSERT INTO ${table2} (id, time, text_sample, bigint_sample) VALUES (?, ?, ?, ?)`;
+            const queries = [
+                { query: queryA, params: [id, types.TimeUuid.now(), 1, "a1"] },
+                {
+                    query: queryB,
+                    params: [id, types.TimeUuid.now(), "b1", 2n],
+                },
+                { query: queryA, params: [id, types.TimeUuid.now(), 3, "a2"] },
+            ];
+            await client.batch(queries, { prepare: true });
+
+            const rowsA = (
+                await client.execute(
+                    `SELECT int_sample, text_sample FROM ${table1} WHERE id = ?`,
+                    [id],
+                    { prepare: true },
+                )
+            ).rows;
+            assert.deepStrictEqual(
+                rowsA.map((r) => [r.int_sample, r.text_sample]),
+                [
+                    [1, "a1"],
+                    [3, "a2"],
+                ],
+            );
+            const rowsB = (
+                await client.execute(
+                    `SELECT text_sample, bigint_sample FROM ${table2} WHERE id = ?`,
+                    [id],
+                    { prepare: true },
+                )
+            ).rows;
+            assert.strictEqual(rowsB.length, 1);
+            assert.strictEqual(rowsB[0].text_sample, "b1");
+            assert.strictEqual(rowsB[0].bigint_sample, 2n);
+            await client.shutdown();
+        });
+
+        it("should reuse prepared statements across batch and execute calls", async function () {
+            const client = newInstance();
+            const id = types.Uuid.random();
+            const insert = `INSERT INTO ${table1} (id, time, int_sample) VALUES (?, ?, ?)`;
+            for (const value of [10, 20]) {
+                await client.batch(
+                    [
+                        {
+                            query: insert,
+                            params: [id, types.TimeUuid.now(), value],
+                        },
+                        {
+                            query: insert,
+                            params: [id, types.TimeUuid.now(), value + 1],
+                        },
+                    ],
+                    { prepare: true },
+                );
+            }
+            await client.execute(insert, [id, types.TimeUuid.now(), 30], {
+                prepare: true,
+            });
+            const result = await client.execute(
+                `SELECT int_sample FROM ${table1} WHERE id = ?`,
+                [id],
+                { prepare: true },
+            );
+            assert.deepStrictEqual(
+                result.rows.map((r) => r.int_sample),
+                [10, 11, 20, 21, 30],
+            );
+            await client.shutdown();
+        });
+
         it("should not use keyspace if set on options for lower protocol versions", function () {
             const client = newInstance({});
             const insertQuery =

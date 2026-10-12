@@ -117,7 +117,17 @@ export interface QueryOptions {
      * [TODO: Add support for this field]
      */
     pageState?: Buffer | string;
-    /** Determines if the query must be executed as a prepared statement. */
+    /**
+     * Determines if the query must be executed as a prepared statement.
+     *
+     * When `true`, the driver prepares the statement on all hosts once.
+     * It caches the prepared statement and reuses it in later calls.
+     *
+     * When `false`, a statement with bound values is still prepared,
+     * but only on the connection that executes it. The driver does not cache it.
+     * This is lighter for a statement that you execute once.
+     * For a statement that you execute many times, use `true`.
+     */
     prepare?: boolean;
     /** Per-attempt read timeout is unsupported. Use `requestTimeout`. */
     readTimeout?: number;

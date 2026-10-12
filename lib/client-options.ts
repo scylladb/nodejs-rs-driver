@@ -703,7 +703,7 @@ function defaultOptions(): ClientOptions {
         driverConfigReportingEnabled: true,
         requestTracker: null,
         metrics: new metrics.DefaultMetrics(),
-        maxPrepared: null, // Default is 512, defined on the Rust side
+        maxPrepared: null, // Default is 512, defined in the client prepared cache
         refreshSchemaDelay: 1000,
         prepareOnAllHosts: true,
         rePrepareOnUp: true,
@@ -1278,9 +1278,6 @@ function setRustOptions(options: ClientOptions): rust.SessionOptions {
     rustOptions.clientId = options.id;
     rustOptions.keyspace = options.keyspace;
     rustOptions.localDataCenter = options.localDataCenter;
-    if (options.maxPrepared) {
-        rustOptions.cacheSize = options.maxPrepared;
-    }
     if (options.credentials) {
         rustOptions.credentialsUsername = options.credentials.username;
         rustOptions.credentialsPassword = options.credentials.password;

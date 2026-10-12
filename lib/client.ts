@@ -26,7 +26,6 @@ import {
     convertComplexType,
     ColumnInfo,
 } from "./types/cql-utils";
-import { PreparedCache } from "./cache";
 import Encoder = require("./encoder");
 import { HostMap } from "./host";
 import type { Replica } from "./host";
@@ -100,7 +99,10 @@ class Client extends events.EventEmitter {
     rustClient: rust.SessionWrapper | undefined;
     #encoder: Encoder;
     #loggingId: number | undefined;
-
+    // Map insertion order determines which prepared handle is evicted first.
+    #preparedCache = new Map<string, PreparedInfo>();
+    // Share one preparation among concurrent calls for the same statement.
+    #preparing = new Map<string, Promise<PreparedInfo>>();
     /**
      * @internal
      * @ignore
@@ -239,16 +241,54 @@ class Client extends events.EventEmitter {
     }
 
     /**
-     * Manually prepare query into prepared statement.
+     * Reuse a prepared handle and its bind metadata for the same statement.
+     * Bind metadata is fixed for the lifetime of the handle, as in the Rust driver.
      * @internal
      * @ignore
      */
     async prepareStatement(statement: string): Promise<PreparedInfo> {
-        // This will be called only after checking that client is connected
-        let expectedTypes = await this.rustClient!.prepareStatement(statement);
-        let types = expectedTypes.map((t) => convertComplexType(t[0]));
-        let boundParamNames = expectedTypes.map((t) => t[1].toLowerCase());
-        return new PreparedInfo(types, statement, boundParamNames);
+        const cached = this.#preparedCache.get(statement);
+        if (cached) {
+            // Move a cache hit to the end; the first entry is the LRU victim.
+            this.#preparedCache.delete(statement);
+            this.#preparedCache.set(statement, cached);
+            return cached;
+        }
+        const inFlight = this.#preparing.get(statement);
+        if (inFlight) return inFlight;
+
+        const preparing = (async () => {
+            const preparedResult =
+                await this.rustClient!.prepareStatement(statement);
+            const handle = preparedResult[0];
+            const expectedTypes = preparedResult[1];
+            const types = expectedTypes.map((t) => convertComplexType(t[0]));
+            const boundParamNames = expectedTypes.map((t) =>
+                t[1].toLowerCase(),
+            );
+            const prepared = new PreparedInfo(
+                types,
+                statement,
+                boundParamNames,
+                handle,
+            );
+            const limit = this.options.maxPrepared || 512;
+            if (this.#preparedCache.size >= limit) {
+                this.#preparedCache.delete(
+                    this.#preparedCache.keys().next().value!,
+                );
+            }
+            this.#preparedCache.set(statement, prepared);
+            return prepared;
+        })();
+        this.#preparing.set(statement, preparing);
+        try {
+            return await preparing;
+        } finally {
+            if (this.#preparing.get(statement) === preparing) {
+                this.#preparing.delete(statement);
+            }
+        }
     }
 
     /**
@@ -547,6 +587,7 @@ class Client extends events.EventEmitter {
                 prepared = await this.prepareStatement(query);
                 break;
             case query instanceof PreparedInfo:
+                // A handle stays valid after cache eviction, so a retained one can be reused.
                 prepared = query;
                 break;
             default:
@@ -562,15 +603,15 @@ class Client extends events.EventEmitter {
             unifiedParams = utils.adaptNamedParamsPrepared(params, prepared);
         }
 
-        let encoded = encodeParams(
+        const encoded = encodeParams(
             prepared.types,
             unifiedParams,
             this.#encoder,
         );
 
         if (paged) {
-            return this.rustClient!.executeSinglePage(
-                prepared.statement,
+            return this.rustClient!.executePreparedSinglePage(
+                prepared.handle,
                 encoded,
                 rustOptions,
                 pageState,
@@ -580,7 +621,7 @@ class Client extends events.EventEmitter {
         return [
             undefined,
             await this.rustClient!.executePreparedUnpaged(
-                prepared.statement,
+                prepared.handle,
                 encoded,
                 rustOptions,
             ),
@@ -882,9 +923,9 @@ class Client extends events.EventEmitter {
 
         let shouldBePrepared = execOptions.isPrepared();
         let allQueries: string[] = [];
+        let allPrepared: PreparedInfo[] = [];
         let parametersRows: Array<any> = [];
         let hints = execOptions.getHints() || [];
-        let preparedCache = new PreparedCache();
 
         for (let i = 0; i < queries.length; i++) {
             let element = queries[i];
@@ -906,13 +947,10 @@ class Client extends events.EventEmitter {
             isNamedParameters(params, execOptions);
 
             if (shouldBePrepared) {
-                let prepared = preparedCache.getElement(statement);
-                if (!prepared) {
-                    prepared = await this.prepareStatement(statement);
-                    preparedCache.storeElement(statement, prepared);
-                }
+                // prepareStatement reuses cached handles, also for repeated statements in this batch.
+                let prepared = await this.prepareStatement(statement);
                 types = prepared.types;
-                statement = prepared.statement;
+                allPrepared.push(prepared);
 
                 if (Array.isArray(params)) {
                     cleanParams = params;
@@ -937,7 +975,12 @@ class Client extends events.EventEmitter {
         }
 
         let rustOptions = execOptions.getRustOptions();
-        let batch = this.rustClient!.createBatch(allQueries, rustOptions);
+        let batch = shouldBePrepared
+            ? this.rustClient!.createPreparedBatch(
+                  allPrepared.map((prepared) => prepared.handle),
+                  rustOptions,
+              )
+            : this.rustClient!.createBatch(allQueries, rustOptions);
         let wrappedResult = await this.rustClient!.batch(batch, parametersRows);
         return new ResultSet(wrappedResult, this.#encoder);
     }

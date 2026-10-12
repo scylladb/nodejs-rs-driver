@@ -6,7 +6,8 @@ use std::time::Duration;
 
 use config::SessionOptions;
 use napi::Env;
-use scylla::client::caching_session::CachingSession;
+use napi::bindgen_prelude::{External, ExternalRef};
+use scylla::client::session::Session;
 use scylla::errors::{ExecutionError, RequestAttemptError};
 use scylla::response::{PagingState, PagingStateResponse};
 use scylla::serialize::row::{BuiltinTypeCheckError, BuiltinTypeCheckErrorKind};
@@ -26,8 +27,6 @@ use crate::utils::bigint_to_i64;
 use crate::utils::js_thread_only::JsThreadOnly;
 use crate::{requests::request::PreparedStatementWrapper, result::QueryResultWrapper};
 
-const DEFAULT_CACHE_SIZE: u32 = 512;
-
 #[napi]
 pub struct BatchWrapper {
     inner: Arc<Batch>,
@@ -35,7 +34,7 @@ pub struct BatchWrapper {
 
 #[napi]
 pub struct SessionWrapper {
-    pub(crate) inner: Arc<CachingSession>,
+    pub(crate) inner: Arc<Session>,
     /// Cache of the last `ClusterSnapshot` that was computed, alongside the `Arc<ClusterState>`
     /// pointer it was built from.
     cluster_snapshot: Mutex<Option<JsThreadOnly<ClusterSnapshot>>>,
@@ -59,6 +58,12 @@ enum QueryValues {
         statement: PreparedStatement,
     },
 }
+
+/// A native prepared handle and its bind metadata: (expected type, variable name) pairs.
+type PreparedHandleWithBindMetadata = (
+    External<PreparedStatementWrapper>,
+    Vec<(ComplexType<'static>, String)>,
+);
 
 fn validate_value_count(
     prepared: &PreparedStatement,
@@ -89,7 +94,7 @@ impl QueryExecutor {
 
 impl QueryExecutor {
     async fn fetch_next_page_internal(
-        session: &CachingSession,
+        session: &Session,
         values: &QueryValues,
         paging_state: Option<PagingState>,
     ) -> ConvertedResult<PagingResult> {
@@ -98,13 +103,11 @@ impl QueryExecutor {
         let (result, paging_state_response) = match values {
             QueryValues::Prepared { values, statement } => {
                 session
-                    .get_session()
                     .execute_unstable(statement, &values.inner, true, paging_state)
                     .await
             }
             QueryValues::Unprepared { params, statement } => {
                 session
-                    .get_session()
                     .query_single_page(statement.clone(), params, paging_state)
                     .await
             }
@@ -144,20 +147,15 @@ impl QueryExecutor {
 #[napi]
 impl SessionWrapper {
     async fn execute_unpaged_serialized(
-        session: &CachingSession,
-        statement: Statement,
+        session: &Session,
+        prepared: &PreparedStatement,
         params: &SerializedValuesWrapper,
     ) -> ConvertedResult<QueryResultWrapper> {
-        let prepared = session
-            .add_prepared_statement(&statement)
-            .await
-            .map_err(ExecutionError::from)?;
-        validate_value_count(&prepared, params)?;
+        validate_value_count(prepared, params)?;
         // The unstable interop API accepts already-owned SerializedValues. This
         // avoids sending JS buffers or per-value Vec copies across an await.
         let (result, paging_state) = session
-            .get_session()
-            .execute_unstable(&prepared, &params.inner, false, PagingState::start())
+            .execute_unstable(prepared, &params.inner, false, PagingState::start())
             .await?;
         if !matches!(paging_state, PagingStateResponse::NoMorePages) {
             tracing::error!("Unpaged prepared query returned a non-empty paging state");
@@ -173,12 +171,10 @@ impl SessionWrapper {
     pub fn create_session(env: Env, options: SessionOptions) -> JsAsyncResult<SessionWrapper> {
         BridgedPromise::spawn(&env, || {
             Ok(async move {
-                let cache_size = options.cache_size.unwrap_or(DEFAULT_CACHE_SIZE) as usize;
                 let local_datacenter = options.local_datacenter.clone();
                 let builder = configure_session_builder(options)?;
                 let session = builder.build().await?;
                 validate_local_datacenter(&session, local_datacenter.as_deref())?;
-                let session: CachingSession = CachingSession::from(session, cache_size);
                 Ok(SessionWrapper {
                     inner: Arc::new(session),
                     cluster_snapshot: Mutex::new(None),
@@ -190,11 +186,7 @@ impl SessionWrapper {
     /// Returns the name of the current keyspace
     #[napi]
     pub fn get_keyspace(&self) -> Option<String> {
-        self.inner
-            .get_session()
-            .get_keyspace()
-            .as_deref()
-            .map(ToOwned::to_owned)
+        self.inner.get_keyspace().as_deref().map(ToOwned::to_owned)
     }
 
     /// Checks whether all nodes that are currently up agree on the schema version.
@@ -209,7 +201,7 @@ impl SessionWrapper {
         BridgedPromise::spawn(&env, || {
             let inner = Arc::clone(&self.inner);
             Ok(async move {
-                Ok(match inner.get_session().check_schema_agreement().await {
+                Ok(match inner.check_schema_agreement().await {
                     Ok(agreed_version) => agreed_version.is_some(),
                     Err(err) => {
                         tracing::warn!(
@@ -233,7 +225,7 @@ impl SessionWrapper {
         BridgedPromise::spawn(&env, || {
             let inner = Arc::clone(&self.inner);
             Ok(async move {
-                inner.get_session().await_schema_agreement().await?;
+                inner.await_schema_agreement().await?;
                 Ok(())
             })
         })
@@ -259,57 +251,56 @@ impl SessionWrapper {
                 self.apply_statement_options(query.into(), &options.options)?;
             let inner = Arc::clone(&self.inner);
             Ok(async move {
-                let result = inner.get_session().query_unpaged(statement, params).await?;
+                let result = inner.query_unpaged(statement, params).await?;
                 QueryResultWrapper::from_query(result)
             })
         })
     }
 
     /// Prepares a statement through rust driver for a given session.
-    /// Returns (expected type, variable name) pairs for the prepared statement.
-    #[napi(ts_return_type = "Promise<Array<[ComplexType, string]>>")]
+    /// Returns the native prepared handle and its bind metadata. The bind metadata
+    /// remains fixed for this handle even if the schema changes.
+    #[napi(
+        ts_return_type = "Promise<[ExternalObject<PreparedStatementWrapper>, Array<[ComplexType, string]>]>"
+    )]
     pub fn prepare_statement(
         &self,
         env: Env,
         statement: String,
-    ) -> JsAsyncResult<Vec<(ComplexType<'static>, String)>> {
+    ) -> JsAsyncResult<PreparedHandleWithBindMetadata> {
         BridgedPromise::spawn(&env, || {
             let statement: Statement = statement.into();
             let inner = Arc::clone(&self.inner);
             Ok(async move {
-                let w = PreparedStatementWrapper {
-                    prepared: inner
-                        .add_prepared_statement(&statement) // TODO: change for add_prepared_statement_to_owned after it is made public
-                        .await?,
+                let handle = PreparedStatementWrapper {
+                    prepared: inner.prepare(statement).await?,
                 };
-                let types = w.get_expected_types();
-                ConvertedResult::Ok(types)
+                let expected_types = handle.get_expected_types();
+                ConvertedResult::Ok((External::new(handle), expected_types))
             })
         })
     }
 
-    /// Execute a given prepared statement against the database with provided parameters.
+    /// Execute a given prepared statement against the database with provided parameters,
+    /// without paging.
     ///
     /// Returns a wrapper of the result provided by the rust driver
     ///
-    /// All parameters must be in a type recognizable by ParameterWrapper
-    /// -- each value must be tuple of its ComplexType and the value itself.
-    /// Creating Prepared statement may help to determine required types
-    ///
-    /// Currently `execute_unpaged` from rust driver is used, so no paging is done
-    /// and there is no support for any query options
+    /// All parameters must be already serialized according to the bind metadata
+    /// of the prepared statement.
     #[napi(ts_return_type = "Promise<QueryResultWrapper>")]
     pub fn execute_prepared_unpaged(
         &self,
         env: Env,
-        query: String,
+        handle: &External<PreparedStatementWrapper>,
         params: SerializedValuesWrapper,
         options: &QueryOptionsWrapper,
     ) -> JsAsyncResult<QueryResultWrapper> {
         BridgedPromise::spawn(&env, || {
-            let query = self.apply_statement_options(query.into(), &options.options)?;
+            let statement =
+                self.apply_prepared_statement_options(handle.prepared.clone(), &options.options)?;
             let inner = Arc::clone(&self.inner);
-            Ok(async move { Self::execute_unpaged_serialized(&inner, query, &params).await })
+            Ok(async move { Self::execute_unpaged_serialized(&inner, &statement, &params).await })
         })
     }
 
@@ -367,27 +358,24 @@ impl SessionWrapper {
     /// For the following pages you need to provide page state
     /// received from the previous page
     #[napi(ts_return_type = "Promise<PagingResultWithExecutor>")]
-    pub fn execute_single_page(
+    pub fn execute_prepared_single_page(
         &self,
         env: Env,
-        query: String,
+        handle: &External<PreparedStatementWrapper>,
         params: SerializedValuesWrapper,
         options: &QueryOptionsWrapper,
         paging_state: Option<&PagingStateWrapper>,
     ) -> JsAsyncResult<PagingResultWithExecutor> {
         BridgedPromise::spawn(&env, || {
-            let statement = self.apply_statement_options(query.into(), &options.options)?;
+            let statement =
+                self.apply_prepared_statement_options(handle.prepared.clone(), &options.options)?;
+            validate_value_count(&statement, &params)?;
             let paging_state = paging_state.map(|p| p.inner.clone());
             let inner = Arc::clone(&self.inner);
             Ok(async move {
-                let prepared = inner
-                    .add_prepared_statement(&statement)
-                    .await
-                    .map_err(ExecutionError::from)?;
-                validate_value_count(&prepared, &params)?;
                 let executor = QueryExecutor::new(QueryValues::Prepared {
                     values: params,
-                    statement: prepared,
+                    statement,
                 });
 
                 let res =
@@ -411,6 +399,28 @@ impl SessionWrapper {
             statements
                 .into_iter()
                 .for_each(|q| batch.append_statement(q.as_str()));
+
+            batch = self.apply_batch_options(batch, &options.options)?;
+            ConvertedResult::Ok(BatchWrapper {
+                inner: Arc::new(batch),
+            })
+        })
+    }
+
+    /// Creates object representing batch of already prepared statements.
+    #[napi(ts_return_type = "BatchWrapper")]
+    pub fn create_prepared_batch(
+        &self,
+        #[napi(ts_arg_type = "Array<ExternalObject<PreparedStatementWrapper>>")] statements: Vec<
+            ExternalRef<PreparedStatementWrapper>,
+        >,
+        options: &QueryOptionsWrapper,
+    ) -> JsResult<BatchWrapper> {
+        with_custom_error(|| {
+            let mut batch: Batch = Default::default();
+            statements
+                .iter()
+                .for_each(|handle| batch.append_statement(handle.prepared.clone()));
 
             batch = self.apply_batch_options(batch, &options.options)?;
             ConvertedResult::Ok(BatchWrapper {
@@ -503,7 +513,7 @@ impl SessionWrapper {
             .cluster_snapshot
             .lock()
             .expect("poisoning impossible due to process-aborting panics");
-        let rust_cluster_state = self.inner.get_session().get_cluster_state();
+        let rust_cluster_state = self.inner.get_cluster_state();
 
         let cached_state = cache_guard.as_ref().map(|cached| cached.get(env));
 
@@ -618,4 +628,9 @@ macro_rules! make_non_batch_apply_options {
 }
 
 make_non_batch_apply_options!(Statement, apply_statement_options, statement_opt_partial);
+make_non_batch_apply_options!(
+    PreparedStatement,
+    apply_prepared_statement_options,
+    prepared_statement_opt_partial
+);
 make_apply_options!(Batch, apply_batch_options);

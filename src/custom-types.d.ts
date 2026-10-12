@@ -46,6 +46,9 @@ export type EncodedValuesWrapper = Uint8Array | null | undefined
 /** Values encoded for one CQL statement, including null and unset markers. */
 export type SerializedValuesWrapper = Array<EncodedValuesWrapper>
 
+/** Opaque native prepared statement stored by the client. */
+export interface PreparedStatementWrapper {}
+
 // ---------------------------------------------------------------------------
 // Types for objects produced by define_rust_to_js_convertible_object.
 // These are plain JS objects returned from Rust to JS
