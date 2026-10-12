@@ -57,3 +57,6 @@ jobs:
         shell: bash
       - name: Run not fully integrated unit tests
         run: npm run unit-not-supported
+      - name: Run Rust unit tests
+        run: cargo test --lib --all-features --target ${{ matrix.settings.target }}
+        shell: bash
