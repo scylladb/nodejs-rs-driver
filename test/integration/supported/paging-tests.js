@@ -85,6 +85,99 @@ module.exports = function (keyspace, prepare) {
             assert.strictEqual(rs.rows.length, 30);
         });
 
+        async function readAllPages(fetchSize) {
+            const ids = [];
+            let pageState;
+            do {
+                const rs = await client.execute(query, [keyA], {
+                    prepare,
+                    fetchSize,
+                    pageState,
+                });
+                assert.deepEqual(
+                    rs.columns.map((c) => c.name),
+                    ["id1", "id2", "value"],
+                );
+                ids.push(...rs.rows.map((row) => row["id2"]));
+                pageState = rs.pageState;
+            } while (pageState);
+            return ids;
+        }
+
+        it("should follow pageState to the last page", async () => {
+            const expected = Array.from(
+                { length: rowsInPartitionA },
+                (_, i) => i,
+            );
+            assert.deepEqual(await readAllPages(30), expected);
+            // The second run reuses the statement, and for prepare: true also the cached handle.
+            assert.deepEqual(await readAllPages(30), expected);
+        });
+
+        it("should retrieve all pages with eachRow and autoPage", async () => {
+            const ids = [];
+            await new Promise((resolve, reject) =>
+                client.eachRow(
+                    query,
+                    [keyA],
+                    { prepare, fetchSize: 17, autoPage: true },
+                    (n, row) => ids.push(row["id2"]),
+                    (err) => (err ? reject(err) : resolve()),
+                ),
+            );
+            assert.deepEqual(
+                ids,
+                Array.from({ length: rowsInPartitionA }, (_, i) => i),
+            );
+        });
+
+        it("should retrieve all pages with stream", async () => {
+            const ids = [];
+            const stream = client.stream(query, [keyA], {
+                prepare,
+                fetchSize: 23,
+            });
+            for await (const row of stream) {
+                ids.push(row["id2"]);
+            }
+            assert.deepEqual(
+                ids,
+                Array.from({ length: rowsInPartitionA }, (_, i) => i),
+            );
+        });
+
+        it("should return new result columns after a schema change", async () => {
+            const table = helper.getRandomName("tbl_alter");
+            await helper.ddl(
+                client,
+                `CREATE TABLE ${table} (id1 text, id2 int, PRIMARY KEY (id1, id2))`,
+            );
+            const insertOptions = {
+                prepare: true,
+                consistency: types.consistencies.all,
+            };
+            for (let i = 0; i < 5; i++) {
+                await client.execute(
+                    `INSERT INTO ${table} (id1, id2) VALUES (?, ?)`,
+                    [keyA, i],
+                    insertOptions,
+                );
+            }
+            const select = `SELECT * FROM ${table} WHERE id1 = ?`;
+            const run = async () => {
+                const rs = await client.execute(select, [keyA], {
+                    prepare,
+                    fetchSize: 2,
+                });
+                const rows = await helper.asyncIteratorToArray(rs);
+                assert.lengthOf(rows, 5);
+                return rs.columns.map((c) => c.name);
+            };
+            assert.deepEqual(await run(), ["id1", "id2"]);
+            await helper.ddl(client, `ALTER TABLE ${table} ADD extra text`);
+            assert.deepEqual(await run(), ["id1", "id2", "extra"]);
+        });
+
         if (Symbol.asyncIterator) {
             it("should retrieve the following pages with async iterator", async () => {
                 // Use a small fetch size for testing, usually should be in the hundreds or thousands
