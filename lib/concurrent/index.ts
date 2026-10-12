@@ -2,7 +2,6 @@
 
 import utils = require("../utils");
 import { Readable, Stream } from "stream";
-import { PreparedCache } from "../cache";
 import type { Client } from "../../";
 
 /**
@@ -129,7 +128,6 @@ class ArrayBasedExecutor {
     #queryOptions: any;
     #result: ResultSetGroup;
     #stop: boolean;
-    #cache: any;
 
     /**
      * @param options The execution options.
@@ -158,7 +156,6 @@ class ArrayBasedExecutor {
         });
         this.#result = new ResultSetGroup(options);
         this.#stop = false;
-        this.#cache = new PreparedCache();
     }
 
     async execute(): Promise<ResultSetGroup> {
@@ -195,11 +192,7 @@ class ArrayBasedExecutor {
         }
 
         try {
-            let prepared = this.#cache.getElement(query);
-            if (!prepared) {
-                prepared = await this.#client.prepareStatement(query);
-                this.#cache.storeElement(query, prepared);
-            }
+            const prepared = await this.#client.prepareStatement(query);
             await this.#client
                 .rustyExecute(prepared, params || [], this.#queryOptions)
                 .then((rs: any) => this.#result.setResultItem(index, rs));
