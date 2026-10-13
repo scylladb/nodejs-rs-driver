@@ -47,9 +47,17 @@ describe("Metadata#checkSchemaAgreement()", function () {
                     const agreement =
                         await client.metadata.checkSchemaAgreement();
                     assert.strictEqual(agreement, false);
-                    await helper.wait.until(() =>
-                        warnings.some((m) => m.includes("schema agreement")),
-                    );
+                    await helper.wait
+                        .until(() =>
+                            warnings.some((m) =>
+                                m.includes("schema agreement"),
+                            ),
+                        )
+                        .catch((err) =>
+                            assert.fail(
+                                `${err.message}; got: ${JSON.stringify(warnings)}`,
+                            ),
+                        );
                 } finally {
                     client.removeListener("log", onLog);
                 }
