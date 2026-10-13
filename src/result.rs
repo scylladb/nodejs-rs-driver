@@ -14,7 +14,7 @@ use scylla::{
 };
 #[cfg(feature = "tests")]
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::{ffi::c_void, ptr};
+use std::{ffi::c_void, ptr, sync::Mutex};
 
 #[cfg(feature = "tests")]
 static PAGE_BUFFER_FINALIZATIONS: AtomicU32 = AtomicU32::new(0);
@@ -33,6 +33,80 @@ enum QueryResultVariant {
 #[napi]
 pub struct QueryResultWrapper {
     inner: QueryResultVariant,
+    /// The result metadata generation of the prepared handle that produced this result.
+    /// None for non-row results, and for results of unprepared statements and of batches.
+    /// Goal: let JS reuse converted result metadata, to avoid N-API conversion cost.
+    /// See [`ResultMetadataTracker`].
+    metadata_generation: Option<u32>,
+}
+
+/// Tracks the result metadata of one prepared statement handle.
+///
+/// Goal: cache the converted result metadata (column names and types) on the JS side.
+/// Converting it from Rust to JS takes many N-API calls per column. Without the cache,
+/// this conversion runs for each result. With it, it runs only when the result metadata
+/// of the prepared statement changes.
+///
+/// Each result gets a generation number. Two results have the same generation
+/// only if they have the same result metadata. JS uses this to reuse
+/// the converted column names and types, without asking for them again.
+///
+/// Change detection:
+/// - If the server sends a result metadata ID (Scylla extension), store and compare only the ID.
+/// - Else, store and compare the column specifications. Without the extension,
+///   the server sends full metadata with each response.
+/// - An empty ID cannot identify the metadata, so it counts as no ID.
+/// - If the results switch between having an ID and not having one, count this as a change.
+///   This costs one conversion in JS. It can happen, for example, in a mixed cluster
+///   during a rolling upgrade, where only some connections use the extension.
+#[derive(Default)]
+pub(crate) struct ResultMetadataTracker {
+    last: Mutex<Option<KnownResultMetadata>>,
+}
+
+struct KnownResultMetadata {
+    metadata: KnownMetadata,
+    generation: u32,
+}
+
+/// The part of the result metadata that is needed to detect a change.
+enum KnownMetadata {
+    /// The result metadata ID. It changes when the metadata changes.
+    Id(Vec<u8>),
+    /// The column specifications, for results without a result metadata ID.
+    ColSpecs(Vec<ColumnSpec<'static>>),
+}
+
+impl ResultMetadataTracker {
+    fn generation(&self, id: Option<&[u8]>, col_specs: &[ColumnSpec<'_>]) -> u32 {
+        let id = id.filter(|id| !id.is_empty());
+        let mut last = self
+            .last
+            .lock()
+            .expect("poisoning impossible due to process-aborting panics");
+        if let Some(known) = last.as_ref() {
+            let same = match (&known.metadata, id) {
+                (KnownMetadata::Id(known_id), Some(id)) => known_id.as_slice() == id,
+                (KnownMetadata::ColSpecs(known_specs), None) => known_specs.as_slice() == col_specs,
+                _ => false,
+            };
+            if same {
+                return known.generation;
+            }
+        }
+        let generation = last.as_ref().map_or(0, |k| k.generation.wrapping_add(1));
+        let metadata = match id {
+            Some(id) => KnownMetadata::Id(id.to_vec()),
+            None => {
+                KnownMetadata::ColSpecs(col_specs.iter().map(|s| s.clone().into_owned()).collect())
+            }
+        };
+        *last = Some(KnownResultMetadata {
+            metadata,
+            generation,
+        });
+        generation
+    }
 }
 
 /// Wrapper for the information required in the ResultSet.columns field
@@ -121,16 +195,56 @@ impl ToNapiValue for PageBuffer {
 
 #[napi]
 impl QueryResultWrapper {
-    /// Converts rust query result into query result wrapper that can be passed to NAPI-RS
-    pub fn from_query(result: QueryResult) -> ConvertedResult<QueryResultWrapper> {
-        let value = match result.into_rows_result() {
-            Ok(v) => QueryResultVariant::RowsResult(v),
-            Err(IntoRowsResultError::ResultNotRows(v)) => QueryResultVariant::EmptyResult(v),
+    /// Converts rust query result into query result wrapper that can be passed to NAPI-RS.
+    /// For results of unprepared statements and of batches, which have no metadata generation.
+    pub fn from_unprepared_or_batch(result: QueryResult) -> ConvertedResult<QueryResultWrapper> {
+        Self::new(result, None)
+    }
+
+    /// Converts rust query result of a prepared handle into query result wrapper,
+    /// tagged with its metadata generation in the tracker of the handle.
+    /// Goal: let JS reuse converted result metadata, to avoid N-API conversion cost.
+    /// See [`ResultMetadataTracker`].
+    pub(crate) fn from_prepared(
+        result: QueryResult,
+        tracker: &ResultMetadataTracker,
+    ) -> ConvertedResult<QueryResultWrapper> {
+        Self::new(result, Some(tracker))
+    }
+
+    fn new(
+        result: QueryResult,
+        tracker: Option<&ResultMetadataTracker>,
+    ) -> ConvertedResult<QueryResultWrapper> {
+        let (inner, metadata_generation) = match result.into_rows_result() {
+            Ok(v) => {
+                let metadata_generation = tracker.map(|tracker| {
+                    let metadata = v.raw_rows_with_metadata().metadata();
+                    tracker.generation(metadata.id(), metadata.col_specs())
+                });
+                (QueryResultVariant::RowsResult(v), metadata_generation)
+            }
+            Err(IntoRowsResultError::ResultNotRows(v)) => {
+                (QueryResultVariant::EmptyResult(v), None)
+            }
             Err(IntoRowsResultError::ResultMetadataLazyDeserializationError(e)) => {
                 return Err(ConvertedError::from(e));
             }
         };
-        Ok(QueryResultWrapper { inner: value })
+        Ok(QueryResultWrapper {
+            inner,
+            metadata_generation,
+        })
+    }
+
+    /// Returns the result metadata generation of the prepared handle that produced this result.
+    /// Results with the same generation have the same column names and types.
+    /// Returns None for non-row results, and for results of unprepared statements and of batches.
+    /// Goal: let JS reuse converted result metadata, to avoid N-API conversion cost.
+    /// See ResultMetadataTracker in the Rust code.
+    #[napi]
+    pub fn get_metadata_generation(&self) -> Option<u32> {
+        self.metadata_generation
     }
 
     /// Extracts all the rows of the result as an independent buffer and a row count.
@@ -251,5 +365,68 @@ impl QueryResultWrapper {
                 .tracing_id()
                 .map(|val| Buffer::from(val.as_bytes().as_slice())),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use scylla::{
+        cluster::metadata::{ColumnType, NativeType},
+        frame::response::result::{ColumnSpec, TableSpec},
+    };
+
+    use super::ResultMetadataTracker;
+
+    fn spec(name: &str, typ: NativeType) -> ColumnSpec<'static> {
+        ColumnSpec::owned(
+            name.to_owned(),
+            ColumnType::Native(typ),
+            TableSpec::owned("ks".to_owned(), "t".to_owned()),
+        )
+    }
+
+    #[test]
+    fn same_metadata_id_keeps_generation() {
+        let tracker = ResultMetadataTracker::default();
+        let specs = [spec("v", NativeType::Int)];
+        assert_eq!(tracker.generation(Some(&[1]), &specs), 0);
+        assert_eq!(tracker.generation(Some(&[1]), &specs), 0);
+    }
+
+    #[test]
+    fn changed_metadata_id_bumps_generation() {
+        let tracker = ResultMetadataTracker::default();
+        let int = [spec("v", NativeType::Int)];
+        let text = [spec("v", NativeType::Text)];
+        assert_eq!(tracker.generation(Some(&[1]), &int), 0);
+        assert_eq!(tracker.generation(Some(&[2]), &text), 1);
+        assert_eq!(tracker.generation(Some(&[2]), &text), 1);
+        // Concurrent results across a schema change only cost a refresh.
+        assert_eq!(tracker.generation(Some(&[1]), &int), 2);
+    }
+
+    #[test]
+    fn without_metadata_id_compares_column_specs() {
+        let tracker = ResultMetadataTracker::default();
+        let int = [spec("v", NativeType::Int)];
+        let text = [spec("v", NativeType::Text)];
+        let added = [spec("v", NativeType::Int), spec("w", NativeType::Int)];
+        assert_eq!(tracker.generation(None, &int), 0);
+        assert_eq!(tracker.generation(None, &int), 0);
+        // An empty ID cannot identify the metadata, so it counts as no ID.
+        assert_eq!(tracker.generation(Some(&[]), &int), 0);
+        assert_eq!(tracker.generation(None, &text), 1);
+        assert_eq!(tracker.generation(None, &added), 2);
+    }
+
+    #[test]
+    fn switching_between_id_and_no_id_bumps_generation() {
+        let tracker = ResultMetadataTracker::default();
+        let int = [spec("v", NativeType::Int)];
+        assert_eq!(tracker.generation(Some(&[1]), &int), 0);
+        // Same column specs, but the stored ID cannot be compared with them.
+        assert_eq!(tracker.generation(None, &int), 1);
+        assert_eq!(tracker.generation(None, &int), 1);
+        assert_eq!(tracker.generation(Some(&[1]), &int), 2);
     }
 }

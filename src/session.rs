@@ -19,13 +19,14 @@ use crate::async_bridge::{BridgedPromise, JsAsyncResult};
 use crate::errors::{ConvertedError, ConvertedResult, JsResult, make_js_error, with_custom_error};
 use crate::metadata::state::ClusterSnapshot;
 use crate::paging::{PagingResult, PagingResultWithExecutor, PagingStateWrapper};
+use crate::requests::request::PreparedStatementWrapper;
 use crate::requests::request::{QueryOptionsObj, QueryOptionsWrapper};
+use crate::result::{QueryResultWrapper, ResultMetadataTracker};
 use crate::session::config::configure_session_builder;
 use crate::types::encoded_data::{EncodedValuesWrapper, SerializedValuesWrapper};
 use crate::types::type_wrappers::ComplexType;
 use crate::utils::bigint_to_i64;
 use crate::utils::js_thread_only::JsThreadOnly;
-use crate::{requests::request::PreparedStatementWrapper, result::QueryResultWrapper};
 
 #[napi]
 pub struct BatchWrapper {
@@ -56,6 +57,11 @@ enum QueryValues {
     Prepared {
         values: SerializedValuesWrapper,
         statement: PreparedStatement,
+        /// The tracker of the prepared handle, so that later pages are also tagged
+        /// with metadata generations.
+        /// Goal: let JS reuse converted result metadata, to avoid N-API conversion cost.
+        /// See [`ResultMetadataTracker`].
+        result_metadata: Arc<ResultMetadataTracker>,
     },
 }
 
@@ -101,20 +107,32 @@ impl QueryExecutor {
         let paging_state = paging_state.unwrap_or(PagingState::start());
 
         let (result, paging_state_response) = match values {
-            QueryValues::Prepared { values, statement } => {
-                session
+            QueryValues::Prepared {
+                values,
+                statement,
+                result_metadata,
+            } => {
+                let (result, paging_state_response) = session
                     .execute_unstable(statement, &values.inner, true, paging_state)
-                    .await
+                    .await?;
+                (
+                    QueryResultWrapper::from_prepared(result, result_metadata)?,
+                    paging_state_response,
+                )
             }
             QueryValues::Unprepared { params, statement } => {
-                session
+                let (result, paging_state_response) = session
                     .query_single_page(statement.clone(), params, paging_state)
-                    .await
+                    .await?;
+                (
+                    QueryResultWrapper::from_unprepared_or_batch(result)?,
+                    paging_state_response,
+                )
             }
-        }?;
+        };
 
         Ok(PagingResult {
-            result: QueryResultWrapper::from_query(result)?,
+            result,
             paging_state: match paging_state_response {
                 PagingStateResponse::HasMorePages { state } => {
                     Some(PagingStateWrapper { inner: state })
@@ -150,6 +168,7 @@ impl SessionWrapper {
         session: &Session,
         prepared: &PreparedStatement,
         params: &SerializedValuesWrapper,
+        result_metadata: &ResultMetadataTracker,
     ) -> ConvertedResult<QueryResultWrapper> {
         validate_value_count(prepared, params)?;
         // The unstable interop API accepts already-owned SerializedValues. This
@@ -163,7 +182,7 @@ impl SessionWrapper {
                 RequestAttemptError::NonfinishedPagingState,
             )));
         }
-        QueryResultWrapper::from_query(result)
+        QueryResultWrapper::from_prepared(result, result_metadata)
     }
 
     /// Creates session based on the provided session options.
@@ -252,7 +271,7 @@ impl SessionWrapper {
             let inner = Arc::clone(&self.inner);
             Ok(async move {
                 let result = inner.query_unpaged(statement, params).await?;
-                QueryResultWrapper::from_query(result)
+                QueryResultWrapper::from_unprepared_or_batch(result)
             })
         })
     }
@@ -274,6 +293,7 @@ impl SessionWrapper {
             Ok(async move {
                 let handle = PreparedStatementWrapper {
                     prepared: inner.prepare(statement).await?,
+                    result_metadata: Default::default(),
                 };
                 let expected_types = handle.get_expected_types();
                 ConvertedResult::Ok((External::new(handle), expected_types))
@@ -299,8 +319,12 @@ impl SessionWrapper {
         BridgedPromise::spawn(&env, || {
             let statement =
                 self.apply_prepared_statement_options(handle.prepared.clone(), &options.options)?;
+            let result_metadata = Arc::clone(&handle.result_metadata);
             let inner = Arc::clone(&self.inner);
-            Ok(async move { Self::execute_unpaged_serialized(&inner, &statement, &params).await })
+            Ok(async move {
+                Self::execute_unpaged_serialized(&inner, &statement, &params, &result_metadata)
+                    .await
+            })
         })
     }
 
@@ -319,7 +343,7 @@ impl SessionWrapper {
             let inner = Arc::clone(&self.inner);
             Ok(async move {
                 let res = inner.batch(&batch, params).await?;
-                QueryResultWrapper::from_query(res)
+                QueryResultWrapper::from_unprepared_or_batch(res)
             })
         })
     }
@@ -371,11 +395,13 @@ impl SessionWrapper {
                 self.apply_prepared_statement_options(handle.prepared.clone(), &options.options)?;
             validate_value_count(&statement, &params)?;
             let paging_state = paging_state.map(|p| p.inner.clone());
+            let result_metadata = Arc::clone(&handle.result_metadata);
             let inner = Arc::clone(&self.inner);
             Ok(async move {
                 let executor = QueryExecutor::new(QueryValues::Prepared {
                     values: params,
                     statement,
+                    result_metadata,
                 });
 
                 let res =

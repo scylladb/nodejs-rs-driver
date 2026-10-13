@@ -1,10 +1,17 @@
 use napi::bindgen_prelude::BigInt;
 use scylla::statement::prepared::PreparedStatement;
 
-use crate::types::type_wrappers::ComplexType;
+use std::sync::Arc;
+
+use crate::{result::ResultMetadataTracker, types::type_wrappers::ComplexType};
 
 pub struct PreparedStatementWrapper {
     pub(crate) prepared: PreparedStatement,
+    /// Tracks the result metadata generations of this handle.
+    /// Shared with the executors of later pages.
+    /// Goal: let JS reuse converted result metadata, to avoid N-API conversion cost.
+    /// See [`ResultMetadataTracker`].
+    pub(crate) result_metadata: Arc<ResultMetadataTracker>,
 }
 
 // Missing fields

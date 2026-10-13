@@ -4,7 +4,7 @@ import utils = require("../utils");
 import errors = require("../errors");
 import rust = require("../../index");
 import resultsWrapper = require("./results-wrapper");
-import { ColumnMetadata } from "./results-wrapper";
+import { ColumnMetadata, ResultColumnsCache } from "./results-wrapper";
 import Uuid = require("./uuid");
 import Row = require("./row");
 import Encoder = require("../encoder");
@@ -115,10 +115,21 @@ class ResultSet {
         pageState: Buffer,
     ) => Promise<[rust.PagingStateWrapper | null, rust.QueryResultWrapper]>;
 
+    /**
+     * Converted columns of the prepared handle, reused for later pages.
+     * Goal: avoid N-API conversion cost of result metadata on each page.
+     * See {@link ResultColumnsCache}.
+     * Installed as a non-enumerable property, because it's a private implementation detail.
+     * @internal
+     * @ignore
+     */
+    declare columnsCache?: ResultColumnsCache;
+
     constructor(
         result: rust.QueryResultWrapper,
         encoder: Encoder,
         pagingState?: rust.PagingStateWrapper | null,
+        columnsCache?: ResultColumnsCache,
     ) {
         // Old constructor logic only for purpose of unit tests.
         if (!(result instanceof rust.QueryResultWrapper)) {
@@ -150,7 +161,17 @@ class ResultSet {
             }
             return;
         }
-        this.rows = resultsWrapper.getRowsFromResultsWrapper(result, encoder);
+        this.rows = resultsWrapper.getRowsFromResultsWrapper(
+            result,
+            encoder,
+            columnsCache,
+        );
+        if (columnsCache) {
+            Object.defineProperty(this, "columnsCache", {
+                value: columnsCache,
+                enumerable: false,
+            });
+        }
 
         this.rowLength = this.rows ? this.rows.length : 0;
 
@@ -317,6 +338,7 @@ class ResultSet {
                     rows = resultsWrapper.getRowsFromResultsWrapper(
                         rs[1],
                         encoder,
+                        self.columnsCache,
                     ) as Array<Row>;
                     index = 0;
                     if (rs[0]) {

@@ -39,6 +39,8 @@ The driver keeps a cache of the last `ClientOptions.maxPrepared` statements. Thi
 The bind types and parameter names of a prepared statement remain fixed for as long as its cached handle is reused, as in the Rust driver. A schema change does not automatically refresh this metadata. If you change a table or user-defined type used by a prepared statement, create a new `Client` before executing that statement with the changed schema.
 :::
 
+Result columns behave differently. The driver reuses the column names and types of a prepared statement's results only while the result metadata stays the same. It detects changes with the result metadata ID when ScyllaDB supports it, and with the column metadata in each response otherwise. A schema change, such as `ALTER TABLE ... ADD` with `SELECT *`, is visible in the next result.
+
 :::{caution}
 **Ensure sufficient cache size.** If you execute more than `ClientOptions.maxPrepared` different statements, you will experience cache flickering, defeating the purpose of prepared
 statements and significantly decreasing driver performance.

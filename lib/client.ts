@@ -18,6 +18,7 @@ import clientOptions = require("./client-options");
 import ClientState = require("./metadata/client-state");
 import packageInfo = require("../package.json");
 import { ExecutionOptions, DefaultExecutionOptions } from "./execution-options";
+import { ResultColumnsCache } from "./types/results-wrapper";
 import promiseUtils = require("./promise-utils");
 import rust = require("../index");
 import ResultSet = require("./types/result-set");
@@ -528,15 +529,18 @@ class Client extends events.EventEmitter {
         let rustOptions = execOptions.getRustOptions();
 
         let resultTuple: rust.PagingResultWithExecutor;
+        let columnsCache: ResultColumnsCache | undefined;
 
         if (execOptions.isPrepared()) {
+            const prepared = await this.#resolvePrepared(query);
             resultTuple = await this.#rustyExecutePrepared(
-                query,
+                prepared,
                 params,
                 rustOptions,
                 paged,
                 pageState,
             );
+            columnsCache = prepared.resultColumns;
         } else {
             // This is checked in isNamedParameters. The assert here is to satisfy the TS compiler.
             assert(Array.isArray(params));
@@ -554,7 +558,12 @@ class Client extends events.EventEmitter {
         let resultPageState = resultTuple[0];
         let executor = resultTuple[2];
 
-        let resultSet = new ResultSet(result, this.#encoder, resultPageState);
+        let resultSet = new ResultSet(
+            result,
+            this.#encoder,
+            resultPageState,
+            columnsCache,
+        );
         if (resultPageState) {
             // If resultPageState then executor must be defined according to type definition.
             assert(executor instanceof rust.QueryExecutor);
@@ -571,31 +580,32 @@ class Client extends events.EventEmitter {
         return resultSet;
     }
 
-    async #rustyExecutePrepared(
+    async #resolvePrepared(
         query: string | PreparedInfo,
-        params: ArrayOrObject,
-        rustOptions: rust.QueryOptionsWrapper,
-        paged: boolean,
-        pageState?: rust.PagingStateWrapper,
-    ): Promise<rust.PagingResultWithExecutor> {
-        let prepared: PreparedInfo;
+    ): Promise<PreparedInfo> {
         // If the statement is already prepared, skip the preparation process
         // Otherwise call Rust part to prepare a statement
 
         switch (true) {
             case typeof query === "string":
-                prepared = await this.prepareStatement(query);
-                break;
+                return await this.prepareStatement(query);
             case query instanceof PreparedInfo:
                 // A handle stays valid after cache eviction, so a retained one can be reused.
-                prepared = query;
-                break;
+                return query;
             default:
                 throw new TypeError(
                     `Invalid type for query. Got ${query}, expected string or internal prepared info`,
                 );
         }
+    }
 
+    async #rustyExecutePrepared(
+        prepared: PreparedInfo,
+        params: ArrayOrObject,
+        rustOptions: rust.QueryOptionsWrapper,
+        paged: boolean,
+        pageState?: rust.PagingStateWrapper,
+    ): Promise<rust.PagingResultWithExecutor> {
         let unifiedParams: Array<any>;
         if (Array.isArray(params)) {
             unifiedParams = params;
@@ -735,6 +745,7 @@ class Client extends events.EventEmitter {
 
         let rowLength = 0;
         let fetchPage: ResultSet["rawNextPageAsync"];
+        let columnsCache: ResultColumnsCache | undefined;
         let pageState: Buffer | undefined;
         let fetchedFirstPage = false;
 
@@ -748,7 +759,12 @@ class Client extends events.EventEmitter {
                 );
             }
             const [pagingState, rawResult] = await fetchPage(pageState);
-            const result = new ResultSet(rawResult, this.#encoder, pagingState);
+            const result = new ResultSet(
+                rawResult,
+                this.#encoder,
+                pagingState,
+                columnsCache,
+            );
             if (pagingState) {
                 result.rawNextPageAsync = fetchPage;
             }
@@ -787,6 +803,7 @@ class Client extends events.EventEmitter {
             if (result.innerPageState) {
                 fetchedFirstPage = true;
                 fetchPage = result.rawNextPageAsync;
+                columnsCache = result.columnsCache;
                 pageState = result.rawPageState;
 
                 if (execOptions.isAutoPage()) {
