@@ -117,7 +117,9 @@ Generally there are two things you need to do, in order to properly annotate tho
 
     ```rs
     #[napi]
-    pub fn get_columns_types(&self) -> Vec<ComplexType<'_>> {
+    pub fn result_get_columns_types(
+        result: &External<QueryResultWrapper>,
+    ) -> Vec<ComplexType<'_>> {
         ...
     }
     ```
@@ -125,10 +127,7 @@ Generally there are two things you need to do, in order to properly annotate tho
     Napi-rs then annotates the TS definition of this function as returning `ComplexType`:
 
     ```ts
-    export declare class QueryResultWrapper {
-        ...
-        getColumnsTypes(): Array<ComplexType>
-    }
+    export declare function resultGetColumnsTypes(result: ExternalObject<QueryResultWrapper>): Array<ComplexType>
     ```
 
     The custom definition in the `custom-types.d.ts`:
@@ -152,7 +151,7 @@ Generally there are two things you need to do, in order to properly annotate tho
     `T` in TS (instead of the default `JsResult<T>`). Unfortunately you cannot handle it automatically.
 
     To properly annotate such functions you need to use napi-rs `ts_return_type` for every function that returns such type.
-    When using this tag, you need to specify the full type like this: `#[napi(ts_return_type = "Promise<QueryResultWrapper>")]`
+    When using this tag, you need to specify the full type like this: `#[napi(ts_return_type = "Promise<ExternalObject<QueryResultWrapper>>")]`
     (meaning you need to remember about Promise part for async functions).
 
     It's annoying, but allows to properly annotate the functions.

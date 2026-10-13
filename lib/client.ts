@@ -18,7 +18,7 @@ import clientOptions = require("./client-options");
 import ClientState = require("./metadata/client-state");
 import packageInfo = require("../package.json");
 import { ExecutionOptions, DefaultExecutionOptions } from "./execution-options";
-import { ResultColumnsCache } from "./types/results-wrapper";
+import { ResultColumnsCache, RustResult } from "./types/results-wrapper";
 import promiseUtils = require("./promise-utils");
 import rust = require("../index");
 import ResultSet = require("./types/result-set");
@@ -528,7 +528,7 @@ class Client extends events.EventEmitter {
 
         let rustOptions = execOptions.getRustOptions();
 
-        let result: rust.QueryResultWrapper;
+        let result: RustResult;
         let columnsCache: ResultColumnsCache | undefined;
 
         if (execOptions.isPrepared()) {
@@ -570,10 +570,9 @@ class Client extends events.EventEmitter {
 
             resultSet.rawNextPageAsync = async (
                 pageState: Buffer,
-            ): Promise<rust.QueryResultWrapper> => {
-                return await executor.fetchNextPage(
-                    this.rustClient!,
-                    pageState,
+            ): Promise<RustResult> => {
+                return new RustResult(
+                    await executor.fetchNextPage(this.rustClient!, pageState),
                 );
             };
         }
@@ -605,7 +604,7 @@ class Client extends events.EventEmitter {
         rustOptions: RustQueryOptions,
         paged: boolean,
         pageState?: Buffer,
-    ): Promise<rust.QueryResultWrapper> {
+    ): Promise<RustResult> {
         let unifiedParams: Array<any>;
         if (Array.isArray(params)) {
             unifiedParams = params;
@@ -620,17 +619,21 @@ class Client extends events.EventEmitter {
         );
 
         if (paged) {
-            return this.rustClient!.executePreparedSinglePage(
+            return new RustResult(
+                await this.rustClient!.executePreparedSinglePage(
+                    prepared.handle,
+                    encoded,
+                    ...rustOptions,
+                    pageState,
+                ),
+            );
+        }
+        return new RustResult(
+            await this.rustClient!.executePreparedUnpaged(
                 prepared.handle,
                 encoded,
                 ...rustOptions,
-                pageState,
-            );
-        }
-        return this.rustClient!.executePreparedUnpaged(
-            prepared.handle,
-            encoded,
-            ...rustOptions,
+            ),
         );
     }
 
@@ -641,7 +644,7 @@ class Client extends events.EventEmitter {
         rustOptions: RustQueryOptions,
         paged: boolean,
         pageState?: Buffer,
-    ): Promise<rust.QueryResultWrapper> {
+    ): Promise<RustResult> {
         // We do not accept already prepared statements for unprepared queries
         if (typeof query !== "string") {
             throw new Error("Expected to obtain a string query");
@@ -659,14 +662,18 @@ class Client extends events.EventEmitter {
         let encoded = encodeParams(hints2 || [], params, this.#encoder);
 
         if (paged) {
-            return this.rustClient!.querySinglePage(
-                query,
-                encoded,
-                ...rustOptions,
-                pageState,
+            return new RustResult(
+                await this.rustClient!.querySinglePage(
+                    query,
+                    encoded,
+                    ...rustOptions,
+                    pageState,
+                ),
             );
         }
-        return this.rustClient!.queryUnpaged(query, encoded, ...rustOptions);
+        return new RustResult(
+            await this.rustClient!.queryUnpaged(query, encoded, ...rustOptions),
+        );
     }
 
     /**
@@ -989,7 +996,9 @@ class Client extends events.EventEmitter {
                   ...rustOptions,
               )
             : this.rustClient!.createBatch(allQueries, ...rustOptions);
-        let wrappedResult = await this.rustClient!.batch(batch, parametersRows);
+        let wrappedResult = new RustResult(
+            await this.rustClient!.batch(batch, parametersRows),
+        );
         return new ResultSet(wrappedResult, this.#encoder);
     }
 

@@ -16,6 +16,67 @@ export interface ColumnMetadata {
     type: ColumnInfo;
 }
 
+/**
+ * A native query result.
+ *
+ * Rust gives each result to JS as an `External`, not as an instance of a native class.
+ * An instance of a native class costs more N-API work: on creation, and on each method call.
+ * This class gives the result the same methods that the native class had.
+ * Each method calls one Rust function with the `External`.
+ * @internal
+ */
+export class RustResult {
+    readonly #inner: rust.ExternalObject<rust.QueryResultWrapper>;
+
+    constructor(inner: rust.ExternalObject<rust.QueryResultWrapper>) {
+        this.#inner = inner;
+    }
+
+    getPagingState(): Buffer | null {
+        return rust.resultGetPagingState(this.#inner);
+    }
+
+    getExecutor(): rust.QueryExecutor | null {
+        return rust.resultGetExecutor(this.#inner);
+    }
+
+    getMetadataGeneration(): number | null {
+        return rust.resultGetMetadataGeneration(this.#inner);
+    }
+
+    getRows(): [Buffer, number] | null {
+        return rust.resultGetRows(this.#inner);
+    }
+
+    getRowsShared(): [Buffer, number] | null {
+        return rust.resultGetRowsShared(this.#inner);
+    }
+
+    getColumnsNames(): Array<string> {
+        return rust.resultGetColumnsNames(this.#inner);
+    }
+
+    getColumnsTypes(): Array<rust.ComplexType> {
+        return rust.resultGetColumnsTypes(this.#inner);
+    }
+
+    getColumnsSpecs(): Array<rust.MetaColumnWrapper> {
+        return rust.resultGetColumnsSpecs(this.#inner);
+    }
+
+    getCoordinator(): string {
+        return rust.resultGetCoordinator(this.#inner);
+    }
+
+    getWarnings(): Array<string> {
+        return rust.resultGetWarnings(this.#inner);
+    }
+
+    getTraceId(): Buffer | null {
+        return rust.resultGetTraceId(this.#inner);
+    }
+}
+
 interface ResultColumns {
     names: Array<string>;
     types: Array<ColumnInfo>;
@@ -39,7 +100,7 @@ export class ResultColumnsCache {
     #columns: ResultColumns | undefined;
 
     /** Returns the columns of the result, converting them only when the generation changes. */
-    get(result: rust.QueryResultWrapper): ResultColumns {
+    get(result: RustResult): ResultColumns {
         const generation = result.getMetadataGeneration();
         // Rust tags every rows result of a prepared handle with a generation.
         assert(generation != null);
@@ -51,7 +112,7 @@ export class ResultColumnsCache {
     }
 }
 
-function readColumns(result: rust.QueryResultWrapper): ResultColumns {
+function readColumns(result: RustResult): ResultColumns {
     return {
         names: result.getColumnsNames(),
         types: result.getColumnsTypes().map((typ) => convertComplexType(typ)),
@@ -65,7 +126,7 @@ function readColumns(result: rust.QueryResultWrapper): ResultColumns {
  * @returns Returns array of rows if the result is of the RowsResult kind, and undefined otherwise
  */
 export function getRowsFromResultsWrapper(
-    result: rust.QueryResultWrapper,
+    result: RustResult,
     encoder: Encoder,
     columnsCache?: ResultColumnsCache,
 ): Array<Row> | undefined {
@@ -88,9 +149,7 @@ export function getRowsFromResultsWrapper(
     return encoder.decodeRows(rawPage, rowLength, columns.names, columns.types);
 }
 
-export function getColumnsMetadata(
-    result: rust.QueryResultWrapper,
-): Array<ColumnMetadata> {
+export function getColumnsMetadata(result: RustResult): Array<ColumnMetadata> {
     const res: Array<ColumnMetadata> = [];
     const columnsWrapper = result.getColumnsSpecs();
     // TODO: Here, we ask for column type again, despite already requesting that info at the value deserialization

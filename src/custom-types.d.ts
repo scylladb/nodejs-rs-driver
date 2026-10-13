@@ -30,6 +30,9 @@ export type SerializedValuesWrapper = Array<EncodedValuesWrapper>
 /** Opaque native prepared statement stored by the client. */
 export interface PreparedStatementWrapper {}
 
+/** Opaque native query result. JS reads it with the `result*` functions. */
+export interface QueryResultWrapper {}
+
 // ---------------------------------------------------------------------------
 // Types for objects produced by define_rust_to_js_convertible_object.
 // These are plain JS objects returned from Rust to JS

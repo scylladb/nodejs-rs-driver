@@ -84,7 +84,7 @@ fn apply_ddl_lbp(statement: &mut Statement, host_id: Uuid) {
 }
 
 /// Helper for executing DDL statements in tests.
-#[napi(ts_return_type = "Promise<QueryResultWrapper>")]
+#[napi(ts_return_type = "Promise<ExternalObject<QueryResultWrapper>>")]
 pub fn ddl(env: Env, session: &SessionWrapper, query: String) -> JsAsyncResult<QueryResultWrapper> {
     let session = Arc::clone(&session.inner);
     BridgedPromise::spawn(&env, || {

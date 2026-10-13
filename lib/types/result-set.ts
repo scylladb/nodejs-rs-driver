@@ -4,7 +4,11 @@ import utils = require("../utils");
 import errors = require("../errors");
 import rust = require("../../index");
 import resultsWrapper = require("./results-wrapper");
-import { ColumnMetadata, ResultColumnsCache } from "./results-wrapper";
+import {
+    ColumnMetadata,
+    ResultColumnsCache,
+    RustResult,
+} from "./results-wrapper";
 import Uuid = require("./uuid");
 import Row = require("./row");
 import Encoder = require("../encoder");
@@ -48,7 +52,7 @@ class ResultSet {
      * Object representing Rust result wrapper.
      * This value is used for the fields that are retrieved lazily.
      */
-    #rustResult!: rust.QueryResultWrapper;
+    #rustResult!: RustResult;
 
     /**
      * Cache for columns vale.
@@ -104,9 +108,7 @@ class ResultSet {
      * @internal
      * @ignore
      */
-    declare rawNextPageAsync?: (
-        pageState: Buffer,
-    ) => Promise<rust.QueryResultWrapper>;
+    declare rawNextPageAsync?: (pageState: Buffer) => Promise<RustResult>;
 
     /**
      * Converted columns of the prepared handle, reused for later pages.
@@ -119,13 +121,13 @@ class ResultSet {
     declare columnsCache?: ResultColumnsCache;
 
     constructor(
-        result: rust.QueryResultWrapper,
+        result: RustResult,
         encoder: Encoder,
         pagingState?: Buffer | null,
         columnsCache?: ResultColumnsCache,
     ) {
         // Old constructor logic only for purpose of unit tests.
-        if (!(result instanceof rust.QueryResultWrapper)) {
+        if (!(result instanceof RustResult)) {
             console.warn(
                 "Using legacy version of the ResultSet constructor.\n" +
                     "This is deprecated and may be removed at any moment.",

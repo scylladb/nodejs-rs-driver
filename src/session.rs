@@ -143,7 +143,7 @@ impl QueryExecutor {
 }
 #[napi]
 impl QueryExecutor {
-    #[napi(ts_return_type = "Promise<QueryResultWrapper>")]
+    #[napi(ts_return_type = "Promise<ExternalObject<QueryResultWrapper>>")]
     pub fn fetch_next_page(
         &self,
         env: Env,
@@ -256,7 +256,7 @@ impl SessionWrapper {
     /// All parameters must be in a type recognizable by ParameterWrapper
     /// -- each value must be tuple of its ComplexType and the value itself.
     /// If the provided types will not be correct, this query will fail.
-    #[napi(ts_return_type = "Promise<QueryResultWrapper>")]
+    #[napi(ts_return_type = "Promise<ExternalObject<QueryResultWrapper>>")]
     #[allow(clippy::too_many_arguments)]
     pub fn query_unpaged(
         &self,
@@ -322,7 +322,7 @@ impl SessionWrapper {
     ///
     /// All parameters must be already serialized according to the bind metadata
     /// of the prepared statement.
-    #[napi(ts_return_type = "Promise<QueryResultWrapper>")]
+    #[napi(ts_return_type = "Promise<ExternalObject<QueryResultWrapper>>")]
     #[allow(clippy::too_many_arguments)]
     pub fn execute_prepared_unpaged(
         &self,
@@ -361,7 +361,7 @@ impl SessionWrapper {
     /// Executes all statements in the provided batch. Those statements can be either prepared or unprepared.
     ///
     /// Returns a wrapper of the result provided by the rust driver
-    #[napi(ts_return_type = "Promise<QueryResultWrapper>")]
+    #[napi(ts_return_type = "Promise<ExternalObject<QueryResultWrapper>>")]
     pub fn batch(
         &self,
         env: Env,
@@ -383,7 +383,7 @@ impl SessionWrapper {
     /// For the first page, paging state is not required.
     /// For the following pages you need to provide page state
     /// received from the previous page
-    #[napi(ts_return_type = "Promise<QueryResultWrapper>")]
+    #[napi(ts_return_type = "Promise<ExternalObject<QueryResultWrapper>>")]
     #[allow(clippy::too_many_arguments)]
     pub fn query_single_page(
         &self,
@@ -424,7 +424,7 @@ impl SessionWrapper {
     /// For the first page, paging state is not required.
     /// For the following pages you need to provide page state
     /// received from the previous page
-    #[napi(ts_return_type = "Promise<QueryResultWrapper>")]
+    #[napi(ts_return_type = "Promise<ExternalObject<QueryResultWrapper>>")]
     #[allow(clippy::too_many_arguments)]
     pub fn execute_prepared_single_page(
         &self,
