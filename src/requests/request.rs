@@ -33,23 +33,16 @@ pub struct QueryOptionsObj {
     pub trace_query: Option<bool>,
 }
 
-#[napi]
-pub struct QueryOptionsWrapper {
-    pub(crate) options: QueryOptionsObj,
-}
-
-#[napi]
-impl QueryOptionsWrapper {
-    /// The options are passed as positional arguments, not as one object.
-    /// napi reads positional arguments by index.
+impl QueryOptionsObj {
+    /// JS passes the options as positional arguments of each execution call,
+    /// not as one object. napi reads positional arguments by index.
     ///
     /// A former approach with Objects involved reading named properties of
     /// an object, which costs a key string and a property lookup for each field.
-    ///
-    /// The new approach is much more performant on flamegraphs.
-    #[napi(constructor)]
+    /// A later approach wrapped the options in a `#[napi]` class.
+    /// Each instance of the class cost a new JS object, `napi_wrap`, and a GC finalizer.
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
+    pub(crate) fn new(
         consistency: Option<u16>,
         fetch_size: Option<i32>,
         is_idempotent: Option<bool>,
@@ -58,16 +51,14 @@ impl QueryOptionsWrapper {
         timestamp: Option<BigInt>,
         trace_query: Option<bool>,
     ) -> Self {
-        QueryOptionsWrapper {
-            options: QueryOptionsObj {
-                consistency,
-                fetch_size,
-                is_idempotent,
-                request_timeout,
-                serial_consistency,
-                timestamp,
-                trace_query,
-            },
+        QueryOptionsObj {
+            consistency,
+            fetch_size,
+            is_idempotent,
+            request_timeout,
+            serial_consistency,
+            timestamp,
+            trace_query,
         }
     }
 }

@@ -190,13 +190,29 @@ export interface QueryOptions {
 }
 
 /**
- * Parses js query options into rust query options wrapper
+ * The query options in the form that the Rust execution calls take them:
+ * as positional arguments, in this order.
  * @internal
  * @ignore
  */
-export function queryOptionsIntoWrapper(
+export type RustQueryOptions = [
+    consistency: number | undefined,
+    fetchSize: number | undefined,
+    isIdempotent: boolean | undefined,
+    requestTimeout: number | undefined,
+    serialConsistency: number | undefined,
+    timestamp: bigint | undefined,
+    traceQuery: boolean | undefined,
+];
+
+/**
+ * Converts js query options into the arguments of the Rust execution calls.
+ * @internal
+ * @ignore
+ */
+export function queryOptionsIntoRustArgs(
     options: ExecutionOptions,
-): rust.QueryOptionsWrapper {
+): RustQueryOptions {
     const requestTimeout = options.getRequestTimeout();
     validateRequestTimeout(requestTimeout, "requestTimeout");
     let timestamp: number | Long | bigint | undefined | null =
@@ -204,7 +220,7 @@ export function queryOptionsIntoWrapper(
     if (timestamp instanceof Long) timestamp = timestamp.toBigInt();
     else if (timestamp) timestamp = BigInt(timestamp);
 
-    return new rust.QueryOptionsWrapper(
+    return [
         options.getConsistency(),
         options.getFetchSize(),
         options.isIdempotent(),
@@ -212,5 +228,5 @@ export function queryOptionsIntoWrapper(
         options.getSerialConsistency(),
         timestamp as bigint | undefined,
         options.isQueryTracing(),
-    );
+    ];
 }

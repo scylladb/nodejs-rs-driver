@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use config::SessionOptions;
 use napi::Env;
-use napi::bindgen_prelude::{Buffer, External, ExternalRef};
+use napi::bindgen_prelude::{BigInt, Buffer, External, ExternalRef};
 use scylla::client::session::Session;
 use scylla::errors::{ExecutionError, RequestAttemptError};
 use scylla::response::{PagingState, PagingStateResponse};
@@ -19,7 +19,7 @@ use crate::async_bridge::{BridgedPromise, JsAsyncResult};
 use crate::errors::{ConvertedError, ConvertedResult, JsResult, make_js_error, with_custom_error};
 use crate::metadata::state::ClusterSnapshot;
 use crate::requests::request::PreparedStatementWrapper;
-use crate::requests::request::{QueryOptionsObj, QueryOptionsWrapper};
+use crate::requests::request::QueryOptionsObj;
 use crate::result::{NextPage, QueryResultWrapper, ResultMetadataTracker};
 use crate::session::config::configure_session_builder;
 use crate::types::encoded_data::{EncodedValuesWrapper, SerializedValuesWrapper};
@@ -257,16 +257,31 @@ impl SessionWrapper {
     /// -- each value must be tuple of its ComplexType and the value itself.
     /// If the provided types will not be correct, this query will fail.
     #[napi(ts_return_type = "Promise<QueryResultWrapper>")]
+    #[allow(clippy::too_many_arguments)]
     pub fn query_unpaged(
         &self,
         env: Env,
         query: String,
         params: Vec<EncodedValuesWrapper>,
-        options: &QueryOptionsWrapper,
+        consistency: Option<u16>,
+        fetch_size: Option<i32>,
+        is_idempotent: Option<bool>,
+        request_timeout: Option<i32>,
+        serial_consistency: Option<i16>,
+        timestamp: Option<BigInt>,
+        trace_query: Option<bool>,
     ) -> JsAsyncResult<QueryResultWrapper> {
+        let options = QueryOptionsObj::new(
+            consistency,
+            fetch_size,
+            is_idempotent,
+            request_timeout,
+            serial_consistency,
+            timestamp,
+            trace_query,
+        );
         BridgedPromise::spawn(&env, || {
-            let statement: Statement =
-                self.apply_statement_options(query.into(), &options.options)?;
+            let statement: Statement = self.apply_statement_options(query.into(), &options)?;
             let inner = Arc::clone(&self.inner);
             Ok(async move {
                 let result = inner.query_unpaged(statement, params).await?;
@@ -308,16 +323,32 @@ impl SessionWrapper {
     /// All parameters must be already serialized according to the bind metadata
     /// of the prepared statement.
     #[napi(ts_return_type = "Promise<QueryResultWrapper>")]
+    #[allow(clippy::too_many_arguments)]
     pub fn execute_prepared_unpaged(
         &self,
         env: Env,
         handle: &External<PreparedStatementWrapper>,
         params: SerializedValuesWrapper,
-        options: &QueryOptionsWrapper,
+        consistency: Option<u16>,
+        fetch_size: Option<i32>,
+        is_idempotent: Option<bool>,
+        request_timeout: Option<i32>,
+        serial_consistency: Option<i16>,
+        timestamp: Option<BigInt>,
+        trace_query: Option<bool>,
     ) -> JsAsyncResult<QueryResultWrapper> {
+        let options = QueryOptionsObj::new(
+            consistency,
+            fetch_size,
+            is_idempotent,
+            request_timeout,
+            serial_consistency,
+            timestamp,
+            trace_query,
+        );
         BridgedPromise::spawn(&env, || {
             let statement =
-                self.apply_prepared_statement_options(handle.prepared.clone(), &options.options)?;
+                self.apply_prepared_statement_options(handle.prepared.clone(), &options)?;
             let result_metadata = Arc::clone(&handle.result_metadata);
             let inner = Arc::clone(&self.inner);
             Ok(async move {
@@ -353,16 +384,32 @@ impl SessionWrapper {
     /// For the following pages you need to provide page state
     /// received from the previous page
     #[napi(ts_return_type = "Promise<QueryResultWrapper>")]
+    #[allow(clippy::too_many_arguments)]
     pub fn query_single_page(
         &self,
         env: Env,
         query: String,
         params: Vec<EncodedValuesWrapper>,
-        options: &QueryOptionsWrapper,
+        consistency: Option<u16>,
+        fetch_size: Option<i32>,
+        is_idempotent: Option<bool>,
+        request_timeout: Option<i32>,
+        serial_consistency: Option<i16>,
+        timestamp: Option<BigInt>,
+        trace_query: Option<bool>,
         paging_state: Option<Buffer>,
     ) -> JsAsyncResult<QueryResultWrapper> {
+        let options = QueryOptionsObj::new(
+            consistency,
+            fetch_size,
+            is_idempotent,
+            request_timeout,
+            serial_consistency,
+            timestamp,
+            trace_query,
+        );
         BridgedPromise::spawn(&env, || {
-            let statement = self.apply_statement_options(query.into(), &options.options)?;
+            let statement = self.apply_statement_options(query.into(), &options)?;
             let executor = QueryExecutor::new(QueryValues::Unprepared { params, statement });
             let paging_state = paging_state.map(|p| PagingState::new_from_raw_bytes(&*p));
             let inner = Arc::clone(&self.inner);
@@ -378,17 +425,33 @@ impl SessionWrapper {
     /// For the following pages you need to provide page state
     /// received from the previous page
     #[napi(ts_return_type = "Promise<QueryResultWrapper>")]
+    #[allow(clippy::too_many_arguments)]
     pub fn execute_prepared_single_page(
         &self,
         env: Env,
         handle: &External<PreparedStatementWrapper>,
         params: SerializedValuesWrapper,
-        options: &QueryOptionsWrapper,
+        consistency: Option<u16>,
+        fetch_size: Option<i32>,
+        is_idempotent: Option<bool>,
+        request_timeout: Option<i32>,
+        serial_consistency: Option<i16>,
+        timestamp: Option<BigInt>,
+        trace_query: Option<bool>,
         paging_state: Option<Buffer>,
     ) -> JsAsyncResult<QueryResultWrapper> {
+        let options = QueryOptionsObj::new(
+            consistency,
+            fetch_size,
+            is_idempotent,
+            request_timeout,
+            serial_consistency,
+            timestamp,
+            trace_query,
+        );
         BridgedPromise::spawn(&env, || {
             let statement =
-                self.apply_prepared_statement_options(handle.prepared.clone(), &options.options)?;
+                self.apply_prepared_statement_options(handle.prepared.clone(), &options)?;
             validate_value_count(&statement, &params)?;
             let paging_state = paging_state.map(|p| PagingState::new_from_raw_bytes(&*p));
             let result_metadata = Arc::clone(&handle.result_metadata);
@@ -407,18 +470,34 @@ impl SessionWrapper {
 
     /// Creates object representing batch of statements.
     #[napi(ts_return_type = "BatchWrapper")]
+    #[allow(clippy::too_many_arguments)]
     pub fn create_batch(
         &self,
         statements: Vec<String>,
-        options: &QueryOptionsWrapper,
+        consistency: Option<u16>,
+        fetch_size: Option<i32>,
+        is_idempotent: Option<bool>,
+        request_timeout: Option<i32>,
+        serial_consistency: Option<i16>,
+        timestamp: Option<BigInt>,
+        trace_query: Option<bool>,
     ) -> JsResult<BatchWrapper> {
+        let options = QueryOptionsObj::new(
+            consistency,
+            fetch_size,
+            is_idempotent,
+            request_timeout,
+            serial_consistency,
+            timestamp,
+            trace_query,
+        );
         with_custom_error(|| {
             let mut batch: Batch = Default::default();
             statements
                 .into_iter()
                 .for_each(|q| batch.append_statement(q.as_str()));
 
-            batch = self.apply_batch_options(batch, &options.options)?;
+            batch = self.apply_batch_options(batch, &options)?;
             ConvertedResult::Ok(BatchWrapper {
                 inner: Arc::new(batch),
             })
@@ -427,20 +506,36 @@ impl SessionWrapper {
 
     /// Creates object representing batch of already prepared statements.
     #[napi(ts_return_type = "BatchWrapper")]
+    #[allow(clippy::too_many_arguments)]
     pub fn create_prepared_batch(
         &self,
         #[napi(ts_arg_type = "Array<ExternalObject<PreparedStatementWrapper>>")] statements: Vec<
             ExternalRef<PreparedStatementWrapper>,
         >,
-        options: &QueryOptionsWrapper,
+        consistency: Option<u16>,
+        fetch_size: Option<i32>,
+        is_idempotent: Option<bool>,
+        request_timeout: Option<i32>,
+        serial_consistency: Option<i16>,
+        timestamp: Option<BigInt>,
+        trace_query: Option<bool>,
     ) -> JsResult<BatchWrapper> {
+        let options = QueryOptionsObj::new(
+            consistency,
+            fetch_size,
+            is_idempotent,
+            request_timeout,
+            serial_consistency,
+            timestamp,
+            trace_query,
+        );
         with_custom_error(|| {
             let mut batch: Batch = Default::default();
             statements
                 .iter()
                 .for_each(|handle| batch.append_statement(handle.prepared.clone()));
 
-            batch = self.apply_batch_options(batch, &options.options)?;
+            batch = self.apply_batch_options(batch, &options)?;
             ConvertedResult::Ok(BatchWrapper {
                 inner: Arc::new(batch),
             })

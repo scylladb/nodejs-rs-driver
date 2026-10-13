@@ -148,8 +148,8 @@ class ArrayBasedExecutor {
             options.concurrencyLevel || 100,
             this.#parameters.length,
         );
-        // Create ExecutionOptions here, to avoid creation of new
-        // rust QueryOptionsWrapper for each of the executed queries.
+        // Create ExecutionOptions here, to avoid converting the options
+        // for Rust again for each of the executed queries.
         this.#queryOptions = client.createOptions({
             prepare: true,
             executionProfile: options.executionProfile,
@@ -246,8 +246,8 @@ class StreamBasedExecutor {
         options = options || utils.emptyObject;
         this.#raiseOnFirstError = options.raiseOnFirstError !== false;
         this.#concurrencyLevel = options.concurrencyLevel || 100;
-        // Create ExecutionOptions here, to avoid creation of new
-        // rust QueryOptionsWrapper for each of the executed queries.
+        // Create ExecutionOptions here, to avoid converting the options
+        // for Rust again for each of the executed queries.
         this.#queryOptions = client.createOptions({
             prepare: true,
             executionProfile: options.executionProfile,
