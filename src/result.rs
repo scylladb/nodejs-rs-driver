@@ -420,7 +420,7 @@ pub fn result_get_paging_state(
 }
 
 /// Returns the executor that fetches the next pages, or null when this is the last page.
-#[napi]
+#[napi(ts_return_type = "ExternalObject<QueryExecutor> | null")]
 pub fn result_get_executor(result: &External<QueryResultWrapper>) -> Option<QueryExecutor> {
     result.get_executor()
 }

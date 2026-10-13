@@ -36,7 +36,7 @@ export class RustResult {
         return rust.resultGetPagingState(this.#inner);
     }
 
-    getExecutor(): rust.QueryExecutor | null {
+    getExecutor(): rust.ExternalObject<rust.QueryExecutor> | null {
         return rust.resultGetExecutor(this.#inner);
     }
 

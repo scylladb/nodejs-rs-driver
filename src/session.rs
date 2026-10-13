@@ -5,8 +5,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use config::SessionOptions;
-use napi::Env;
-use napi::bindgen_prelude::{BigInt, Buffer, External, ExternalRef};
+use napi::bindgen_prelude::{BigInt, Buffer, External, ExternalRef, ToNapiValue};
+use napi::{Env, sys};
 use scylla::client::session::Session;
 use scylla::errors::{ExecutionError, RequestAttemptError};
 use scylla::response::{PagingState, PagingStateResponse};
@@ -43,7 +43,10 @@ pub struct SessionWrapper {
 /// This object allows executing queries for following pages of the result,
 /// without the need to pass the statement and parameters multiple times.
 /// This structure is tied to specific session.
-#[napi]
+///
+/// JS gets it as an `External`, not as an instance of a `#[napi]` class,
+/// for the same reason as [`QueryResultWrapper`].
+/// JS fetches the next page with [`executor_fetch_next_page`].
 #[derive(Clone)]
 pub struct QueryExecutor {
     values: Arc<QueryValues>,
@@ -141,24 +144,28 @@ impl QueryExecutor {
         }
     }
 }
-#[napi]
-impl QueryExecutor {
-    #[napi(ts_return_type = "Promise<ExternalObject<QueryResultWrapper>>")]
-    pub fn fetch_next_page(
-        &self,
-        env: Env,
-        session: &SessionWrapper,
-        paging_state: Option<Buffer>,
-    ) -> JsAsyncResult<QueryResultWrapper> {
-        BridgedPromise::spawn(&env, || {
-            let executor = self.clone();
-            let session_inner = Arc::clone(&session.inner);
-            let paging_state = paging_state.map(|p| PagingState::new_from_raw_bytes(&*p));
-            Ok(async move {
-                Self::fetch_next_page_internal(&session_inner, &executor, paging_state).await
-            })
-        })
+impl ToNapiValue for QueryExecutor {
+    unsafe fn to_napi_value(env: sys::napi_env, val: Self) -> napi::Result<sys::napi_value> {
+        unsafe { External::to_napi_value(env, External::new(val)) }
     }
+}
+
+/// Fetches the page of the given paging state with the given executor.
+#[napi(ts_return_type = "Promise<ExternalObject<QueryResultWrapper>>")]
+pub fn executor_fetch_next_page(
+    env: Env,
+    executor: &External<QueryExecutor>,
+    session: &SessionWrapper,
+    paging_state: Option<Buffer>,
+) -> JsAsyncResult<QueryResultWrapper> {
+    BridgedPromise::spawn(&env, || {
+        let executor = QueryExecutor::clone(executor);
+        let session_inner = Arc::clone(&session.inner);
+        let paging_state = paging_state.map(|p| PagingState::new_from_raw_bytes(&*p));
+        Ok(async move {
+            QueryExecutor::fetch_next_page_internal(&session_inner, &executor, paging_state).await
+        })
+    })
 }
 
 #[napi]

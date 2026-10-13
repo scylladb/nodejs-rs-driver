@@ -566,13 +566,17 @@ class Client extends events.EventEmitter {
         if (resultPageState) {
             const executor = result.getExecutor();
             // A result with a next page also has the executor that fetches it.
-            assert(executor instanceof rust.QueryExecutor);
+            assert(executor !== null);
 
             resultSet.rawNextPageAsync = async (
                 pageState: Buffer,
             ): Promise<RustResult> => {
                 return new RustResult(
-                    await executor.fetchNextPage(this.rustClient!, pageState),
+                    await rust.executorFetchNextPage(
+                        executor,
+                        this.rustClient!,
+                        pageState,
+                    ),
                 );
             };
         }
