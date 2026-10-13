@@ -197,11 +197,6 @@ export interface QueryOptions {
 export function queryOptionsIntoWrapper(
     options: ExecutionOptions,
 ): rust.QueryOptionsWrapper {
-    // `counter`, `keyspace`, `logged` and `prepare` are read straight off the
-    // execution options rather than through their getters, so they are always
-    // undefined here.
-    const asProperties = options as any;
-
     const requestTimeout = options.getRequestTimeout();
     validateRequestTimeout(requestTimeout, "requestTimeout");
     let timestamp: number | Long | bigint | undefined | null =
@@ -210,18 +205,10 @@ export function queryOptionsIntoWrapper(
     else if (timestamp) timestamp = BigInt(timestamp);
 
     return new rust.QueryOptionsWrapper(
-        options.isAutoPage(),
-        options.getCaptureStackTrace(),
         options.getConsistency(),
-        asProperties.counter,
         options.getFetchSize(),
         options.isIdempotent(),
-        asProperties.keyspace,
-        asProperties.logged,
-        asProperties.prepare,
         requestTimeout,
-        options.getRoutingIndexes(),
-        options.getRoutingNames(),
         options.getSerialConsistency(),
         timestamp as bigint | undefined,
         options.isQueryTracing(),
