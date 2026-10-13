@@ -111,40 +111,33 @@ Generally there are two things you need to do, in order to properly annotate tho
 
 - [`custom-types.d.ts`](../../../src/custom-types.d.ts): This file defines custom types. This means when you define new type, that you accept as argument or return from rust function,
     and it is **not** napi-class, you have define its JS(TS) type there.
-    This file will then tell the JS/TS parser what does the magic type annotated in Rust function ex. `PagingResultWithExecutor` means.
+    This file will then tell the JS/TS parser what does the magic type annotated in Rust function ex. `ComplexType` means.
 
-    So in the Rust code you just return `PagingResultWithExecutor`:
+    So in the Rust code you just return `ComplexType`:
 
     ```rs
-    // Simple version
     #[napi]
-    pub async fn query_single_page_encoded(
-        &self,
+    pub fn get_columns_types(&self) -> Vec<ComplexType<'_>> {
         ...
-    ) -> Result<PagingResultWithExecutor> {
-
-
-    // Full version with manual type override (see next point)
-    #[napi(ts_return_type = "Promise<PagingResultWithExecutor>")]
-    pub async fn query_single_page_encoded(
-        &self,
-        ...
-    ) -> JsResult<PagingResultWithExecutor> {
+    }
     ```
 
-    Napi-rs then annotates the TS definition of this function as returning `PagingResultWithExecutor`:
+    Napi-rs then annotates the TS definition of this function as returning `ComplexType`:
 
     ```ts
-    export declare class SessionWrapper {
+    export declare class QueryResultWrapper {
         ...
-        querySinglePage(...): Promise<PagingResultWithExecutor>
+        getColumnsTypes(): Array<ComplexType>
     }
     ```
 
     The custom definition in the `custom-types.d.ts`:
 
     ```ts
-    export type PagingResultWithExecutor = [Buffer | null, QueryResultWrapper, QueryExecutor]
+    export type ComplexType =
+      | { baseType: Exclude<CqlType, CqlType.List | CqlType.Set | CqlType.Map | ...> }
+      | { baseType: CqlType.List | CqlType.Set; frozen: boolean; subtype1: ComplexType }
+      | ...
     ```
 
     provides the meaning for this type. This is something you need to add manually to `custom-types.d.ts` file
@@ -159,7 +152,7 @@ Generally there are two things you need to do, in order to properly annotate tho
     `T` in TS (instead of the default `JsResult<T>`). Unfortunately you cannot handle it automatically.
 
     To properly annotate such functions you need to use napi-rs `ts_return_type` for every function that returns such type.
-    When using this tag, you need to specify the full type like this: `#[napi(ts_return_type = "Promise<PagingResult>")]`
+    When using this tag, you need to specify the full type like this: `#[napi(ts_return_type = "Promise<QueryResultWrapper>")]`
     (meaning you need to remember about Promise part for async functions).
 
     It's annoying, but allows to properly annotate the functions.

@@ -36,8 +36,11 @@ function makeClient() {
             assert.deepStrictEqual(state, states[fetches]);
             fetches++;
             return fetches % 2 === 1
-                ? [states[1], { rows: [{ page: 2 }] }]
-                : [null, { rows: [{ page: 3 }] }];
+                ? {
+                      rows: [{ page: 2 }],
+                      getPagingState: () => states[1],
+                  }
+                : { rows: [{ page: 3 }], getPagingState: () => null };
         };
         return first;
     };

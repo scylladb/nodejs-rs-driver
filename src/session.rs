@@ -18,10 +18,9 @@ use scylla::statement::{Consistency, SerialConsistency, Statement};
 use crate::async_bridge::{BridgedPromise, JsAsyncResult};
 use crate::errors::{ConvertedError, ConvertedResult, JsResult, make_js_error, with_custom_error};
 use crate::metadata::state::ClusterSnapshot;
-use crate::paging::{PagingResult, PagingResultWithExecutor};
 use crate::requests::request::PreparedStatementWrapper;
 use crate::requests::request::{QueryOptionsObj, QueryOptionsWrapper};
-use crate::result::{QueryResultWrapper, ResultMetadataTracker};
+use crate::result::{NextPage, QueryResultWrapper, ResultMetadataTracker};
 use crate::session::config::configure_session_builder;
 use crate::types::encoded_data::{EncodedValuesWrapper, SerializedValuesWrapper};
 use crate::types::type_wrappers::ComplexType;
@@ -45,6 +44,7 @@ pub struct SessionWrapper {
 /// without the need to pass the statement and parameters multiple times.
 /// This structure is tied to specific session.
 #[napi]
+#[derive(Clone)]
 pub struct QueryExecutor {
     values: Arc<QueryValues>,
 }
@@ -99,14 +99,22 @@ impl QueryExecutor {
 }
 
 impl QueryExecutor {
+    /// Fetches one page. The result keeps this executor if more pages follow.
     async fn fetch_next_page_internal(
         session: &Session,
-        values: &QueryValues,
+        executor: &QueryExecutor,
         paging_state: Option<PagingState>,
-    ) -> ConvertedResult<PagingResult> {
+    ) -> ConvertedResult<QueryResultWrapper> {
         let paging_state = paging_state.unwrap_or(PagingState::start());
+        let next_page = |paging_state_response| match paging_state_response {
+            PagingStateResponse::HasMorePages { state } => Some(NextPage {
+                paging_state: state,
+                executor: executor.clone(),
+            }),
+            PagingStateResponse::NoMorePages => None,
+        };
 
-        let (result, paging_state_response) = match values {
+        match &*executor.values {
             QueryValues::Prepared {
                 values,
                 statement,
@@ -115,46 +123,39 @@ impl QueryExecutor {
                 let (result, paging_state_response) = session
                     .execute_unstable(statement, &values.inner, true, paging_state)
                     .await?;
-                (
-                    QueryResultWrapper::from_prepared(result, result_metadata)?,
-                    paging_state_response,
+                QueryResultWrapper::from_prepared(
+                    result,
+                    result_metadata,
+                    next_page(paging_state_response),
                 )
             }
             QueryValues::Unprepared { params, statement } => {
                 let (result, paging_state_response) = session
                     .query_single_page(statement.clone(), params, paging_state)
                     .await?;
-                (
-                    QueryResultWrapper::from_unprepared_or_batch(result)?,
-                    paging_state_response,
+                QueryResultWrapper::from_unprepared_or_batch(
+                    result,
+                    next_page(paging_state_response),
                 )
             }
-        };
-
-        Ok(PagingResult {
-            result,
-            paging_state: match paging_state_response {
-                PagingStateResponse::HasMorePages { state } => Some(state),
-                PagingStateResponse::NoMorePages => None,
-            },
-        })
+        }
     }
 }
 #[napi]
 impl QueryExecutor {
-    #[napi(ts_return_type = "Promise<PagingResult>")]
+    #[napi(ts_return_type = "Promise<QueryResultWrapper>")]
     pub fn fetch_next_page(
         &self,
         env: Env,
         session: &SessionWrapper,
         paging_state: Option<Buffer>,
-    ) -> JsAsyncResult<PagingResult> {
+    ) -> JsAsyncResult<QueryResultWrapper> {
         BridgedPromise::spawn(&env, || {
-            let values = Arc::clone(&self.values);
+            let executor = self.clone();
             let session_inner = Arc::clone(&session.inner);
             let paging_state = paging_state.map(|p| PagingState::new_from_raw_bytes(&*p));
             Ok(async move {
-                Self::fetch_next_page_internal(&session_inner, &values, paging_state).await
+                Self::fetch_next_page_internal(&session_inner, &executor, paging_state).await
             })
         })
     }
@@ -180,7 +181,7 @@ impl SessionWrapper {
                 RequestAttemptError::NonfinishedPagingState,
             )));
         }
-        QueryResultWrapper::from_prepared(result, result_metadata)
+        QueryResultWrapper::from_prepared(result, result_metadata, None)
     }
 
     /// Creates session based on the provided session options.
@@ -269,7 +270,7 @@ impl SessionWrapper {
             let inner = Arc::clone(&self.inner);
             Ok(async move {
                 let result = inner.query_unpaged(statement, params).await?;
-                QueryResultWrapper::from_unprepared_or_batch(result)
+                QueryResultWrapper::from_unprepared_or_batch(result, None)
             })
         })
     }
@@ -341,7 +342,7 @@ impl SessionWrapper {
             let inner = Arc::clone(&self.inner);
             Ok(async move {
                 let res = inner.batch(&batch, params).await?;
-                QueryResultWrapper::from_unprepared_or_batch(res)
+                QueryResultWrapper::from_unprepared_or_batch(res, None)
             })
         })
     }
@@ -351,7 +352,7 @@ impl SessionWrapper {
     /// For the first page, paging state is not required.
     /// For the following pages you need to provide page state
     /// received from the previous page
-    #[napi(ts_return_type = "Promise<PagingResultWithExecutor>")]
+    #[napi(ts_return_type = "Promise<QueryResultWrapper>")]
     pub fn query_single_page(
         &self,
         env: Env,
@@ -359,17 +360,14 @@ impl SessionWrapper {
         params: Vec<EncodedValuesWrapper>,
         options: &QueryOptionsWrapper,
         paging_state: Option<Buffer>,
-    ) -> JsAsyncResult<PagingResultWithExecutor> {
+    ) -> JsAsyncResult<QueryResultWrapper> {
         BridgedPromise::spawn(&env, || {
             let statement = self.apply_statement_options(query.into(), &options.options)?;
             let executor = QueryExecutor::new(QueryValues::Unprepared { params, statement });
             let paging_state = paging_state.map(|p| PagingState::new_from_raw_bytes(&*p));
             let inner = Arc::clone(&self.inner);
             Ok(async move {
-                let res =
-                    QueryExecutor::fetch_next_page_internal(&inner, &executor.values, paging_state)
-                        .await?;
-                ConvertedResult::Ok(res.with_executor(executor))
+                QueryExecutor::fetch_next_page_internal(&inner, &executor, paging_state).await
             })
         })
     }
@@ -379,7 +377,7 @@ impl SessionWrapper {
     /// For the first page, paging state is not required.
     /// For the following pages you need to provide page state
     /// received from the previous page
-    #[napi(ts_return_type = "Promise<PagingResultWithExecutor>")]
+    #[napi(ts_return_type = "Promise<QueryResultWrapper>")]
     pub fn execute_prepared_single_page(
         &self,
         env: Env,
@@ -387,7 +385,7 @@ impl SessionWrapper {
         params: SerializedValuesWrapper,
         options: &QueryOptionsWrapper,
         paging_state: Option<Buffer>,
-    ) -> JsAsyncResult<PagingResultWithExecutor> {
+    ) -> JsAsyncResult<QueryResultWrapper> {
         BridgedPromise::spawn(&env, || {
             let statement =
                 self.apply_prepared_statement_options(handle.prepared.clone(), &options.options)?;
@@ -402,11 +400,7 @@ impl SessionWrapper {
                     result_metadata,
                 });
 
-                let res =
-                    QueryExecutor::fetch_next_page_internal(&inner, &executor.values, paging_state)
-                        .await?;
-
-                ConvertedResult::Ok(res.with_executor(executor))
+                QueryExecutor::fetch_next_page_internal(&inner, &executor, paging_state).await
             })
         })
     }

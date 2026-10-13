@@ -106,7 +106,7 @@ class ResultSet {
      */
     declare rawNextPageAsync?: (
         pageState: Buffer,
-    ) => Promise<[Buffer | null, rust.QueryResultWrapper]>;
+    ) => Promise<rust.QueryResultWrapper>;
 
     /**
      * Converted columns of the prepared handle, reused for later pages.
@@ -327,12 +327,12 @@ class ResultSet {
 
                     const rs = await self.rawNextPageAsync(pageState);
                     rows = resultsWrapper.getRowsFromResultsWrapper(
-                        rs[1],
+                        rs,
                         encoder,
                         self.columnsCache,
                     ) as Array<Row>;
                     index = 0;
-                    pageState = rs[0] ?? undefined;
+                    pageState = rs.getPagingState() ?? undefined;
                 }
 
                 if (index < rows.length) {

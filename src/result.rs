@@ -1,6 +1,8 @@
 use crate::{
     errors::{ConvertedError, ConvertedResult},
+    session::QueryExecutor,
     types::type_wrappers::ComplexType,
+    utils::to_napi_obj::CopyableBuffer,
 };
 use bytes::Bytes;
 use napi::{
@@ -10,7 +12,10 @@ use napi::{
 use scylla::{
     errors::IntoRowsResultError,
     frame::response::result::ColumnSpec,
-    response::query_result::{QueryResult, QueryRowsResult},
+    response::{
+        PagingState,
+        query_result::{QueryResult, QueryRowsResult},
+    },
 };
 #[cfg(feature = "tests")]
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -38,6 +43,18 @@ pub struct QueryResultWrapper {
     /// Goal: let JS reuse converted result metadata, to avoid N-API conversion cost.
     /// See [`ResultMetadataTracker`].
     metadata_generation: Option<u32>,
+    /// What is needed to fetch the next page. None when this is the last page,
+    /// and for unpaged results.
+    next_page: Option<NextPage>,
+}
+
+/// The paging state of the next page, and the executor that fetches it.
+///
+/// The result keeps them, so a paged request returns one JS object.
+/// JS asks for them only when more pages follow, which most results do not.
+pub(crate) struct NextPage {
+    pub(crate) paging_state: PagingState,
+    pub(crate) executor: QueryExecutor,
 }
 
 /// Tracks the result metadata of one prepared statement handle.
@@ -197,8 +214,11 @@ impl ToNapiValue for PageBuffer {
 impl QueryResultWrapper {
     /// Converts rust query result into query result wrapper that can be passed to NAPI-RS.
     /// For results of unprepared statements and of batches, which have no metadata generation.
-    pub fn from_unprepared_or_batch(result: QueryResult) -> ConvertedResult<QueryResultWrapper> {
-        Self::new(result, None)
+    pub(crate) fn from_unprepared_or_batch(
+        result: QueryResult,
+        next_page: Option<NextPage>,
+    ) -> ConvertedResult<QueryResultWrapper> {
+        Self::new(result, None, next_page)
     }
 
     /// Converts rust query result of a prepared handle into query result wrapper,
@@ -208,13 +228,15 @@ impl QueryResultWrapper {
     pub(crate) fn from_prepared(
         result: QueryResult,
         tracker: &ResultMetadataTracker,
+        next_page: Option<NextPage>,
     ) -> ConvertedResult<QueryResultWrapper> {
-        Self::new(result, Some(tracker))
+        Self::new(result, Some(tracker), next_page)
     }
 
     fn new(
         result: QueryResult,
         tracker: Option<&ResultMetadataTracker>,
+        next_page: Option<NextPage>,
     ) -> ConvertedResult<QueryResultWrapper> {
         let (inner, metadata_generation) = match result.into_rows_result() {
             Ok(v) => {
@@ -234,7 +256,26 @@ impl QueryResultWrapper {
         Ok(QueryResultWrapper {
             inner,
             metadata_generation,
+            next_page,
         })
+    }
+
+    /// Returns the raw paging state of the next page, or None when this is the last page.
+    #[napi(ts_return_type = "Buffer | null")]
+    pub fn get_paging_state(&self) -> Option<CopyableBuffer<'_>> {
+        self.next_page.as_ref().map(|next| {
+            CopyableBuffer::new(
+                next.paging_state
+                    .as_bytes_slice()
+                    .map_or(&[], |bytes| &bytes[..]),
+            )
+        })
+    }
+
+    /// Returns the executor that fetches the next pages, or None when this is the last page.
+    #[napi]
+    pub fn get_executor(&self) -> Option<QueryExecutor> {
+        self.next_page.as_ref().map(|next| next.executor.clone())
     }
 
     /// Returns the result metadata generation of the prepared handle that produced this result.
