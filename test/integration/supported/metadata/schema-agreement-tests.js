@@ -47,6 +47,8 @@ describe("Metadata#checkSchemaAgreement()", function () {
                     const agreement =
                         await client.metadata.checkSchemaAgreement();
                     assert.strictEqual(agreement, false);
+                    // Rust forwards log events asynchronously, independently of the promise result,
+                    // so the warning may arrive after checkSchemaAgreement() resolves.
                     await helper.wait
                         .until(() =>
                             warnings.some((m) =>
