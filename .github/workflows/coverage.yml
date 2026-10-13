@@ -71,9 +71,23 @@ jobs:
           components: llvm-tools-preview
       # Built from crates.io rather than fetched by an install action, which
       # would be one more third-party action for the repository's list of
-      # allowed actions to cover. The build takes about a minute.
+      # allowed actions to cover. The build takes about a minute, so the binary
+      # is cached by version, and only the first run on a version builds it.
+      - name: Restore cargo-llvm-cov
+        id: cargo-llvm-cov-cache
+        uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: ~/.cargo/bin/cargo-llvm-cov
+          key: cargo-llvm-cov-${{ runner.os }}-${{ runner.arch }}-0.9.1
       - name: Install cargo-llvm-cov
+        if: ${{ steps.cargo-llvm-cov-cache.outputs.cache-hit != 'true' }}
         run: cargo install cargo-llvm-cov@0.9.1 --locked
+      - name: Save cargo-llvm-cov
+        if: ${{ steps.cargo-llvm-cov-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: ~/.cargo/bin/cargo-llvm-cov
+          key: cargo-llvm-cov-${{ runner.os }}-${{ runner.arch }}-0.9.1
       # Java and ccm are installed the same way .github/common/integration does.
       - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
         with:
@@ -113,13 +127,19 @@ jobs:
       # uploads. scripts/coverage.sh writes both reports even when a suite fails
       # and exits non-zero only afterwards, and on main such a partial report
       # would become the baseline later pull requests are compared against.
-      # Pull requests from forks get no secrets and upload without a token, and
-      # Dependabot-triggered runs get no CODECOV_TOKEN either; neither fails the
-      # job if Codecov refuses the upload.
+      # Pull requests from forks get no secrets and upload without a token,
+      # Dependabot-triggered runs get no CODECOV_TOKEN either, and nor does a
+      # run in a fork of the repository; none of them fails the job if Codecov
+      # refuses the upload.
+      # The action downloads the Codecov CLI, by default its latest release. Its
+      # version is pinned, as the actions themselves are (see "Updating
+      # workflows" in MAINTENANCE.md), so a new CLI release cannot break the
+      # uploads, which fail the job on main.
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+          version: v11.3.1
           files: coverage/js/lcov.info,coverage/rust/lcov.info
           disable_search: true
-          fail_ci_if_error: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') }}
+          fail_ci_if_error: ${{ github.repository == 'scylladb/nodejs-rs-driver' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')) }}

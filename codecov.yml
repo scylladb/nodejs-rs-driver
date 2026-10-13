@@ -30,6 +30,12 @@ component_management:
       paths:
         - src/**
 
+# Codecov shows components only where it is told to: here, as a table in the
+# pull request comment. They get no statuses of their own; the informational
+# ones below cover both layers together.
+comment:
+  layout: "header, diff, components, files"
+
 coverage:
   status:
     # Informational: report the delta, never fail a pull request on it. The
