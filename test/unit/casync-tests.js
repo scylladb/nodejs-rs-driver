@@ -215,8 +215,67 @@ describe("casync bridge", function () {
             assert.strictEqual(await rust.testsCasyncResolveDelayed(5), 5);
         });
 
+        it("drops queued completion results when a blocked worker terminates", async function () {
+            this.timeout(10000);
+            rust.testsCasyncTrackedStats(true);
+            const worker = new Worker(
+                path.resolve(__dirname, "casync-worker-completed.js.worker"),
+            );
+            try {
+                await new Promise((resolve, reject) => {
+                    const timeout = setTimeout(
+                        () =>
+                            reject(
+                                new Error(
+                                    "worker did not queue completion results",
+                                ),
+                            ),
+                        7000,
+                    );
+                    worker.once("message", () => {
+                        clearTimeout(timeout);
+                        resolve();
+                    });
+                    worker.once("error", (error) => {
+                        clearTimeout(timeout);
+                        reject(error);
+                    });
+                    worker.once("exit", () => {
+                        clearTimeout(timeout);
+                        reject(new Error("worker exited before termination"));
+                    });
+                });
+                assert.deepEqual(rust.testsCasyncTrackedStats(false), [0, 0]);
+                assert.strictEqual(await worker.terminate(), 1);
+                assert.deepEqual(rust.testsCasyncTrackedStats(false), [0, 4]);
+                assert.strictEqual(await rust.testsCasyncResolveDelayed(5), 5);
+            } finally {
+                await worker.terminate();
+            }
+        });
+
+        it("consumes and drops each queued result exactly once", async function () {
+            rust.testsCasyncTrackedStats(true);
+            // Multiple rounds exercise queue reuse after earlier results are consumed.
+            for (let round = 0; round < 3; round++) {
+                const values = [0, 1, 2, 3].map((i) => round * 4 + i);
+                assert.deepEqual(
+                    await Promise.all(
+                        values.map((i) => rust.testsCasyncTrackedResult(i)),
+                    ),
+                    values,
+                );
+            }
+            assert.deepEqual(rust.testsCasyncTrackedStats(false), [12, 12]);
+            assert.strictEqual(rust.testsBridgePendingCompletions(), 0);
+        });
+
         it("permits future submission during value conversion", async function () {
             assert.strictEqual(await rust.testsCasyncNestedPromise(), 42);
+            assert.strictEqual(
+                await rust.testsCasyncNestedPromiseDelayed(),
+                42,
+            );
         });
 
         it("rejects a conversion exception without aborting Node", async function () {

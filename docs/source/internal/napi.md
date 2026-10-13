@@ -75,21 +75,42 @@ you will still pay the cost of converting all unused fields.
 
 ### Casync (async bridge)
 
-The driver runs bridged Rust futures on a Tokio runtime, one per Node.js environment.
-`lib/client` initializes one bridge per environment, including worker threads.
-The bridge creates a Promise for each spawned future on the JavaScript thread.
-The future runs on the Tokio worker. The Promise's deferred handle travels with
-the Tokio task as an opaque pointer. The worker does not use it.
+The driver owns one Tokio runtime and one shared thread-safe function (TSFN)
+per Node.js environment. `lib/client` initializes this bridge, including in worker
+threads. Each submission creates a Promise on the JavaScript thread.
 
-When a future completes, the worker wraps the deferred and the result in a settle callback.
-It pushes this callback to a completion queue.
-Only the first push after a drain calls the shared thread-safe function.
-The drain runs on the JavaScript thread. It calls all queued settle callbacks in one TSFN callback.
-Each settle callback converts its result to JavaScript and settles its Promise.
+The bridge selects a path from the number of outstanding futures at submission:
 
-The thread-safe function is referenced while futures are outstanding so Node.js stays alive until
-they settle. Conversion errors reject the Promise; a JavaScript exception thrown during conversion
-is cleared and used as the rejection value.
+- Below eight outstanding futures, it polls once on the JavaScript thread in the
+  Tokio runtime context. A ready value settles immediately, with asynchronous
+  Promise reactions. If pending, the future moves to Tokio for a fresh poll and
+  eventually stores its completion in the shared queue. Notifications are
+  coalesced so one JS callback can settle multiple pending results.
+- At higher concurrency, Tokio performs all polling. Workers enqueue completion
+  callbacks and coalesce wakeups. Each drain takes and settles the current
+  snapshot, retaining the existing batch behavior under load.
+
+This preserves batching for pending futures while avoiding the worker and
+completion queue for immediately ready low-load futures. There is no delay to fill a batch, no public mode switch, and new
+submissions return to the low-load path as outstanding work decreases. Promise
+reactions can run between drain callbacks.
+
+Deferred handles travel with futures as opaque pointers; only the originating
+JavaScript thread uses them. The TSFN remains referenced while any future is
+outstanding. Conversion errors reject the Promise, including JavaScript
+exceptions thrown during conversion. No registry borrow or completion-queue
+lock is held during conversion, allowing nested submissions.
+
+The drain removes results from the queue before converting them. Shutdown
+disables sends and empties the queue, dropping captured native resources
+outside locks.
+Failed notification sends also discard their stored results.
+
+With napi-rs 3.12.2, discarded TSFN notifications can still leak the dependency's
+notification-wrapper allocations during worker shutdown. Repeated worker
+termination can accumulate leaked memory. The bridge retains ownership
+of completion results so those wrappers cannot retain result resources. Fixing
+the dependency's wrapper cleanup is outside this bridge change.
 
 ### JSResults
 

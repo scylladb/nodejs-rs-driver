@@ -1,81 +1,52 @@
 //! Bridge between Rust futures and JavaScript Promises.
 //!
-//! # Why
+//! # Scheduling paths
 //!
-//! Async functions made with napi-rs settle each Promise through its own
-//! thread-safe function (TSFN) call. This costs much CPU time on the
-//! JavaScript thread, which is the bottleneck of the driver.
-//! This bridge settles the Promises of many futures in one TSFN callback.
+//! Each Node.js environment owns one Tokio runtime, one completion queue, and
+//! one weak thread-safe function (TSFN). The number of outstanding futures at
+//! submission selects a path; no timer waits for a batch to fill.
 //!
-//! # Architecture
+//! With fewer than eight outstanding futures, the bridge polls once on the
+//! JavaScript thread, inside the Tokio runtime context. A ready future settles
+//! immediately; its Promise reactions still run asynchronously. A pending future
+//! moves to Tokio, which polls it with its own waker. Its eventual completion
+//! joins the shared queue, whose notifications are coalesced at every load.
 //!
-//! Each Node.js environment (the main thread or a worker thread) has its own:
-//! - `FutureRegistry`, which lives only on the JavaScript thread,
-//! - Tokio runtime with one worker thread,
-//! - `CompletionQueue`, which both threads use,
-//! - weak TSFN, which tokio threads use upon future completion to wake
-//!   the JavaScript thread.
-//!
-//! ```text
-//!  JavaScript thread                          Tokio worker thread
-//!  ─────────────────                          ───────────────────
-//!
-//!  BridgedPromise::spawn(env, prepare)
-//!   │ prepare()?  (sync work, can throw)
-//!   │ ref the TSFN (if no futures pending)
-//!   │ napi_create_promise ─► (deferred, promise)
-//!   │ rt.spawn(run_task) ─────────────────────► run_task:
-//!   ▼                                            │ result = fut.await
-//!  return the promise to JavaScript              │ Box::new(settle closure)
-//!                                                │   (captures result and deferred)
-//!                                                ▼
-//!                                         CompletionQueue::push
-//!                                            │ completed.push(settle)
-//!                                            │ if signaled was false:
-//!                                            │   signaled = true
-//!                                            │   TSFN.call()  ─────┐
-//!                                            ▼                     │
-//!                                           (done)                 │
-//!                                                                  │
-//!  TSFN callback ◄─────────────────────────────────────────────────┘
-//!   │ FutureRegistry::drain:
-//!   │   signaled = false
-//!   │   batch = take(completed)
-//!   │   for each settle in batch:
-//!   │     settle(env)
-//!   │       └─ convert the result to JS, resolve or reject
-//!   │     if no futures pending: unref the TSFN
-//!   ▼
-//! ```
-//!
-//! Many futures can complete before the JavaScript thread runs the TSFN
-//! callback. Only the first push after a drain calls the TSFN. So one
-//! callback settles the whole batch.
-//!
-//! The drain clears `signaled` before it takes the batch. A push after the
-//! take then calls the TSFN again, so no completion is lost.
-//!
-//! The TSFN is referenced only while futures are pending. So the bridge
-//! keeps Node.js alive only until the last Promise settles.
-//!
-//! # What moves between the threads
+//! At higher concurrency, Tokio performs all future polling. Workers enqueue
+//! completion callbacks, and only the first enqueue after a drain signals the
+//! TSFN. The drain settles its snapshot in one callback, retaining the existing
+//! batching behavior under load.
 //!
 //! ```text
-//!                 created on    travels through                   used on
-//!  DeferredPtr    JS thread ───► Tokio task, then SettleCallback ───► JS thread (resolve / reject)
-//!  SettleCallback worker    ───► CompletionQueue                 ───► JS thread (called, freed)
+//! JavaScript submission
+//!   |
+//!   +-- fewer than 8 pending --> first poll
+//!   |                            +-- Ready --> settle Promise
+//!   |                            +-- Pending --> Tokio --> completion queue --> TSFN drain
+//!   |
+//!   +-- 8 or more pending --> Tokio --> completion queue --> TSFN drain
 //! ```
+//!
+//! The selection belongs to each submitted future. A burst can have both polling paths
+//! in flight; when it subsides, new requests automatically use the
+//! low-load path. There is no process-wide mode or application configuration.
+//!
+//! # Lifetime and wakeups
+//!
+//! The TSFN is referenced while futures are outstanding, keeping Node.js alive
+//! until the last Promise settles. Deferred handles travel through Rust as
+//! opaque pointers and are used only on the originating JavaScript thread.
+//!
+//! The drain clears `signaled` before taking a batch. A worker pushing after the
+//! take therefore schedules another callback. Locks
+//! and registry borrows are released before conversion, which can invoke JS and
+//! submit another future synchronously.
 //!
 //! # Modules
 //!
-//! Each item runs on one kind of thread:
-//! - `js_thread`: the JavaScript thread of an environment. It creates Promises,
-//!   spawns futures, and settles the Promises in batches.
-//! - `worker`: the Tokio worker threads. They run the futures and push the
-//!   results to the completion queue.
-//! - `shared`: the types that move between the two, or that both use.
-//!
-//! The public API in this file runs on the JavaScript thread.
+//! - `js_thread`: Promise creation, first polling, inline settlement, and drains.
+//! - `worker`: Tokio execution and queued completion delivery.
+//! - `shared`: types passed between the threads.
 
 mod js_thread;
 mod shared;
@@ -116,7 +87,7 @@ fn noop_callback() {
 ///
 /// Creates a dedicated `multi_thread(1)` Tokio runtime. Its worker thread runs
 /// the spawned futures and drives the reactor (epoll/kqueue). A single weak
-/// TSFN delivers batches of completed futures to the JavaScript thread.
+/// TSFN delivers batches of completions to the JavaScript thread.
 /// It is ABI-stable, cross-platform, and has no direct libuv dependency.
 #[napi(ts_return_type = "void")]
 pub fn init_async_bridge(env: Env) -> JsResult<()> {
@@ -172,7 +143,7 @@ impl<T> BridgedPromise<T>
 where
     T: ToNapiValue + Send + 'static,
 {
-    /// Run a typed Rust future on this environment's Tokio runtime
+    /// Run a typed Rust future through this environment's adaptive bridge
     /// and return the Promise that the future settles.
     ///
     /// `prepare` runs synchronously on the JavaScript thread. It can do fallible
@@ -188,7 +159,7 @@ where
         F: Future<Output = ConvertedResult<T>> + Send + 'static,
     {
         with_custom_error(|| {
-            let fut = Box::pin(prepare()?);
+            let fut = prepare()?;
             let registry = FutureRegistry::get(env).ok_or_else(|| {
                 ConvertedError::from(napi::Error::from_reason(
                     "init_async_bridge must be called before BridgedPromise::spawn",
@@ -198,4 +169,42 @@ where
             ConvertedResult::Ok(BridgedPromise(promise, PhantomData))
         })
     }
+}
+
+/// Read and optionally reset per-environment path counters for bridge tests.
+#[cfg(feature = "tests")]
+#[napi]
+pub fn tests_bridge_stats(env: Env, reset: bool) -> Vec<f64> {
+    FutureRegistry::get(&env).unwrap().stats(reset)
+}
+
+/// Number of queued results awaiting JS consumption, for shutdown tests.
+#[cfg(feature = "tests")]
+#[napi]
+pub fn tests_bridge_pending_completions(env: Env) -> u32 {
+    FutureRegistry::get(&env)
+        .unwrap()
+        .queue
+        .completed
+        .lock()
+        .unwrap()
+        .len() as u32
+}
+
+/// Force queued notifications to be discarded instead of dispatched during
+/// termination. Node versions differ in whether they drain first.
+#[cfg(feature = "tests")]
+#[napi]
+pub fn tests_bridge_abort_notifications(env: Env) -> Result<()> {
+    let tsfn = FutureRegistry::get(&env)
+        .unwrap()
+        .queue
+        .tsfn
+        .lock()
+        .unwrap()
+        .take()
+        .unwrap();
+    // Releasing normally drains queued callbacks; this test needs abort.
+    #[allow(deprecated)]
+    tsfn.abort()
 }

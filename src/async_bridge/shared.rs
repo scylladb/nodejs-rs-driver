@@ -59,19 +59,19 @@ impl DeferredPtr {
 
 /// Settles one Promise. It holds the result of the future and the deferred.
 ///
-/// A Tokio worker creates it when a future completes. The JavaScript thread
-/// calls it (and frees it) in the drain. It is boxed because one queue holds
-/// the results of futures with different output types.
+/// The JavaScript thread calls and frees it, either directly or in a
+/// drain, or shutdown drops it. Boxing lets storage hold different result types.
 pub(super) type SettleCallback = Box<dyn FnOnce(Env) + Send>;
 
-/// No argument no return value, weak ThreadSafeFunction type.
+/// A signal to drain coalesced completions. The TSFN never owns results:
+/// napi-rs can discard notifications on shutdown without dropping payloads.
 pub(super) type Tsfn =
     napi::threadsafe_function::ThreadsafeFunction<(), (), (), Status, false, true>;
 
 /// Completion queue of one environment.
 ///
 /// Tokio workers push completed futures here (`push`, in the `worker` module).
-/// A single TSFN call drains the whole batch on the JavaScript thread
+/// A TSFN callback drains the queued completions on the JavaScript thread
 /// (`FutureRegistry::drain`, in the `js_thread` module).
 pub(super) struct CompletionQueue {
     pub(super) completed: Mutex<Vec<SettleCallback>>,
@@ -79,6 +79,7 @@ pub(super) struct CompletionQueue {
     pub(super) signaled: AtomicBool,
     /// The TSFN lives here (behind a Mutex) so it's reachable from any
     /// thread — including the Tokio worker threads that complete futures.
+    /// Send and shutdown take this lock before the completion-storage lock.
     pub(super) tsfn: Mutex<Option<Tsfn>>,
 }
 

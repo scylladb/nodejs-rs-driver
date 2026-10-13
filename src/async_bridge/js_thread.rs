@@ -11,21 +11,28 @@ use std::ptr;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::task::{Context, Poll};
 
 // While check_status macro is doc(hidden), it implements a simple checks that convert c errors into Rust Results
 // Implementation: https://github.com/napi-rs/napi-rs/blob/f2178312d0e3e07beecc19836b91716a229107d3/crates/napi/src/error.rs#L35
 use napi::bindgen_prelude::{ToNapiValue, check_status};
 use napi::{Env, Result, sys};
 
-use super::shared::{CompletionQueue, DeferredPtr};
+use super::shared::{CompletionQueue, DeferredPtr, SettleCallback};
 use super::worker;
 use crate::errors::{ConvertedError, ConvertedResult};
 
+// Settle immediately ready low-load futures without a worker handoff.
+// Pending futures always share the completion queue to amortize JS callbacks.
+const INLINE_POLL_THRESHOLD: usize = 8;
+
 /// FutureRegistry — one per N-API environment.
-/// Futures run on the Tokio runtime. Each task carries its deferred,
-/// and the drain settles it on the JavaScript thread.
+/// Low-load futures get one local poll before moving to Tokio if pending.
+/// All settlement happens on the originating JavaScript thread.
 pub(super) struct FutureRegistry {
     active_count: Cell<usize>,
+    #[cfg(feature = "tests")]
+    counters: Cell<[u64; 8]>,
     pub(super) queue: Arc<CompletionQueue>,
     tokio_rt: RefCell<Option<tokio::runtime::Runtime>>,
 }
@@ -34,6 +41,8 @@ impl FutureRegistry {
     pub(super) fn new(rt: tokio::runtime::Runtime) -> Self {
         Self {
             active_count: Cell::new(0),
+            #[cfg(feature = "tests")]
+            counters: Cell::new([0; 8]),
             queue: Arc::new(CompletionQueue::new()),
             tokio_rt: RefCell::new(Some(rt)),
         }
@@ -86,8 +95,37 @@ impl FutureRegistry {
 
         self.active_count.set(active_count + 1);
 
-        // The task allocation happens here, on the JavaScript thread.
-        // The task body runs on a Tokio worker.
+        let poll_inline = active_count < INLINE_POLL_THRESHOLD;
+        let mut future = Box::pin(future);
+        if poll_inline {
+            // A first poll can start I/O without waking a worker first. Never
+            // wait for readiness here. Spawning after Pending guarantees a new
+            // poll with Tokio's waker, including when the first poll self-woke.
+            let ready = {
+                let _guard = rt.enter();
+                let mut cx = Context::from_waker(futures::task::noop_waker_ref());
+                future.as_mut().poll(&mut cx)
+            };
+            if let Poll::Ready(result) = ready {
+                #[cfg(feature = "tests")]
+                self.count(0);
+                // Conversion may synchronously submit another future.
+                drop(runtime);
+                self.complete(
+                    *env,
+                    Box::new(move |env| {
+                        // SAFETY: Still on the originating JavaScript thread.
+                        unsafe { settle(env, deferred, result) }
+                    }),
+                );
+                return Ok(promise);
+            }
+            #[cfg(feature = "tests")]
+            self.count(1);
+        } else {
+            #[cfg(feature = "tests")]
+            self.count(2);
+        }
         rt.spawn(worker::run_task(future, deferred, Arc::clone(&self.queue)));
         Ok(promise)
     }
@@ -98,33 +136,66 @@ impl FutureRegistry {
         // then signals the TSFN again, so no completion is lost.
         self.queue.signaled.store(false, Ordering::Release);
         let completed = std::mem::take(&mut *self.queue.completed.lock().unwrap());
-
+        #[cfg(feature = "tests")]
+        {
+            self.count(5);
+            let mut counters = self.counters.get();
+            counters[6] = counters[6].max(completed.len() as u64);
+            self.counters.set(counters);
+        }
         for settle in completed {
-            // Conversion can invoke JavaScript, which may spawn another
-            // future synchronously. No borrow is held here.
-            settle(env);
+            self.complete(env, settle);
+            #[cfg(feature = "tests")]
+            self.count(4);
+        }
+    }
 
-            let remaining = self.active_count.get() - 1;
-            self.active_count.set(remaining);
-            if remaining == 0 {
-                let guard = self.queue.tsfn.lock().unwrap();
-                if let Some(ref tsfn) = *guard {
-                    // SAFETY: Env belongs to this registry's N-API environment.
-                    let status = unsafe {
-                        check_status!(sys::napi_unref_threadsafe_function(env.raw(), tsfn.raw()))
-                    };
-                    if let Err(e) = status {
-                        panic!("Failed to unref TSFN in drain: {}", e.reason);
-                    }
+    fn complete(&self, env: Env, settle: SettleCallback) {
+        // Conversion can invoke JavaScript and submit another future.
+        settle(env);
+        let remaining = self.active_count.get() - 1;
+        self.active_count.set(remaining);
+        if remaining == 0 {
+            let guard = self.queue.tsfn.lock().unwrap();
+            if let Some(ref tsfn) = *guard {
+                // SAFETY: Env belongs to this registry's N-API environment.
+                let status = unsafe {
+                    check_status!(sys::napi_unref_threadsafe_function(env.raw(), tsfn.raw()))
+                };
+                if let Err(e) = status {
+                    panic!("Failed to unref TSFN after completion: {}", e.reason);
                 }
             }
         }
     }
 
+    #[cfg(feature = "tests")]
+    fn count(&self, index: usize) {
+        let mut counters = self.counters.get();
+        counters[index] += 1;
+        self.counters.set(counters);
+    }
+
+    #[cfg(feature = "tests")]
+    pub(super) fn stats(&self, reset: bool) -> Vec<f64> {
+        let counters = self.counters.get();
+        if reset {
+            self.counters.set([0; 8]);
+        }
+        counters.into_iter().map(|n| n as f64).collect()
+    }
+
     // This function is registered in the startup to be called during node cleanup process.
     pub(super) fn shutdown(&self) {
         self.active_count.set(0);
-        *self.queue.tsfn.lock().unwrap() = None;
+        let (tsfn, completed) = {
+            let mut guard = self.queue.tsfn.lock().unwrap();
+            let tsfn = guard.take();
+            let completed = std::mem::take(&mut *self.queue.completed.lock().unwrap());
+            (tsfn, completed)
+        };
+        // Release locks before dropping callbacks and their captured resources.
+        drop((tsfn, completed));
         if let Some(rt) = self.tokio_rt.borrow_mut().take() {
             rt.shutdown_background();
         }

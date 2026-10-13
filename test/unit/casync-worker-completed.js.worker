@@ -1,0 +1,23 @@
+"use strict";
+
+const { parentPort } = require("worker_threads");
+const rust = require("../../index");
+require("../../lib/client");
+
+// Stay below the low-load threshold. Do not return to the event loop: Tokio
+// completes these futures, but JS cannot consume their TSFN notifications.
+for (let i = 0; i < 4; i++) {
+    rust.testsCasyncTrackedResult(i);
+}
+const blocked = new Int32Array(new SharedArrayBuffer(4));
+const deadline = Date.now() + 5000;
+while (rust.testsBridgePendingCompletions() !== 4) {
+    if (Date.now() > deadline) {
+        throw new Error("completion results were not queued");
+    }
+    Atomics.wait(blocked, 0, 0, 1);
+}
+// Force the discard path: some Node versions otherwise drain before cleanup.
+rust.testsBridgeAbortNotifications();
+parentPort.postMessage("completed");
+Atomics.wait(blocked, 0, 0);

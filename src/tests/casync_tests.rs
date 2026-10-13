@@ -12,15 +12,15 @@ use crate::errors::ConvertedError;
 // ---------------------------------------------------------------------------
 
 /// Resolves with 42 on the first poll (no Pending).
-/// The completion still goes through the queue and the drain.
+/// At low load the bridge settles this on the calling JavaScript thread.
 #[napi(ts_return_type = "Promise<number>")]
 pub fn tests_casync_resolve_immediate(env: Env) -> JsAsyncResult<i32> {
     BridgedPromise::spawn(&env, || Ok(async move { Ok::<i32, ConvertedError>(42) }))
 }
 
 /// Resolves with `millis` after sleeping for `millis` milliseconds.
-/// The future completes on the Tokio worker after the timer expires,
-/// exercising the worker → completion queue → TSFN → drain path.
+/// After its first poll returns Pending, Tokio completes the future and sends
+/// its result through the queued TSFN path.
 #[napi(ts_return_type = "Promise<number>")]
 pub fn tests_casync_resolve_delayed(env: Env, millis: u32) -> JsAsyncResult<i32> {
     BridgedPromise::spawn(&env, || {
@@ -136,6 +136,24 @@ pub fn tests_casync_multi_wake(env: Env) -> JsAsyncResult<i32> {
     })
 }
 
+/// The first poll wakes itself and returns Pending. A low-load first poll uses
+/// a temporary waker; spawning must still cause a fresh Tokio poll.
+#[napi(ts_return_type = "Promise<number>")]
+pub fn tests_casync_self_wake(env: Env) -> JsAsyncResult<i32> {
+    BridgedPromise::spawn(&env, || {
+        let mut first = true;
+        Ok(std::future::poll_fn(move |cx| {
+            if first {
+                first = false;
+                cx.waker().wake_by_ref();
+                std::task::Poll::Pending
+            } else {
+                std::task::Poll::Ready(Ok::<i32, ConvertedError>(42))
+            }
+        }))
+    })
+}
+
 /// Test value that spawns another future during conversion.
 pub struct NestedPromise;
 
@@ -153,6 +171,17 @@ impl ToNapiValue for NestedPromise {
 pub fn tests_casync_nested_promise(env: Env) -> JsAsyncResult<NestedPromise> {
     BridgedPromise::spawn(&env, || {
         Ok(async { Ok::<_, ConvertedError>(NestedPromise) })
+    })
+}
+
+/// Exercises nested submission while consuming a queued completion.
+#[napi(ts_return_type = "Promise<number>")]
+pub fn tests_casync_nested_promise_delayed(env: Env) -> JsAsyncResult<NestedPromise> {
+    BridgedPromise::spawn(&env, || {
+        Ok(async {
+            tokio::time::sleep(Duration::from_millis(1)).await;
+            Ok::<_, ConvertedError>(NestedPromise)
+        })
     })
 }
 
@@ -196,4 +225,51 @@ pub fn tests_casync_conversion_error_with_null_byte(
     BridgedPromise::spawn(&env, || {
         Ok(async { Ok::<_, ConvertedError>(FailedConversionWithNullByte) })
     })
+}
+
+// Shared by the main environment and workers, so termination cannot hide a leak.
+static TRACKED_DROPS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+static TRACKED_CONVERSIONS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+pub struct TrackedResult(u32);
+
+impl Drop for TrackedResult {
+    fn drop(&mut self) {
+        TRACKED_DROPS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+impl ToNapiValue for TrackedResult {
+    unsafe fn to_napi_value(env: sys::napi_env, value: Self) -> napi::Result<sys::napi_value> {
+        TRACKED_CONVERSIONS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        // SAFETY: The bridge invokes conversion on the owning JS thread.
+        unsafe { u32::to_napi_value(env, value.0) }
+    }
+}
+
+/// A pending future whose completed native value records conversion and Drop.
+#[napi(ts_return_type = "Promise<number>")]
+pub fn tests_casync_tracked_result(env: Env, value: u32) -> JsAsyncResult<TrackedResult> {
+    BridgedPromise::spawn(&env, || {
+        Ok(async move {
+            tokio::time::sleep(Duration::from_millis(1)).await;
+            Ok::<_, ConvertedError>(TrackedResult(value))
+        })
+    })
+}
+
+/// Tests using tracked results run sequentially and reset before submitting.
+#[napi]
+pub fn tests_casync_tracked_stats(reset: bool) -> Vec<u32> {
+    use std::sync::atomic::Ordering::SeqCst;
+    [&TRACKED_CONVERSIONS, &TRACKED_DROPS]
+        .into_iter()
+        .map(|counter| {
+            if reset {
+                counter.swap(0, SeqCst)
+            } else {
+                counter.load(SeqCst)
+            }
+        })
+        .collect()
 }

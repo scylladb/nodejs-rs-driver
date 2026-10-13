@@ -1,16 +1,16 @@
 //! Code that runs on the Tokio worker threads.
 //!
 //! Nothing here calls Node-API. The only link back to the JavaScript thread
-//! is the TSFN call in `CompletionQueue::push`.
+//! is a TSFN notification.
 
 use std::future::Future;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use futures::FutureExt as _;
-use napi::Env;
 use napi::bindgen_prelude::ToNapiValue;
 use napi::threadsafe_function::ThreadsafeFunctionCallMode;
+use napi::{Env, Status};
 
 use super::js_thread;
 use super::shared::{CompletionQueue, DeferredPtr, SettleCallback};
@@ -18,9 +18,9 @@ use crate::errors::ConvertedResult;
 
 /// The body of each task that `FutureRegistry::spawn` starts.
 ///
-/// Awaits the future, boxes its result into a callback for the drain,
-/// and pushes it to the queue. The box is allocated here, on the worker.
-/// The JavaScript thread only calls and frees it.
+/// Awaits the future and delivers its result through the batch queue.
+/// The completion callback is allocated here, on the worker.
+/// Only the JavaScript thread calls it; failed sends or shutdown can drop it.
 pub(super) fn run_task<F, T>(
     future: F,
     deferred: DeferredPtr,
@@ -32,8 +32,8 @@ where
 {
     future.map(move |result| {
         let settle: SettleCallback = Box::new(move |env: Env| {
-            // SAFETY: Only `drain` calls this closure. It runs on the environment's
-            // JavaScript thread, inside the TSFN callback, where `env` is valid.
+            // SAFETY: The drain invokes this closure on
+            // the originating JavaScript thread inside its TSFN callback.
             unsafe { js_thread::settle(env, deferred, result) }
         });
         queue.push(settle);
@@ -44,12 +44,24 @@ impl CompletionQueue {
     /// Called when a future completes.
     /// Only the first push after a drain calls the TSFN.
     fn push(&self, settle: SettleCallback) {
+        // Serialize enqueue and send with teardown. No worker can leave a
+        // callback in storage after shutdown has emptied it.
+        let guard = self.tsfn.lock().unwrap();
+        let Some(tsfn) = guard.as_ref() else {
+            drop(guard);
+            drop(settle);
+            return;
+        };
         self.completed.lock().unwrap().push(settle);
-        if !self.signaled.swap(true, Ordering::AcqRel) {
-            let guard = self.tsfn.lock().unwrap();
-            if let Some(ref tsfn) = *guard {
-                tsfn.call((), ThreadsafeFunctionCallMode::NonBlocking);
-            } // Else branches can happen only during shutdown
-        }
+        let discarded = if !self.signaled.swap(true, Ordering::AcqRel)
+            && tsfn.call((), ThreadsafeFunctionCallMode::NonBlocking) != Status::Ok
+        {
+            self.signaled.store(false, Ordering::Release);
+            std::mem::take(&mut *self.completed.lock().unwrap())
+        } else {
+            Vec::new()
+        };
+        drop(guard);
+        drop(discarded);
     }
 }
