@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use config::SessionOptions;
 use napi::Env;
-use napi::bindgen_prelude::{External, ExternalRef};
+use napi::bindgen_prelude::{Buffer, External, ExternalRef};
 use scylla::client::session::Session;
 use scylla::errors::{ExecutionError, RequestAttemptError};
 use scylla::response::{PagingState, PagingStateResponse};
@@ -149,12 +149,12 @@ impl QueryExecutor {
         &self,
         env: Env,
         session: &SessionWrapper,
-        paging_state: Option<&PagingStateWrapper>,
+        paging_state: Option<Buffer>,
     ) -> JsAsyncResult<PagingResult> {
         BridgedPromise::spawn(&env, || {
             let values = Arc::clone(&self.values);
             let session_inner = Arc::clone(&session.inner);
-            let paging_state = paging_state.map(|p| p.inner.clone());
+            let paging_state = paging_state.map(|p| PagingState::new_from_raw_bytes(&*p));
             Ok(async move {
                 Self::fetch_next_page_internal(&session_inner, &values, paging_state).await
             })
@@ -360,12 +360,12 @@ impl SessionWrapper {
         query: String,
         params: Vec<EncodedValuesWrapper>,
         options: &QueryOptionsWrapper,
-        paging_state: Option<&PagingStateWrapper>,
+        paging_state: Option<Buffer>,
     ) -> JsAsyncResult<PagingResultWithExecutor> {
         BridgedPromise::spawn(&env, || {
             let statement = self.apply_statement_options(query.into(), &options.options)?;
             let executor = QueryExecutor::new(QueryValues::Unprepared { params, statement });
-            let paging_state = paging_state.map(|p| p.inner.clone());
+            let paging_state = paging_state.map(|p| PagingState::new_from_raw_bytes(&*p));
             let inner = Arc::clone(&self.inner);
             Ok(async move {
                 let res =
@@ -388,13 +388,13 @@ impl SessionWrapper {
         handle: &External<PreparedStatementWrapper>,
         params: SerializedValuesWrapper,
         options: &QueryOptionsWrapper,
-        paging_state: Option<&PagingStateWrapper>,
+        paging_state: Option<Buffer>,
     ) -> JsAsyncResult<PagingResultWithExecutor> {
         BridgedPromise::spawn(&env, || {
             let statement =
                 self.apply_prepared_statement_options(handle.prepared.clone(), &options.options)?;
             validate_value_count(&statement, &params)?;
-            let paging_state = paging_state.map(|p| p.inner.clone());
+            let paging_state = paging_state.map(|p| PagingState::new_from_raw_bytes(&*p));
             let result_metadata = Arc::clone(&handle.result_metadata);
             let inner = Arc::clone(&self.inner);
             Ok(async move {

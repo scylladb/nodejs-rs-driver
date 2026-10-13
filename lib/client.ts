@@ -507,7 +507,7 @@ class Client extends events.EventEmitter {
         query: string | PreparedInfo,
         params: ArrayOrObject,
         execOptions: ExecutionOptions,
-        pageState?: rust.PagingStateWrapper | Buffer | null,
+        pageState?: Buffer | null,
     ): Promise<ResultSet> {
         // Why not just take execOptions.isPaged()?
         // When executing through eachRow, users may not set the isPaged query option properly
@@ -573,7 +573,7 @@ class Client extends events.EventEmitter {
             ): Promise<rust.PagingResult> => {
                 return await executor.fetchNextPage(
                     this.rustClient!,
-                    rust.PagingStateWrapper.fromBuffer(pageState),
+                    pageState,
                 );
             };
         }
@@ -604,7 +604,7 @@ class Client extends events.EventEmitter {
         params: ArrayOrObject,
         rustOptions: rust.QueryOptionsWrapper,
         paged: boolean,
-        pageState?: rust.PagingStateWrapper,
+        pageState?: Buffer,
     ): Promise<rust.PagingResultWithExecutor> {
         let unifiedParams: Array<any>;
         if (Array.isArray(params)) {
@@ -645,7 +645,7 @@ class Client extends events.EventEmitter {
         execOptions: ExecutionOptions,
         rustOptions: rust.QueryOptionsWrapper,
         paged: boolean,
-        pageState?: rust.PagingStateWrapper,
+        pageState?: Buffer,
     ): Promise<rust.PagingResultWithExecutor> {
         // We do not accept already prepared statements for unprepared queries
         if (typeof query !== "string") {
@@ -1101,9 +1101,9 @@ class Client extends events.EventEmitter {
  * will not be cleared for the following pages of the execution.
  */
 function normalizePagingState(
-    pageState: rust.PagingStateWrapper | Buffer | null | undefined,
+    pageState: Buffer | null | undefined,
     execOptions: ExecutionOptions,
-): rust.PagingStateWrapper | undefined {
+): Buffer | undefined {
     let optionsPageState = execOptions.getPageState();
     switch (true) {
         // Paging is disabled, so we do not care about value of paging state
@@ -1113,17 +1113,13 @@ function normalizePagingState(
         case pageState === null && optionsPageState == undefined:
             return undefined;
         // Normalize pageState first, since it has a priority over execOptions
-        case pageState instanceof rust.PagingStateWrapper:
-            return pageState;
         case pageState instanceof Buffer:
-            return rust.PagingStateWrapper.fromBuffer(pageState);
+            return pageState;
         // If we have paging enabled, but no page state from last page, normalize exec options page state
         case pageState === null && optionsPageState instanceof Buffer:
-            return rust.PagingStateWrapper.fromBuffer(optionsPageState);
+            return optionsPageState;
         case pageState === null && typeof optionsPageState === "string":
-            return rust.PagingStateWrapper.fromBuffer(
-                Buffer.from(optionsPageState, "hex"),
-            );
+            return Buffer.from(optionsPageState, "hex");
         default:
             // Only cases with invalid types will be caught here: all accepted types are accepted in the earlier branches
             throw new TypeError(

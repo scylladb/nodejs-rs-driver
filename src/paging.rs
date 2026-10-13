@@ -11,13 +11,6 @@ pub struct PagingStateWrapper {
 #[napi]
 impl PagingStateWrapper {
     #[napi]
-    pub fn from_buffer(value: Buffer) -> PagingStateWrapper {
-        PagingStateWrapper {
-            inner: PagingState::new_from_raw_bytes(&*value),
-        }
-    }
-
-    #[napi]
     pub fn get_raw_page_state(&self) -> Buffer {
         self.inner
             .as_bytes_slice()
