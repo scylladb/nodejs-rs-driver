@@ -7,8 +7,7 @@ class FakeResultSet {
     constructor(rawResult, _encoder, pagingState) {
         this.rows = rawResult.rows;
         this.rowLength = this.rows.length;
-        this.innerPageState = pagingState || undefined;
-        this.rawPageState = pagingState?.getRawPageState();
+        this.rawPageState = pagingState || undefined;
     }
 }
 
@@ -28,18 +27,20 @@ function makeClient() {
 
     client.rustyExecute = async () => {
         executions++;
-        const first = new FakeResultSet({ rows: [{ page: 1 }] }, null, {
-            getRawPageState: () => states[0],
-        });
+        const first = new FakeResultSet(
+            { rows: [{ page: 1 }] },
+            null,
+            states[0],
+        );
         first.rawNextPageAsync = async (state) => {
             assert.deepStrictEqual(state, states[fetches]);
             fetches++;
             return fetches % 2 === 1
-                ? [
-                      { getRawPageState: () => states[1] },
-                      { rows: [{ page: 2 }] },
-                  ]
-                : [null, { rows: [{ page: 3 }] }];
+                ? {
+                      rows: [{ page: 2 }],
+                      getPagingState: () => states[1],
+                  }
+                : { rows: [{ page: 3 }], getPagingState: () => null };
         };
         return first;
     };

@@ -104,7 +104,7 @@ pub fn ddl(env: Env, session: &SessionWrapper, query: String) -> JsAsyncResult<Q
             let result = inner_session
                 .query_unpaged(statement, Vec::<EncodedValuesWrapper>::new())
                 .await?;
-            QueryResultWrapper::from_unprepared_or_batch(result)
+            QueryResultWrapper::from_unprepared_or_batch(result, None)
         })
     })
 }

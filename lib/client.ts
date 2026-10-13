@@ -507,7 +507,7 @@ class Client extends events.EventEmitter {
         query: string | PreparedInfo,
         params: ArrayOrObject,
         execOptions: ExecutionOptions,
-        pageState?: rust.PagingStateWrapper | Buffer | null,
+        pageState?: Buffer | null,
     ): Promise<ResultSet> {
         // Why not just take execOptions.isPaged()?
         // When executing through eachRow, users may not set the isPaged query option properly
@@ -528,12 +528,12 @@ class Client extends events.EventEmitter {
 
         let rustOptions = execOptions.getRustOptions();
 
-        let resultTuple: rust.PagingResultWithExecutor;
+        let result: rust.QueryResultWrapper;
         let columnsCache: ResultColumnsCache | undefined;
 
         if (execOptions.isPrepared()) {
             const prepared = await this.#resolvePrepared(query);
-            resultTuple = await this.#rustyExecutePrepared(
+            result = await this.#rustyExecutePrepared(
                 prepared,
                 params,
                 rustOptions,
@@ -544,7 +544,7 @@ class Client extends events.EventEmitter {
         } else {
             // This is checked in isNamedParameters. The assert here is to satisfy the TS compiler.
             assert(Array.isArray(params));
-            resultTuple = await this.#rustyExecuteUnprepared(
+            result = await this.#rustyExecuteUnprepared(
                 query,
                 params,
                 execOptions,
@@ -554,9 +554,8 @@ class Client extends events.EventEmitter {
             );
         }
 
-        let result = resultTuple[1];
-        let resultPageState = resultTuple[0];
-        let executor = resultTuple[2];
+        // Only paged results can have a next page.
+        let resultPageState = paged ? result.getPagingState() : null;
 
         let resultSet = new ResultSet(
             result,
@@ -565,15 +564,16 @@ class Client extends events.EventEmitter {
             columnsCache,
         );
         if (resultPageState) {
-            // If resultPageState then executor must be defined according to type definition.
+            const executor = result.getExecutor();
+            // A result with a next page also has the executor that fetches it.
             assert(executor instanceof rust.QueryExecutor);
 
             resultSet.rawNextPageAsync = async (
                 pageState: Buffer,
-            ): Promise<rust.PagingResult> => {
+            ): Promise<rust.QueryResultWrapper> => {
                 return await executor.fetchNextPage(
                     this.rustClient!,
-                    rust.PagingStateWrapper.fromBuffer(pageState),
+                    pageState,
                 );
             };
         }
@@ -604,8 +604,8 @@ class Client extends events.EventEmitter {
         params: ArrayOrObject,
         rustOptions: rust.QueryOptionsWrapper,
         paged: boolean,
-        pageState?: rust.PagingStateWrapper,
-    ): Promise<rust.PagingResultWithExecutor> {
+        pageState?: Buffer,
+    ): Promise<rust.QueryResultWrapper> {
         let unifiedParams: Array<any>;
         if (Array.isArray(params)) {
             unifiedParams = params;
@@ -627,16 +627,11 @@ class Client extends events.EventEmitter {
                 pageState,
             );
         }
-        // We add the undefined values here to make the value match PagingResultWithExecutor type
-        return [
-            undefined,
-            await this.rustClient!.executePreparedUnpaged(
-                prepared.handle,
-                encoded,
-                rustOptions,
-            ),
-            undefined,
-        ];
+        return this.rustClient!.executePreparedUnpaged(
+            prepared.handle,
+            encoded,
+            rustOptions,
+        );
     }
 
     async #rustyExecuteUnprepared(
@@ -645,8 +640,8 @@ class Client extends events.EventEmitter {
         execOptions: ExecutionOptions,
         rustOptions: rust.QueryOptionsWrapper,
         paged: boolean,
-        pageState?: rust.PagingStateWrapper,
-    ): Promise<rust.PagingResultWithExecutor> {
+        pageState?: Buffer,
+    ): Promise<rust.QueryResultWrapper> {
         // We do not accept already prepared statements for unprepared queries
         if (typeof query !== "string") {
             throw new Error("Expected to obtain a string query");
@@ -671,12 +666,7 @@ class Client extends events.EventEmitter {
                 pageState,
             );
         }
-        // We add the undefined values here to make the value match PagingResultWithExecutor type
-        return [
-            undefined,
-            await this.rustClient!.queryUnpaged(query, encoded, rustOptions),
-            undefined,
-        ];
+        return this.rustClient!.queryUnpaged(query, encoded, rustOptions);
     }
 
     /**
@@ -758,7 +748,8 @@ class Client extends events.EventEmitter {
                     "Next page executor or paging state is missing",
                 );
             }
-            const [pagingState, rawResult] = await fetchPage(pageState);
+            const rawResult = await fetchPage(pageState);
+            const pagingState = rawResult.getPagingState();
             const result = new ResultSet(
                 rawResult,
                 this.#encoder,
@@ -800,7 +791,7 @@ class Client extends events.EventEmitter {
                 });
             }
 
-            if (result.innerPageState) {
+            if (result.rawPageState) {
                 fetchedFirstPage = true;
                 fetchPage = result.rawNextPageAsync;
                 columnsCache = result.columnsCache;
@@ -1101,9 +1092,9 @@ class Client extends events.EventEmitter {
  * will not be cleared for the following pages of the execution.
  */
 function normalizePagingState(
-    pageState: rust.PagingStateWrapper | Buffer | null | undefined,
+    pageState: Buffer | null | undefined,
     execOptions: ExecutionOptions,
-): rust.PagingStateWrapper | undefined {
+): Buffer | undefined {
     let optionsPageState = execOptions.getPageState();
     switch (true) {
         // Paging is disabled, so we do not care about value of paging state
@@ -1113,17 +1104,13 @@ function normalizePagingState(
         case pageState === null && optionsPageState == undefined:
             return undefined;
         // Normalize pageState first, since it has a priority over execOptions
-        case pageState instanceof rust.PagingStateWrapper:
-            return pageState;
         case pageState instanceof Buffer:
-            return rust.PagingStateWrapper.fromBuffer(pageState);
+            return pageState;
         // If we have paging enabled, but no page state from last page, normalize exec options page state
         case pageState === null && optionsPageState instanceof Buffer:
-            return rust.PagingStateWrapper.fromBuffer(optionsPageState);
+            return optionsPageState;
         case pageState === null && typeof optionsPageState === "string":
-            return rust.PagingStateWrapper.fromBuffer(
-                Buffer.from(optionsPageState, "hex"),
-            );
+            return Buffer.from(optionsPageState, "hex");
         default:
             // Only cases with invalid types will be caught here: all accepted types are accepted in the earlier branches
             throw new TypeError(
