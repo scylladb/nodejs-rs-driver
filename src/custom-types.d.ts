@@ -23,7 +23,7 @@ export type ComplexType =
  * Serialized as a 2-element tuple: [pagingState, result].
  * - pagingState is null when there are no more pages.
  */
-export type PagingResult = [PagingStateWrapper | null, QueryResultWrapper]
+export type PagingResult = [Buffer | null, QueryResultWrapper]
 
 /**
  * Result of a paged query that can be continued via a QueryExecutor.
@@ -33,7 +33,7 @@ export type PagingResult = [PagingStateWrapper | null, QueryResultWrapper]
  * This type can also be used to represent an unpaged query result, to allow for better code reuse.
  * This kind of result can be represented by setting pagingState and executor to undefined.
  */
-export type PagingResultWithExecutor = [PagingStateWrapper | null, QueryResultWrapper, QueryExecutor]
+export type PagingResultWithExecutor = [Buffer | null, QueryResultWrapper, QueryExecutor]
   | [undefined, QueryResultWrapper, undefined]
 
 

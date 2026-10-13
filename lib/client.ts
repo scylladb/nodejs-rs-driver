@@ -800,7 +800,7 @@ class Client extends events.EventEmitter {
                 });
             }
 
-            if (result.innerPageState) {
+            if (result.rawPageState) {
                 fetchedFirstPage = true;
                 fetchPage = result.rawNextPageAsync;
                 columnsCache = result.columnsCache;

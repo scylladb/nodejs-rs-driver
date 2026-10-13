@@ -64,13 +64,6 @@ class ResultSet {
     #encoder!: Encoder;
 
     /**
-     * Internal representation of the page state, used for fetching the next page of results.
-     * @internal
-     * @ignore
-     */
-    innerPageState?: rust.PagingStateWrapper;
-
-    /**
      * Gets an array rows returned by the query.
      * When the result set represents a response from a write query, this property will be `undefined`.
      * When the read query result contains more rows than the fetch size (5000), this property will only contain the
@@ -113,7 +106,7 @@ class ResultSet {
      */
     declare rawNextPageAsync?: (
         pageState: Buffer,
-    ) => Promise<[rust.PagingStateWrapper | null, rust.QueryResultWrapper]>;
+    ) => Promise<[Buffer | null, rust.QueryResultWrapper]>;
 
     /**
      * Converted columns of the prepared handle, reused for later pages.
@@ -128,7 +121,7 @@ class ResultSet {
     constructor(
         result: rust.QueryResultWrapper,
         encoder: Encoder,
-        pagingState?: rust.PagingStateWrapper | null,
+        pagingState?: Buffer | null,
         columnsCache?: ResultColumnsCache,
     ) {
         // Old constructor logic only for purpose of unit tests.
@@ -182,11 +175,9 @@ class ResultSet {
         this.pageState = null;
 
         if (pagingState) {
-            this.innerPageState = pagingState;
-            const rawPageState = pagingState.getRawPageState();
-            this.pageState = rawPageState.toString("hex");
+            this.pageState = pagingState.toString("hex");
             Object.defineProperty(this, "rawPageState", {
-                value: rawPageState,
+                value: pagingState,
                 enumerable: false,
             });
         }
@@ -341,11 +332,7 @@ class ResultSet {
                         self.columnsCache,
                     ) as Array<Row>;
                     index = 0;
-                    if (rs[0]) {
-                        pageState = rs[0].getRawPageState();
-                    } else {
-                        pageState = undefined;
-                    }
+                    pageState = rs[0] ?? undefined;
                 }
 
                 if (index < rows.length) {

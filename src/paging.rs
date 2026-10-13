@@ -5,19 +5,6 @@ use crate::{
     result::QueryResultWrapper, session::QueryExecutor, utils::to_napi_obj::CopyableBuffer,
 };
 
-#[napi]
-pub struct PagingStateWrapper {
-    pub(crate) inner: PagingState,
-}
-
-#[napi]
-impl PagingStateWrapper {
-    #[napi(ts_return_type = "Buffer")]
-    pub fn get_raw_page_state(&self) -> CopyableBuffer<'_> {
-        CopyableBuffer::new(self.inner.as_bytes_slice().map_or(&[], |bytes| &bytes[..]))
-    }
-}
-
 /// Simple object that keeps the result of the current page result
 /// and information about next page.
 ///
@@ -25,7 +12,7 @@ impl PagingStateWrapper {
 /// This would return the same object to the Node part of the program.
 /// But, this can be only done in NAPI 3.0 which we are not using at the moment
 pub struct PagingResult {
-    pub(crate) paging_state: Option<PagingStateWrapper>,
+    pub(crate) paging_state: Option<PagingState>,
     pub(crate) result: QueryResultWrapper,
 }
 
@@ -56,7 +43,14 @@ impl ToNapiValue for PagingResult {
             Vec::to_napi_value(
                 env,
                 vec![
-                    Option::to_napi_value(env, val.paging_state),
+                    Option::to_napi_value(
+                        env,
+                        val.paging_state.as_ref().map(|state| {
+                            CopyableBuffer::new(
+                                state.as_bytes_slice().map_or(&[], |bytes| &bytes[..]),
+                            )
+                        }),
+                    ),
                     QueryResultWrapper::to_napi_value(env, val.result),
                 ],
             )
@@ -77,7 +71,14 @@ impl ToNapiValue for PagingResultWithExecutor {
             Vec::to_napi_value(
                 env,
                 vec![
-                    Option::to_napi_value(env, Some(val.result.paging_state)),
+                    Option::to_napi_value(
+                        env,
+                        val.result.paging_state.as_ref().map(|state| {
+                            CopyableBuffer::new(
+                                state.as_bytes_slice().map_or(&[], |bytes| &bytes[..]),
+                            )
+                        }),
+                    ),
                     QueryResultWrapper::to_napi_value(env, val.result.result),
                     QueryExecutor::to_napi_value(env, val.executor),
                 ],

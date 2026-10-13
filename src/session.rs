@@ -18,7 +18,7 @@ use scylla::statement::{Consistency, SerialConsistency, Statement};
 use crate::async_bridge::{BridgedPromise, JsAsyncResult};
 use crate::errors::{ConvertedError, ConvertedResult, JsResult, make_js_error, with_custom_error};
 use crate::metadata::state::ClusterSnapshot;
-use crate::paging::{PagingResult, PagingResultWithExecutor, PagingStateWrapper};
+use crate::paging::{PagingResult, PagingResultWithExecutor};
 use crate::requests::request::PreparedStatementWrapper;
 use crate::requests::request::{QueryOptionsObj, QueryOptionsWrapper};
 use crate::result::{QueryResultWrapper, ResultMetadataTracker};
@@ -134,9 +134,7 @@ impl QueryExecutor {
         Ok(PagingResult {
             result,
             paging_state: match paging_state_response {
-                PagingStateResponse::HasMorePages { state } => {
-                    Some(PagingStateWrapper { inner: state })
-                }
+                PagingStateResponse::HasMorePages { state } => Some(state),
                 PagingStateResponse::NoMorePages => None,
             },
         })

@@ -144,7 +144,7 @@ Generally there are two things you need to do, in order to properly annotate tho
     The custom definition in the `custom-types.d.ts`:
 
     ```ts
-    export type PagingResultWithExecutor = [PagingStateWrapper | null, QueryResultWrapper, QueryExecutor]
+    export type PagingResultWithExecutor = [Buffer | null, QueryResultWrapper, QueryExecutor]
     ```
 
     provides the meaning for this type. This is something you need to add manually to `custom-types.d.ts` file
