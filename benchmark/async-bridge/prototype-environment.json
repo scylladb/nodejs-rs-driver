@@ -1,0 +1,15 @@
+{
+  "base": "e0f97abb461200b3fb704c73a88aa7aa92c416d1",
+  "node": "v24.16.0",
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+  "kernel": "7.0.0-34-generic",
+  "scylla_version": "2026.2.6",
+  "scylla_image": "sha256:7a238fbb5ccb73e0e280fcf55702b35b1027d247b2e99593f8bc835bbec6fd4e",
+  "final_affinity": {
+    "JavaScript": "0",
+    "Tokio threads": "2,8 (extra blocking threads:10)",
+    "V8/background": "10",
+    "Scylla": "4,6"
+  },
+  "note": "Shared developer workstation; affinity separates client and database but does not reserve CPUs."
+}
