@@ -14,8 +14,11 @@
 //!
 //! At higher concurrency, Tokio performs all future polling. Workers enqueue
 //! completion callbacks, and only the first enqueue after a drain signals the
-//! TSFN. The drain settles its snapshot in one callback, retaining the existing
-//! batching behavior under load.
+//! TSFN. With fewer than 256 outstanding futures, each drain handles at most 64
+//! results or 50 microseconds. At 256 or more, the limits grow to 1024 results or
+//! 2 milliseconds, amortizing callbacks and refill microtasks at high load. A
+//! drain requeues its remainder and returns so Promise reactions can run between
+//! chunks. Time limits are soft: a single conversion cannot be preempted.
 //!
 //! ```text
 //! JavaScript submission
@@ -24,7 +27,7 @@
 //!   |                            +-- Ready --> settle Promise
 //!   |                            +-- Pending --> Tokio --> completion queue --> TSFN drain
 //!   |
-//!   +-- 8 or more pending --> Tokio --> completion queue --> TSFN drain
+//!   +-- 8 or more pending --> Tokio --> completion queue --> bounded TSFN drain
 //! ```
 //!
 //! The selection belongs to each submitted future. A burst can have both polling paths
@@ -38,7 +41,8 @@
 //! opaque pointers and are used only on the originating JavaScript thread.
 //!
 //! The drain clears `signaled` before taking a batch. A worker pushing after the
-//! take therefore schedules another callback. Locks
+//! take therefore schedules another callback. A bounded drain puts its remainder
+//! ahead of newer completions and signals again if no wakeup is pending. Locks
 //! and registry borrows are released before conversion, which can invoke JS and
 //! submit another future synchronously.
 //!
@@ -87,7 +91,7 @@ fn noop_callback() {
 ///
 /// Creates a dedicated `multi_thread(1)` Tokio runtime. Its worker thread runs
 /// the spawned futures and drives the reactor (epoll/kqueue). A single weak
-/// TSFN delivers batches of completions to the JavaScript thread.
+/// TSFN delivers bounded batches of completions to the JavaScript thread.
 /// It is ABI-stable, cross-platform, and has no direct libuv dependency.
 #[napi(ts_return_type = "void")]
 pub fn init_async_bridge(env: Env) -> JsResult<()> {

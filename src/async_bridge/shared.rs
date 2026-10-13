@@ -2,6 +2,7 @@
 //!
 //! Each method says which thread calls it.
 
+use std::collections::VecDeque;
 use std::sync::Mutex;
 use std::sync::atomic::AtomicBool;
 
@@ -59,7 +60,7 @@ impl DeferredPtr {
 
 /// Settles one Promise. It holds the result of the future and the deferred.
 ///
-/// The JavaScript thread calls and frees it, either directly or in a
+/// The JavaScript thread calls and frees it, either directly or in a bounded
 /// drain, or shutdown drops it. Boxing lets storage hold different result types.
 pub(super) type SettleCallback = Box<dyn FnOnce(Env) + Send>;
 
@@ -71,10 +72,10 @@ pub(super) type Tsfn =
 /// Completion queue of one environment.
 ///
 /// Tokio workers push completed futures here (`push`, in the `worker` module).
-/// A TSFN callback drains the queued completions on the JavaScript thread
+/// A TSFN callback drains a bounded portion on the JavaScript thread
 /// (`FutureRegistry::drain`, in the `js_thread` module).
 pub(super) struct CompletionQueue {
-    pub(super) completed: Mutex<Vec<SettleCallback>>,
+    pub(super) completed: Mutex<VecDeque<SettleCallback>>,
     /// Set by the first push after a drain. Cleared by the drain.
     pub(super) signaled: AtomicBool,
     /// The TSFN lives here (behind a Mutex) so it's reachable from any
@@ -87,7 +88,7 @@ impl CompletionQueue {
     /// Runs on: the JavaScript thread.
     pub(super) fn new() -> Self {
         Self {
-            completed: Mutex::new(Vec::new()),
+            completed: Mutex::new(VecDeque::new()),
             signaled: AtomicBool::new(false),
             tsfn: Mutex::new(None),
         }

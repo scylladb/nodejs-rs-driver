@@ -41,6 +41,25 @@ where
 }
 
 impl CompletionQueue {
+    /// Reschedule a bounded drain, retaining shutdown and failed-send cleanup.
+    /// Runs on the JavaScript thread after returning the unprocessed callbacks.
+    pub(super) fn signal(&self) {
+        let guard = self.tsfn.lock().unwrap();
+        let Some(tsfn) = guard.as_ref() else {
+            return;
+        };
+        let discarded = if !self.signaled.swap(true, Ordering::AcqRel)
+            && tsfn.call((), ThreadsafeFunctionCallMode::NonBlocking) != Status::Ok
+        {
+            self.signaled.store(false, Ordering::Release);
+            std::mem::take(&mut *self.completed.lock().unwrap())
+        } else {
+            Default::default()
+        };
+        drop(guard);
+        drop(discarded);
+    }
+
     /// Called when a future completes.
     /// Only the first push after a drain calls the TSFN.
     fn push(&self, settle: SettleCallback) {
@@ -52,14 +71,14 @@ impl CompletionQueue {
             drop(settle);
             return;
         };
-        self.completed.lock().unwrap().push(settle);
+        self.completed.lock().unwrap().push_back(settle);
         let discarded = if !self.signaled.swap(true, Ordering::AcqRel)
             && tsfn.call((), ThreadsafeFunctionCallMode::NonBlocking) != Status::Ok
         {
             self.signaled.store(false, Ordering::Release);
             std::mem::take(&mut *self.completed.lock().unwrap())
         } else {
-            Vec::new()
+            Default::default()
         };
         drop(guard);
         drop(discarded);

@@ -12,6 +12,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::task::{Context, Poll};
+use std::time::{Duration, Instant};
 
 // While check_status macro is doc(hidden), it implements a simple checks that convert c errors into Rust Results
 // Implementation: https://github.com/napi-rs/napi-rs/blob/f2178312d0e3e07beecc19836b91716a229107d3/crates/napi/src/error.rs#L35
@@ -25,6 +26,14 @@ use crate::errors::{ConvertedError, ConvertedResult};
 // Settle immediately ready low-load futures without a worker handoff.
 // Pending futures always share the completion queue to amortize JS callbacks.
 const INLINE_POLL_THRESHOLD: usize = 8;
+const MAX_COMPLETIONS_PER_DRAIN: usize = 64;
+const MAX_DRAIN_TIME: Duration = Duration::from_micros(50);
+// Tiny chunks at high concurrency repeatedly interrupt completion delivery to
+// run refill microtasks. Larger chunks recover throughput without an unbounded
+// callback. See benchmark/async-bridge for the concurrency sweep.
+const HIGH_LOAD_THRESHOLD: usize = 256;
+const HIGH_LOAD_MAX_COMPLETIONS: usize = 1024;
+const HIGH_LOAD_MAX_DRAIN_TIME: Duration = Duration::from_millis(2);
 
 /// FutureRegistry — one per N-API environment.
 /// Low-load futures get one local poll before moving to Tokio if pending.
@@ -135,18 +144,54 @@ impl FutureRegistry {
         // Clear the flag before taking the batch. A push after the take
         // then signals the TSFN again, so no completion is lost.
         self.queue.signaled.store(false, Ordering::Release);
-        let completed = std::mem::take(&mut *self.queue.completed.lock().unwrap());
+        let (limit, budget) = if self.active_count.get() >= HIGH_LOAD_THRESHOLD {
+            (HIGH_LOAD_MAX_COMPLETIONS, HIGH_LOAD_MAX_DRAIN_TIME)
+        } else {
+            (MAX_COMPLETIONS_PER_DRAIN, MAX_DRAIN_TIME)
+        };
+        let completed: Vec<_> = {
+            let mut queued = self.queue.completed.lock().unwrap();
+            let count = queued.len().min(limit);
+            queued.drain(..count).collect()
+        };
+
         #[cfg(feature = "tests")]
-        {
-            self.count(5);
-            let mut counters = self.counters.get();
-            counters[6] = counters[6].max(completed.len() as u64);
-            self.counters.set(counters);
-        }
-        for settle in completed {
+        self.count(5);
+        let started = Instant::now();
+        let mut completed = completed.into_iter();
+        #[cfg(feature = "tests")]
+        let mut count = 0;
+        for settle in completed.by_ref() {
             self.complete(env, settle);
             #[cfg(feature = "tests")]
-            self.count(4);
+            {
+                count += 1;
+                self.count(4);
+            }
+            if started.elapsed() >= budget {
+                break;
+            }
+        }
+        // Leave a large backlog in place rather than copying it on every
+        // bounded drain. Only this chunk's unprocessed callbacks go back in
+        // front, ahead of completions received while JavaScript was running.
+        let pending = {
+            let mut queued = self.queue.completed.lock().unwrap();
+            for settle in completed.rev() {
+                queued.push_front(settle);
+            }
+            !queued.is_empty()
+        };
+        if pending {
+            #[cfg(feature = "tests")]
+            self.count(7);
+            self.queue.signal();
+        }
+        #[cfg(feature = "tests")]
+        {
+            let mut counters = self.counters.get();
+            counters[6] = counters[6].max(count as u64);
+            self.counters.set(counters);
         }
     }
 
