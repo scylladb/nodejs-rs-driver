@@ -1,7 +1,9 @@
-use napi::bindgen_prelude::{Buffer, ToNapiValue};
+use napi::bindgen_prelude::ToNapiValue;
 use scylla::response::PagingState;
 
-use crate::{result::QueryResultWrapper, session::QueryExecutor};
+use crate::{
+    result::QueryResultWrapper, session::QueryExecutor, utils::to_napi_obj::CopyableBuffer,
+};
 
 #[napi]
 pub struct PagingStateWrapper {
@@ -10,11 +12,9 @@ pub struct PagingStateWrapper {
 
 #[napi]
 impl PagingStateWrapper {
-    #[napi]
-    pub fn get_raw_page_state(&self) -> Buffer {
-        self.inner
-            .as_bytes_slice()
-            .map_or(Buffer::default(), |e| (*(e.clone())).into())
+    #[napi(ts_return_type = "Buffer")]
+    pub fn get_raw_page_state(&self) -> CopyableBuffer<'_> {
+        CopyableBuffer::new(self.inner.as_bytes_slice().map_or(&[], |bytes| &bytes[..]))
     }
 }
 
