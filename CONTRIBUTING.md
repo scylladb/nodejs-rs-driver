@@ -90,8 +90,10 @@ It also fails a suite that runs no tests, that contains an exclusive (`.only`) t
 The build that it replaces is put back when the script exits, whether it succeeds, fails or is stopped by Ctrl-C, SIGTERM or SIGHUP:
 the addon (`index.*.node`), the napi loader in `index.js` and `index.d.ts`, and the `.js` and `.d.ts` files that tsc emits next to each `.ts` source in `lib/`.
 A file that was not there before the run is removed.
-A run killed outright, by SIGKILL or a crash, cannot do that: it leaves the instrumented build in place, and the one from before in `coverage/prior-build/`.
+A signal first stops the build or the suite that is running, and the script waits for it to exit before it puts anything back.
+A run killed outright, by SIGKILL or a crash, cannot put anything back: it leaves the instrumented build in place, and the one from before in `coverage/prior-build/`.
 `npm run coverage -- --restore` puts that back without measuring anything, and so does the next run, before anything else.
+Neither puts it back over a build made since the killed run: they stop with an error instead, and deleting `coverage/prior-build/` keeps the build in place.
 Only one run at a time can use a checkout: while one holds `target/coverage.lock`, another exits at once with an error.
 `scripts/test-coverage.sh` tests that control flow, with every tool the script runs replaced by a stub; CI runs it before the real run.
 

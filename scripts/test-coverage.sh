@@ -30,9 +30,12 @@ sources=(lib/a.ts lib/sub/b.ts lib/types.d.ts lib/plain.js)
 # part of its output first. A suite also writes a .profraw file into the target
 # directory, as the instrumented addon does, unless STUB_NO_PROFILE names it,
 # and sends the signal in STUB_KILL to the script and itself if STUB_KILL_SUITE
-# names it. With STUB_DAEMON set, the build leaves a process running and writes
-# its pid there. cp and mv fail the first call whose source is the file
-# STUB_FAIL_FILE names.
+# names it. If STUB_SIGNAL_STEP names the build or a suite, that step sends the
+# signal in STUB_SIGNAL to the script alone and carries on: the build with a
+# process that writes the addon a second later, the suite until it is stopped,
+# which it records as a step with what index.js holds then. With STUB_DAEMON
+# set, the build leaves a process running and writes its pid there. cp and mv
+# fail the first call whose source is the file STUB_FAIL_FILE names.
 stubs() {
     cat >"$work/bin/common" <<'EOF'
 step() {
@@ -91,6 +94,13 @@ case "$*" in
         sleep 60 </dev/null >/dev/null 2>&1 &
         echo $! >"$STUB_DAEMON"
     fi
+    # Like a kill of the npm process that runs the script, which passes the
+    # signal on to the script alone, while the build is still writing.
+    if [[ ${STUB_SIGNAL_STEP:-} == build:test ]]; then
+        (sleep 1 && echo late >index.linux-x64-gnu.node) &
+        kill -s "$STUB_SIGNAL" "$PPID"
+        wait
+    fi
     ;;
 "run "*" -- --fail-zero --forbid-only")
     suite=$2
@@ -114,6 +124,14 @@ case "$*" in
     # get the signal.
     if [[ $suite == "${STUB_KILL_SUITE:-}" ]]; then
         kill -s "$STUB_KILL" "$PPID" "$$"
+    fi
+    # And one that reaches the script alone: the suite runs on until stopped.
+    if [[ $suite == "${STUB_SIGNAL_STEP:-}" ]]; then
+        trap 'echo "stopped:$(cat index.js)" >>"$STUB_STEPS"; exit 143' TERM
+        kill -s "$STUB_SIGNAL" "$PPID"
+        sleep 5 &
+        wait
+        echo "not-stopped" >>"$STUB_STEPS"
     fi
     ;;
 *) unexpected npm "$@" ;;
@@ -292,6 +310,21 @@ expect_killed_state() {
     fi
 }
 
+# expect_content DESCRIPTION TEXT FILE...: checks that each FILE holds TEXT.
+expect_content() {
+    local description=$1 text=$2 file wrong=""
+    shift 2
+    for file in "$@"; do
+        [[ $(cat "$repo/$file" 2>/dev/null) == "$text" ]] || wrong+="$file "
+    done
+    if [[ -z $wrong ]]; then
+        pass "$description"
+    else
+        fail "$description"
+        echo "  not holding \"$text\": $wrong"
+    fi
+}
+
 # hold_lock / release_lock: plays another run of the script in the copy.
 hold_lock() {
     mkdir -p "$repo/target"
@@ -382,6 +415,41 @@ expect "the run after that runs every step" 0 "$all_steps"
 expect_output "... says it puts back the build from before the killed run" \
     "Putting back the build that an earlier run left in coverage/prior-build/."
 expect_files "... and puts it back" prior
+
+for signal in INT:130 TERM:143 HUP:129; do
+    setup prior
+    STUB_SIGNAL=${signal%:*} STUB_SIGNAL_STEP=unit-gc run
+    expect "SIG${signal%:*} to the script alone stops the suite before the build is put back" "${signal#*:}" \
+        "version show-env clean build:test tsc unit unit-gc stopped:instrumented"
+    expect_files "... and then puts it back" prior
+done
+setup prior
+STUB_SIGNAL=TERM STUB_SIGNAL_STEP=build:test run
+sleep 1.5
+expect "SIGTERM to the script alone stops the build" 143 "version show-env clean build:test"
+expect_files "... and every process of it, so none writes over the build put back" prior
+
+setup prior
+STUB_KILL=KILL STUB_KILL_SUITE=unit run
+for file in "${addon_files[@]}"; do
+    echo rebuilt >"$repo/$file"
+done
+run
+expect "a run after a killed run and a rebuild stops before anything runs" 1 ""
+expect_output "... says why" "is not put back over it"
+expect_content "... and leaves the rebuild in place" rebuilt "${addon_files[@]}"
+run --restore
+expect "--restore after a rebuild does nothing" 1 ""
+expect_content "... to the rebuild" rebuilt "${addon_files[@]}"
+if [[ -d $repo/coverage/prior-build ]]; then
+    pass "... or to the copy of the build from before"
+else
+    fail "... or to the copy of the build from before"
+fi
+rm -rf "$repo/coverage/prior-build"
+run
+expect "once that copy is deleted, a run goes ahead" 0 "$all_steps"
+expect_content "... and puts the rebuild back" rebuilt "${addon_files[@]}"
 
 setup prior
 STUB_KILL=KILL STUB_KILL_SUITE=unit run

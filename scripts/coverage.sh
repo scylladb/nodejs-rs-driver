@@ -69,9 +69,13 @@ fi
     # SIGKILL or a crash, cannot do that and leaves the copy where it is:
     # --restore puts it back, and so does the next run, before anything else.
     # Either step can be cut short and simply run again: the copy only counts
-    # once it is complete, and it is only dropped once it is back.
+    # once it is complete, and it is only dropped once it is back. Neither step
+    # puts the copy back over a build made since: once the instrumented build is
+    # complete, its checksums are recorded next to the copy, and a build in
+    # place that no longer matches them is left alone, with an error.
     shopt -s nullglob
     prior_build=coverage/prior-build
+    instrumented_build=$prior_build.sha256
 
     # Lists the files a build puts in place, one per line, whether each of them
     # is there or not: the napi loader, every index.*.node there is, and what
@@ -84,9 +88,27 @@ fi
         done < <(find lib -name '*.ts' ! -name '*.d.ts')
     }
 
+    # Prints the checksum of each file a build put in place, in a fixed order.
+    build_checksums() {
+        local file
+        while IFS= read -r file; do
+            if [[ -e $file ]]; then
+                sha256sum -- "$file" || return 1
+            fi
+        done < <(generated_files | LC_ALL=C sort)
+    }
+
+    # Each file is copied next to its place and renamed over it, so that a
+    # process that still has the addon mapped keeps the file it loaded rather
+    # than see it overwritten.
     restore_prior_build() {
         [[ -d $prior_build ]] || return 0
         local file
+        if [[ -e $instrumented_build ]] && ! build_checksums | cmp -s - "$instrumented_build"; then
+            echo "error: the build in place is not the one a run of $0 left there, so the build in $prior_build/ is not put back over it; delete $prior_build/ to keep the build in place" >&2
+            return 1
+        fi
+        rm -f -- "$instrumented_build" || return 1
         while IFS= read -r file; do
             if [[ ! -e $prior_build/$file ]]; then
                 rm -f -- "$file" || return 1
@@ -94,7 +116,8 @@ fi
         done < <(generated_files)
         while IFS= read -r file; do
             mkdir -p -- "$(dirname -- "$file")" &&
-                cp -p -- "$prior_build/$file" "$file" || return 1
+                cp -p -- "$prior_build/$file" "$file.coverage-tmp" &&
+                mv -f -- "$file.coverage-tmp" "$file" || return 1
         done < <(cd "$prior_build" && find . -type f | sed 's|^\./||')
         mv -- "$prior_build" "$prior_build.restored" && rm -rf -- "$prior_build.restored"
     }
@@ -121,6 +144,42 @@ fi
     rm -rf coverage || exit 1
     mkdir -p coverage/tmp coverage/js coverage/rust "$prior_build.partial" || exit 1
     trap 'restore_prior_build || exit 1' EXIT
+
+    # The build and the suites run in the background, each in a process group
+    # of its own, while this shell waits for them. A signal that stops the run
+    # may reach this shell alone -- a kill of the npm process that runs it,
+    # which passes it on to its child only, say -- and the exit trap would then
+    # put the build back while a suite still runs on it, or a build still writes
+    # it, and drop the lock with them still running. So INT, TERM and HUP first
+    # stop the whole group, with TERM (npm passes HUP on to no one), and wait
+    # for it; further ones are ignored meanwhile, as npm passes a ^C on to this
+    # shell on top of the one from the terminal. Only then does the shell end
+    # with that signal, which runs the exit trap.
+    step_pid=
+    run_step() {
+        # The script runs without job control, so the command is not a process
+        # group leader, and setsid makes it the leader of a new group, $!.
+        setsid "$@" &
+        step_pid=$!
+        wait "$step_pid"
+        local step_status=$?
+        step_pid=
+        return "$step_status"
+    }
+    # shellcheck disable=SC2329 # invoked by the traps below
+    stop() {
+        trap '' INT TERM HUP
+        if [[ -n $step_pid ]]; then
+            kill -TERM -- "-$step_pid" 2>/dev/null
+            wait "$step_pid"
+        fi
+        trap - "$1"
+        kill -s "$1" "$$"
+    }
+    trap 'stop INT' INT
+    trap 'stop TERM' TERM
+    trap 'stop HUP' HUP
+
     while IFS= read -r file; do
         if [[ -e $file ]]; then
             cp -p --parents -- "$file" "$prior_build.partial/" || exit 1
@@ -145,13 +204,14 @@ fi
     llvm_cov_env=$(cargo llvm-cov show-env --sh) || exit 1
     eval "$llvm_cov_env"
     profraw_dir=$(dirname "$LLVM_PROFILE_FILE")
-    export NODE_V8_COVERAGE="$PWD/coverage/tmp"
 
     # Removes the .profraw files of earlier runs, and this crate's artifacts so
     # it is rebuilt from scratch.
     cargo llvm-cov clean --workspace || exit 1
-    npm run build:test || exit 1
-    ./node_modules/.bin/tsc -p tsconfig.build.json --inlineSourceMap || exit 1
+    run_step npm run build:test || exit 1
+    run_step ./node_modules/.bin/tsc -p tsconfig.build.json --inlineSourceMap || exit 1
+    build_checksums >"$instrumented_build.partial" &&
+        mv -- "$instrumented_build.partial" "$instrumented_build" || exit 1
 
     suites=(unit unit-gc unit-not-supported)
     if [[ $mode == unit-only ]]; then
@@ -160,6 +220,10 @@ fi
         suites+=(integration integration-gc)
     fi
 
+    # Set only now, so that only the suites write V8 coverage, and not npm, the
+    # napi CLI and tsc in the build above as well.
+    export NODE_V8_COVERAGE="$PWD/coverage/tmp"
+
     status=0
     for suite in "${suites[@]}"; do
         touch coverage/suite-start
@@ -167,7 +231,7 @@ fi
         # integration-gc select theirs with --grep) fails instead of passing
         # with nothing measured. --forbid-only: so does one that a committed
         # .only cuts down to the tests it singles out.
-        npm run "$suite" -- --fail-zero --forbid-only || status=1
+        run_step npm run "$suite" -- --fail-zero --forbid-only || status=1
         # A process that loaded the instrumented addon writes a .profraw file
         # when it exits. None at all means the suite measured nothing on the
         # Rust side -- an uninstrumented addon was loaded, or every process that
