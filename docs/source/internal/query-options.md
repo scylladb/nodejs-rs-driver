@@ -1,16 +1,18 @@
 # Query options overview
 
 When a user provides options for a given query, an ``ExecutionOptions`` object is created.
-Before using these options in the Rust part of the driver, they are converted to ``QueryOptionsWrapper``.
+Before using these options in the Rust part of the driver, they are converted to ``RustQueryOptions``.
+``RustQueryOptions`` is a JS array of the options that Rust reads.
+Each Rust execution call takes these options as positional arguments.
 
-Because creation of those options requires a number of native calls,
-the process of converting execution options from Node to Rust part is time-consuming.
+The conversion calls a number of getters and checks the values.
+Thus, the conversion takes time.
 
 ## Query options reusing
 
 To reduce the performance impact of creating identical options instances,
 for the ``executeConcurrent`` interface, driver reuses a single instance of ``ExecutionOptions``
-and the corresponding Rust ``QueryOptionsWrapper``. This is possible because, by design,
+and the corresponding ``RustQueryOptions``. This is possible because, by design,
 each of the queries provided to ``executeConcurrent`` is executed with the same options.
 
 ``ExecutionOptions`` are created at the construction of ``ArrayBasedExecutor`` and ``StreamBasedExecutor``,

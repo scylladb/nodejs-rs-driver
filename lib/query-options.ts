@@ -190,18 +190,29 @@ export interface QueryOptions {
 }
 
 /**
- * Parses js query options into rust query options wrapper
+ * The query options in the form that the Rust execution calls take them:
+ * as positional arguments, in this order.
  * @internal
  * @ignore
  */
-export function queryOptionsIntoWrapper(
-    options: ExecutionOptions,
-): rust.QueryOptionsWrapper {
-    // `counter`, `keyspace`, `logged` and `prepare` are read straight off the
-    // execution options rather than through their getters, so they are always
-    // undefined here.
-    const asProperties = options as any;
+export type RustQueryOptions = [
+    consistency: number | undefined,
+    fetchSize: number | undefined,
+    isIdempotent: boolean | undefined,
+    requestTimeout: number | undefined,
+    serialConsistency: number | undefined,
+    timestamp: bigint | undefined,
+    traceQuery: boolean | undefined,
+];
 
+/**
+ * Converts js query options into the arguments of the Rust execution calls.
+ * @internal
+ * @ignore
+ */
+export function queryOptionsIntoRustArgs(
+    options: ExecutionOptions,
+): RustQueryOptions {
     const requestTimeout = options.getRequestTimeout();
     validateRequestTimeout(requestTimeout, "requestTimeout");
     let timestamp: number | Long | bigint | undefined | null =
@@ -209,21 +220,13 @@ export function queryOptionsIntoWrapper(
     if (timestamp instanceof Long) timestamp = timestamp.toBigInt();
     else if (timestamp) timestamp = BigInt(timestamp);
 
-    return new rust.QueryOptionsWrapper(
-        options.isAutoPage(),
-        options.getCaptureStackTrace(),
+    return [
         options.getConsistency(),
-        asProperties.counter,
         options.getFetchSize(),
         options.isIdempotent(),
-        asProperties.keyspace,
-        asProperties.logged,
-        asProperties.prepare,
         requestTimeout,
-        options.getRoutingIndexes(),
-        options.getRoutingNames(),
         options.getSerialConsistency(),
         timestamp as bigint | undefined,
         options.isQueryTracing(),
-    );
+    ];
 }

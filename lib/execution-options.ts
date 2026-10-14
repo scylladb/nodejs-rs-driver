@@ -3,8 +3,7 @@
 import utils = require("./utils");
 import types = require("./types");
 import errors = require("./errors");
-import _rust = require("../index");
-import { queryOptionsIntoWrapper } from "./query-options";
+import { queryOptionsIntoRustArgs, RustQueryOptions } from "./query-options";
 import {
     validateRequestTimeout,
     rejectUnsupportedReadTimeout,
@@ -26,7 +25,7 @@ const proxyExecuteKey = "ProxyExecute";
  * {@link Client} options.
  */
 class ExecutionOptions {
-    #rustWrapper?: _rust.QueryOptionsWrapper;
+    #rustOptions?: RustQueryOptions;
 
     /**
      * Creates a new instance of {@link ExecutionOptions}.
@@ -34,25 +33,26 @@ class ExecutionOptions {
     constructor() {}
 
     /**
-     * Creates rust options wrapper for this execution options unless it already exists.
-     * Goal of this function is to avoid wrapping the same options multiple times.
+     * Converts this execution options into the arguments of the Rust execution calls,
+     * unless they are already converted.
+     * Goal of this function is to avoid converting the same options multiple times.
      * @internal
      * @ignore
      */
-    wrapOptionsIfNotWrappedYet(): void {
-        if (!this.#rustWrapper) {
-            this.#rustWrapper = queryOptionsIntoWrapper(this);
+    convertOptionsIfNotConvertedYet(): void {
+        if (!this.#rustOptions) {
+            this.#rustOptions = queryOptionsIntoRustArgs(this);
         }
     }
 
     /**
-     * Get this options as rust wrapper.
+     * Get this options as the arguments of the Rust execution calls.
      * @internal
      * @ignore
      */
-    getRustOptions(): _rust.QueryOptionsWrapper {
-        this.wrapOptionsIfNotWrappedYet();
-        return this.#rustWrapper!;
+    getRustOptions(): RustQueryOptions {
+        this.convertOptionsIfNotConvertedYet();
+        return this.#rustOptions!;
     }
 
     /**

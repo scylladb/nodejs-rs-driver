@@ -33,7 +33,7 @@ import type { Replica } from "./host";
 import type { Token, TokenRange } from "./token";
 
 // Imports for the purpose of type hints.
-import type { QueryOptions } from "./query-options";
+import type { QueryOptions, RustQueryOptions } from "./query-options";
 import type { ArrayOrObject, CqlValue, metrics as metricsModule } from "../";
 import * as metadataModule from "./metadata";
 
@@ -233,11 +233,11 @@ class Client extends events.EventEmitter {
      */
     createOptions(options?: QueryOptions | ExecutionOptions): ExecutionOptions {
         if (options instanceof ExecutionOptions) {
-            options.wrapOptionsIfNotWrappedYet();
+            options.convertOptionsIfNotConvertedYet();
             return options;
         }
         let fullOptions = DefaultExecutionOptions.create(options, this);
-        fullOptions.wrapOptionsIfNotWrappedYet();
+        fullOptions.convertOptionsIfNotConvertedYet();
         return fullOptions;
     }
 
@@ -602,7 +602,7 @@ class Client extends events.EventEmitter {
     async #rustyExecutePrepared(
         prepared: PreparedInfo,
         params: ArrayOrObject,
-        rustOptions: rust.QueryOptionsWrapper,
+        rustOptions: RustQueryOptions,
         paged: boolean,
         pageState?: Buffer,
     ): Promise<rust.QueryResultWrapper> {
@@ -623,14 +623,14 @@ class Client extends events.EventEmitter {
             return this.rustClient!.executePreparedSinglePage(
                 prepared.handle,
                 encoded,
-                rustOptions,
+                ...rustOptions,
                 pageState,
             );
         }
         return this.rustClient!.executePreparedUnpaged(
             prepared.handle,
             encoded,
-            rustOptions,
+            ...rustOptions,
         );
     }
 
@@ -638,7 +638,7 @@ class Client extends events.EventEmitter {
         query: string | PreparedInfo,
         params: Array<CqlValue>,
         execOptions: ExecutionOptions,
-        rustOptions: rust.QueryOptionsWrapper,
+        rustOptions: RustQueryOptions,
         paged: boolean,
         pageState?: Buffer,
     ): Promise<rust.QueryResultWrapper> {
@@ -662,11 +662,11 @@ class Client extends events.EventEmitter {
             return this.rustClient!.querySinglePage(
                 query,
                 encoded,
-                rustOptions,
+                ...rustOptions,
                 pageState,
             );
         }
-        return this.rustClient!.queryUnpaged(query, encoded, rustOptions);
+        return this.rustClient!.queryUnpaged(query, encoded, ...rustOptions);
     }
 
     /**
@@ -986,9 +986,9 @@ class Client extends events.EventEmitter {
         let batch = shouldBePrepared
             ? this.rustClient!.createPreparedBatch(
                   allPrepared.map((prepared) => prepared.handle),
-                  rustOptions,
+                  ...rustOptions,
               )
-            : this.rustClient!.createBatch(allQueries, rustOptions);
+            : this.rustClient!.createBatch(allQueries, ...rustOptions);
         let wrappedResult = await this.rustClient!.batch(batch, parametersRows);
         return new ResultSet(wrappedResult, this.#encoder);
     }
