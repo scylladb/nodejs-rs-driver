@@ -24,8 +24,11 @@ export type ComplexType =
  */
 export type EncodedValuesWrapper = Uint8Array | null | undefined
 
-/** Values encoded for one CQL statement, including null and unset markers. */
-export type SerializedValuesWrapper = Array<EncodedValuesWrapper>
+/**
+ * Values encoded for one CQL statement, in the request frame layout:
+ * `[u16 count]`, then for each value `[i32 length][bytes]` (-1 null, -2 unset).
+ */
+export type SerializedValuesWrapper = Uint8Array
 
 /** Opaque native prepared statement stored by the client. */
 export interface PreparedStatementWrapper {}

@@ -28,6 +28,7 @@ import {
     convertComplexType,
     ColumnInfo,
 } from "./types/cql-utils";
+import { FrameWriter } from "./frame-writer";
 import Encoder = require("./encoder");
 import { HostMap } from "./host";
 import type { Replica } from "./host";
@@ -100,6 +101,8 @@ class Client extends events.EventEmitter {
      */
     rustClient: RustSession | undefined;
     #encoder: Encoder;
+    /** Encodes the values frames of this client's requests. */
+    #frameWriter = new FrameWriter();
     #loggingId: number | undefined;
     // Map insertion order determines which prepared handle is evicted first.
     #preparedCache = new Map<string, PreparedInfo>();
@@ -615,7 +618,7 @@ class Client extends events.EventEmitter {
             unifiedParams = utils.adaptNamedParamsPrepared(params, prepared);
         }
 
-        const encoded = encodeParams(
+        const encoded = this.#frameWriter.params(
             prepared.types,
             unifiedParams,
             this.#encoder,
