@@ -17,6 +17,10 @@ key, so a larger-result run cannot change a smaller dataset. Reads are prepared
 and include the driver's result construction. `WORKLOADS=bridge` replaces queries
 with immediately ready native futures and requires builds with `--features tests`.
 Those measurements isolate bridge overhead; they are not database-query speedups.
+Immediately ready futures settle inline at low load, so `bridge` does not exercise
+completion drains there. Use `WORKLOADS=bridge-pending` for self-waking futures
+that return `Pending` once and always pass through the completion queue, without
+database I/O or timers. Both bridge workloads require `--features tests`.
 
 ## Run
 

@@ -1,5 +1,7 @@
 "use strict";
 
+/* eslint-disable camelcase -- JSON fields match the Python benchmark tools. */
+
 // Each invocation runs one variant in a fresh process. Native library is selected
 // by NAPI_RS_NATIVE_LIBRARY_PATH; all variants use the same JS driver and workload.
 const { performance, createHistogram } = require("node:perf_hooks");
@@ -41,8 +43,11 @@ function summary(histogram) {
 
 async function main() {
     let operation;
-    if (workload === "bridge") {
-        operation = () => rust.testsCasyncResolveImmediate();
+    if (workload === "bridge" || workload === "bridge-pending") {
+        operation =
+            workload === "bridge-pending"
+                ? () => rust.testsCasyncSelfWake()
+                : () => rust.testsCasyncResolveImmediate();
     } else {
         client = new Client({
             contactPoints: [process.env.BENCH_HOST || "127.0.0.1"],
@@ -82,7 +87,7 @@ async function main() {
         if (collect) maxPending = Math.max(maxPending, pending);
         try {
             const result = await operation();
-            if (workload === "bridge" && result !== 42)
+            if (workload.startsWith("bridge") && result !== 42)
                 throw new Error("Bad bridge value");
             if (collect) {
                 const end = performance.now();
