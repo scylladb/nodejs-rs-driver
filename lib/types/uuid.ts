@@ -62,7 +62,8 @@ class Uuid {
      * Creates a new random (version 4) Uuid.
      * @param callback Optional callback to be invoked with the error as
      * first parameter and the created Uuid as second parameter. The callback
-     * runs synchronously. A cache refill may block while obtaining random bytes.
+     * runs on the next tick, including when generation fails. Generation uses
+     * cached random bytes synchronously; a refill may block while obtaining them.
      */
     static random(callback: ValueCallback<Uuid>): void;
     static random(): Uuid;
@@ -79,9 +80,9 @@ class Uuid {
             try {
                 uuid = new Uuid(randomUuidBuffer());
             } catch (err) {
-                return done(err as Error);
+                return process.nextTick(done, err as Error);
             }
-            return done(null, uuid);
+            return process.nextTick(done, null, uuid);
         }
         return new Uuid(randomUuidBuffer());
     }

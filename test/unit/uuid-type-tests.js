@@ -1,6 +1,7 @@
 "use strict";
 
 const assert = require("assert");
+const { execFileSync } = require("child_process");
 const crypto = require("crypto");
 const sinon = require("sinon");
 const v8 = require("v8");
@@ -273,7 +274,35 @@ describe("Uuid", function () {
 
     describe("random(cb)", function () {
         this.timeout(20000);
-        it("should report a failed cache refill and retry on the next call", function () {
+        it("should defer callbacks on cache refills and cache hits", async function () {
+            let CachedUuid;
+            withFreshModule(require.resolve("../../lib/types/uuid"), (Type) => {
+                CachedUuid = Type;
+            });
+            for (let i = 0; i < 2; i++) {
+                let returned = false;
+                const completed = new Promise((resolve, reject) => {
+                    const result = CachedUuid.random((err, value) => {
+                        try {
+                            assert.ifError(err);
+                            assert.strictEqual(returned, true);
+                            helper.assertInstanceOf(value, CachedUuid);
+                            resolve();
+                        } catch (e) {
+                            reject(e);
+                        }
+                    });
+                    assert.strictEqual(result, undefined);
+                    returned = true;
+                });
+                await completed;
+            }
+        });
+        it("should report a failed cache refill asynchronously and retry on the next call", async function () {
+            let CachedUuid;
+            withFreshModule(require.resolve("../../lib/types/uuid"), (Type) => {
+                CachedUuid = Type;
+            });
             const failure = new Error("random fill failed");
             const originalFill = crypto.randomFillSync;
             let fills = 0;
@@ -284,15 +313,23 @@ describe("Uuid", function () {
                     return originalFill(buffer);
                 });
             try {
-                let observedError;
-                for (let i = 0; i < 129 && !observedError; i++) {
-                    Uuid.random((err) => {
-                        if (err) observedError = err;
+                let returned = false;
+                const completed = new Promise((resolve, reject) => {
+                    CachedUuid.random((err, value) => {
+                        try {
+                            assert.strictEqual(returned, true);
+                            assert.strictEqual(err, failure);
+                            assert.strictEqual(value, undefined);
+                            resolve();
+                        } catch (e) {
+                            reject(e);
+                        }
                     });
-                }
-                assert.strictEqual(observedError, failure);
+                    returned = true;
+                });
+                await completed;
                 assert.strictEqual(fill.callCount, 1);
-                const recovered = Uuid.random();
+                const recovered = CachedUuid.random();
                 assert.strictEqual(recovered.buffer[6] >> 4, 4);
                 assert.strictEqual(recovered.buffer[8] >> 6, 2);
                 assert.strictEqual(fill.callCount, 2);
@@ -301,17 +338,32 @@ describe("Uuid", function () {
             }
         });
         it("should not invoke a throwing callback twice", function () {
-            const failure = new Error("callback failure");
-            let calls = 0;
-            assert.throws(
-                () =>
+            const output = execFileSync(
+                process.execPath,
+                [
+                    "-e",
+                    `
+                    const assert = require("assert");
+                    const Uuid = require(process.argv[1]);
+                    const failure = new Error("callback failure");
+                    let calls = 0;
+                    process.once("uncaughtException", (err) => {
+                        assert.strictEqual(err, failure);
+                        setImmediate(() => {
+                            assert.strictEqual(calls, 1);
+                            process.stdout.write("once");
+                        });
+                    });
                     Uuid.random(() => {
                         calls++;
                         throw failure;
-                    }),
-                (err) => err === failure,
+                    });
+                    `,
+                    require.resolve("../../lib/types/uuid"),
+                ],
+                { encoding: "utf8", timeout: 5000 },
             );
-            assert.strictEqual(calls, 1);
+            assert.strictEqual(output, "once");
         });
         it("should return a Uuid instance", function (done) {
             Uuid.random(function (err, uuid) {
