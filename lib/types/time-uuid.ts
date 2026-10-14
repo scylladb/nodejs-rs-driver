@@ -60,7 +60,7 @@ class TimeUuid extends Uuid {
      * @param ticks A number from 0 to 10000 representing the 100-nanoseconds units for this instance to fill in
      * the information not available in the Date, as Ecmascript Dates have only milliseconds precision.
      * @param nodeId A 6-length Buffer or string of 6 ascii characters representing the node identifier, ie: 'host01'.
-     * @param clockId A 2-length Buffer or string of 6 ascii characters representing the clock identifier.
+     * @param clockId A 2-length Buffer or string of 2 ascii characters representing the clock identifier.
      */
     constructor(
         date?: Date | Buffer | null,
@@ -94,7 +94,7 @@ class TimeUuid extends Uuid {
      *  the information not available in the Date, as Ecmascript Dates have only milliseconds precision.
      * @param nodeId A 6-length Buffer or string of 6 ascii characters representing the node identifier, ie: 'host01'.
      * If not provided, a random nodeId will be generated.
-     * @param clockId A 2-length Buffer or string of 6 ascii characters representing the clock identifier.
+     * @param clockId A 2-length Buffer or string of 2 ascii characters representing the clock identifier.
      * If not provided a random clockId will be generated.
      * @param callback An optional callback to be invoked with the error as first parameter and the created
      * `TimeUuid` as second parameter. When a callback is provided, the random portions of the
@@ -164,7 +164,7 @@ class TimeUuid extends Uuid {
      * Generates a TimeUuid instance based on the current date using random node and clock values.
      * @param nodeId A 6-length Buffer or string of 6 ascii characters representing the node identifier, ie: 'host01'.
      * If not provided, a random nodeId will be generated.
-     * @param clockId A 2-length Buffer or string of 6 ascii characters representing the clock identifier.
+     * @param clockId A 2-length Buffer or string of 2 ascii characters representing the clock identifier.
      * If not provided a random clockId will be generated.
      * @param callback An optional callback to be invoked with the error as first parameter and the created
      * `TimeUuid` as second parameter. When a callback is provided, the random portions of the
