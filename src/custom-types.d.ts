@@ -19,12 +19,6 @@ export type ComplexType =
   | { baseType: CqlType.Tuple; subtypes: ComplexType[] }
 
 /**
- * A pre-encoded CQL value passed to query parameters.
- * Null represents no value, and undefined represents unset value.
- */
-export type EncodedValuesWrapper = Uint8Array | null | undefined
-
-/**
  * Values encoded for one CQL statement, in the request frame layout:
  * `[u16 count]`, then for each value `[i32 length][bytes]` (-1 null, -2 unset).
  */
