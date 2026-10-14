@@ -13,7 +13,6 @@ use napi::Env;
 use crate::async_bridge::{BridgedPromise, JsAsyncResult};
 use crate::result::QueryResultWrapper;
 use crate::session::SessionWrapper;
-use crate::types::encoded_data::EncodedValuesWrapper;
 
 /// Message ScyllaDB returns when a schema change collides with another one being applied at
 /// (roughly) the same time.
@@ -106,9 +105,7 @@ pub fn ddl(
                 apply_ddl_lbp(&mut statement, host_id);
             }
 
-            let result = inner_session
-                .query_unpaged(statement, Vec::<EncodedValuesWrapper>::new())
-                .await?;
+            let result = inner_session.query_unpaged(statement, &[]).await?;
             QueryResultWrapper::from_unprepared_or_batch(result, None)
         })
     })
