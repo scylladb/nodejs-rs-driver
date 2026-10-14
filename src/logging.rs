@@ -1,5 +1,5 @@
 use std::fmt;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 use std::sync::{OnceLock, RwLock};
 
 use napi::bindgen_prelude::FnArgs;
@@ -36,6 +36,33 @@ struct RegisteredCallback {
 
 /// Monotonically increasing id counter for registered callbacks.
 static NEXT_ID: AtomicU64 = AtomicU64::new(0);
+
+/// The most verbose `level_rank` of all registered callbacks.
+/// Any thread reads it to skip events that no callback wants.
+/// It is updated when a callback is added or removed.
+static MAX_LEVEL: AtomicU8 = AtomicU8::new(0);
+
+/// The rank of a level in `MAX_LEVEL`. 0 means "no callback".
+/// A larger rank is more verbose.
+fn level_rank(level: Level) -> u8 {
+    match level {
+        Level::ERROR => 1,
+        Level::WARN => 2,
+        Level::INFO => 3,
+        Level::DEBUG => 4,
+        Level::TRACE => 5,
+    }
+}
+
+/// Recompute `MAX_LEVEL` from the registered callbacks.
+fn update_max_level(callbacks: &[RegisteredCallback]) {
+    let max = callbacks
+        .iter()
+        .map(|cb| level_rank(cb.min_level))
+        .max()
+        .unwrap_or(0);
+    MAX_LEVEL.store(max, Ordering::Relaxed);
+}
 
 /// Registry of all currently-active per-client callbacks.
 /// Initialized (and the global subscriber installed) on the first call to
@@ -160,23 +187,16 @@ impl<S: tracing::Subscriber> Layer<S> for JsForwardingLayer {
         event: &tracing::Event<'_>,
         _ctx: tracing_subscriber::layer::Context<'_, S>,
     ) {
+        // Quick pre-check: does *any* callback want this level?
+        if level_rank(*event.metadata().level()) > MAX_LEVEL.load(Ordering::Relaxed) {
+            return;
+        }
         let Some(lock) = CALLBACKS.get() else {
             return;
         };
         let Ok(callbacks) = lock.read() else {
             return;
         };
-
-        let meta = event.metadata();
-        let event_level = meta.level();
-
-        // Quick pre-check: is *any* callback interested in this level?
-        // Level ordering in tracing: TRACE > DEBUG > INFO > WARN > ERROR
-        // (more verbose = greater).  An event passes if it is at most as
-        // verbose as the callback's threshold, i.e. event_level <= min_level.
-        if !callbacks.iter().any(|cb| *event_level <= cb.min_level) {
-            return;
-        }
 
         // At least one callback wants this event — extract the fields.
         let log_event = LogEvent::from_event(event);
@@ -212,11 +232,13 @@ pub fn setup_logging(callback: LogCallback, min_level: String) -> JsResult<i64> 
         let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
 
         let callbacks = get_or_init_callbacks();
-        callbacks.write()?.push(RegisteredCallback {
+        let mut callbacks = callbacks.write()?;
+        callbacks.push(RegisteredCallback {
             id,
             callback,
             min_level: level,
         });
+        update_max_level(&callbacks);
 
         ConvertedResult::Ok(id as i64)
     })
@@ -230,9 +252,11 @@ pub fn setup_logging(callback: LogCallback, min_level: String) -> JsResult<i64> 
 #[napi]
 pub fn remove_logging(id: i64) {
     if let Some(lock) = CALLBACKS.get() {
-        lock.write()
-            .expect("Since we have use panic=abort, we will never have poisoned locks")
-            .retain(|cb| cb.id != id as u64);
+        let mut callbacks = lock
+            .write()
+            .expect("Since we have use panic=abort, we will never have poisoned locks");
+        callbacks.retain(|cb| cb.id != id as u64);
+        update_max_level(&callbacks);
     }
 }
 
