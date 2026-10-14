@@ -270,6 +270,11 @@ type TimeUuidCallback = (err: Error | null, value?: TimeUuid) => void;
  * Implements the polymorphic argument handling shared by
  * {@link TimeUuid.fromDate} and {@link TimeUuid.now}, which both accept the
  * callback in place of any of the trailing arguments.
+ * Preserve upstream Cassandra input handling: empty IDs request randomness,
+ * Buffer dates wrap existing UUID bytes, and inputs are read after any async
+ * randomness completes. Callers may rely on these behaviors even though the
+ * public types do not describe all of them. Callback delivery is deliberately
+ * always asynchronous, including when no randomness is needed.
  * @private
  */
 function fromDateInternal(

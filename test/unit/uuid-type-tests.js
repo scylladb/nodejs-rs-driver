@@ -1065,25 +1065,83 @@ describe("TimeUuid", function () {
                 );
             });
 
-            it("should treat an empty-string ID as missing", (done) => {
+            it("should read the current time after asynchronous randomness completes", async () => {
+                const clock = sandbox.useFakeTimers({
+                    now: 1000,
+                    toFake: ["Date"],
+                });
+                let finish;
+                sandbox
+                    .stub(crypto, "randomFill")
+                    .callsFake((buffer, offset, length, callback) => {
+                        buffer.fill(0, offset, offset + length);
+                        finish = () => callback(null, buffer);
+                    });
+                const completed = new Promise((resolve, reject) => {
+                    TimeUuid.now((err, value) =>
+                        err ? reject(err) : resolve(value),
+                    );
+                });
+                clock.setSystemTime(2000);
+                finish();
+                assert.strictEqual((await completed).getDate().getTime(), 2000);
+            });
+
+            it("should read a supplied Date after asynchronous randomness completes", async () => {
+                const date = new Date(1000);
+                let finish;
+                sandbox
+                    .stub(crypto, "randomFill")
+                    .callsFake((buffer, offset, length, callback) => {
+                        buffer.fill(0, offset, offset + length);
+                        finish = () => callback(null, buffer);
+                    });
+                const completed = new Promise((resolve, reject) => {
+                    TimeUuid.fromDate(date, 123, (err, value) =>
+                        err ? reject(err) : resolve(value),
+                    );
+                });
+                date.setTime(2000);
+                finish();
+                const value = await completed;
+                assert.strictEqual(value.getDate().getTime(), 2000);
+                assert.strictEqual(value.getDatePrecision().ticks, 123);
+            });
+
+            it("should treat either empty-string ID as missing in both callback factories", async () => {
                 const fill = sandbox.spy(crypto, "randomFill");
-                TimeUuid.now("", "02", (err, value) => {
-                    try {
-                        assert.ifError(err);
+                for (const method of ["now", "fromDate"]) {
+                    for (const [nodeId, clockId, offset, length] of [
+                        ["", "02", 10, 6],
+                        ["host01", "", 8, 2],
+                        ["", "", 8, 8],
+                    ]) {
+                        fill.resetHistory();
+                        const value = await new Promise((resolve, reject) => {
+                            const args = [
+                                nodeId,
+                                clockId,
+                                (err, value) =>
+                                    err ? reject(err) : resolve(value),
+                            ];
+                            if (method === "fromDate")
+                                args.unshift(new Date(0), 0);
+                            TimeUuid[method](...args);
+                        });
                         assert.strictEqual(fill.callCount, 1);
                         assert.deepStrictEqual(
                             fill.firstCall.args.slice(1, 3),
-                            [10, 6],
+                            [offset, length],
                         );
-                        assert.strictEqual(
-                            value.getClockId()[1],
-                            "2".charCodeAt(0),
-                        );
-                        done();
-                    } catch (e) {
-                        done(e);
+                        if (nodeId)
+                            assert.strictEqual(value.getNodeIdString(), nodeId);
+                        if (clockId)
+                            assert.strictEqual(
+                                value.getClockId()[1],
+                                clockId.charCodeAt(1),
+                            );
                     }
-                });
+                }
             });
 
             it("should pass random-fill failures to the callback", (done) => {
