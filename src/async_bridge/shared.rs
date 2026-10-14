@@ -64,6 +64,13 @@ impl DeferredPtr {
 /// the results of futures with different output types.
 pub(super) type SettleCallback = Box<dyn FnOnce(Env) + Send>;
 
+/// One entry of the completion queue. The drain handles the entries in
+/// the order of the pushes.
+pub(super) enum QueueEntry {
+    /// A future completed. Settles its Promise.
+    Settle(SettleCallback),
+}
+
 /// No argument no return value, weak ThreadSafeFunction type.
 pub(super) type Tsfn =
     napi::threadsafe_function::ThreadsafeFunction<(), (), (), Status, false, true>;
@@ -74,7 +81,7 @@ pub(super) type Tsfn =
 /// A single TSFN call drains the whole batch on the JavaScript thread
 /// (`FutureRegistry::drain`, in the `js_thread` module).
 pub(super) struct CompletionQueue {
-    pub(super) completed: Mutex<Vec<SettleCallback>>,
+    pub(super) completed: Mutex<Vec<QueueEntry>>,
     /// Set by the first push after a drain. Cleared by the drain.
     pub(super) signaled: AtomicBool,
     /// The TSFN lives here (behind a Mutex) so it's reachable from any

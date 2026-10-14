@@ -13,7 +13,7 @@ use napi::bindgen_prelude::ToNapiValue;
 use napi::threadsafe_function::ThreadsafeFunctionCallMode;
 
 use super::js_thread;
-use super::shared::{CompletionQueue, DeferredPtr, SettleCallback};
+use super::shared::{CompletionQueue, DeferredPtr, QueueEntry, SettleCallback};
 use crate::errors::ConvertedResult;
 
 /// The body of each task that `FutureRegistry::spawn` starts.
@@ -36,15 +36,15 @@ where
             // JavaScript thread, inside the TSFN callback, where `env` is valid.
             unsafe { js_thread::settle(env, deferred, result) }
         });
-        queue.push(settle);
+        queue.push(QueueEntry::Settle(settle));
     })
 }
 
 impl CompletionQueue {
     /// Called when a future completes.
     /// Only the first push after a drain calls the TSFN.
-    fn push(&self, settle: SettleCallback) {
-        self.completed.lock().unwrap().push(settle);
+    fn push(&self, entry: QueueEntry) {
+        self.completed.lock().unwrap().push(entry);
         if !self.signaled.swap(true, Ordering::AcqRel) {
             let guard = self.tsfn.lock().unwrap();
             if let Some(ref tsfn) = *guard {

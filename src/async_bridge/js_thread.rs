@@ -17,7 +17,7 @@ use std::sync::atomic::Ordering;
 use napi::bindgen_prelude::{ToNapiValue, check_status};
 use napi::{Env, Result, sys};
 
-use super::shared::{CompletionQueue, DeferredPtr};
+use super::shared::{CompletionQueue, DeferredPtr, QueueEntry, SettleCallback};
 use super::worker;
 use crate::errors::{ConvertedError, ConvertedResult};
 
@@ -99,23 +99,30 @@ impl FutureRegistry {
         self.queue.signaled.store(false, Ordering::Release);
         let completed = std::mem::take(&mut *self.queue.completed.lock().unwrap());
 
-        for settle in completed {
-            // Conversion can invoke JavaScript, which may spawn another
-            // future synchronously. No borrow is held here.
-            settle(env);
+        for entry in completed {
+            match entry {
+                QueueEntry::Settle(settle) => self.settle_one(env, settle),
+            }
+        }
+    }
 
-            let remaining = self.active_count.get() - 1;
-            self.active_count.set(remaining);
-            if remaining == 0 {
-                let guard = self.queue.tsfn.lock().unwrap();
-                if let Some(ref tsfn) = *guard {
-                    // SAFETY: Env belongs to this registry's N-API environment.
-                    let status = unsafe {
-                        check_status!(sys::napi_unref_threadsafe_function(env.raw(), tsfn.raw()))
-                    };
-                    if let Err(e) = status {
-                        panic!("Failed to unref TSFN in drain: {}", e.reason);
-                    }
+    /// Settles one Promise and unrefs the TSFN when no futures are pending.
+    fn settle_one(&self, env: Env, settle: SettleCallback) {
+        // Conversion can invoke JavaScript, which may spawn another
+        // future synchronously. No borrow is held here.
+        settle(env);
+
+        let remaining = self.active_count.get() - 1;
+        self.active_count.set(remaining);
+        if remaining == 0 {
+            let guard = self.queue.tsfn.lock().unwrap();
+            if let Some(ref tsfn) = *guard {
+                // SAFETY: Env belongs to this registry's N-API environment.
+                let status = unsafe {
+                    check_status!(sys::napi_unref_threadsafe_function(env.raw(), tsfn.raw()))
+                };
+                if let Err(e) = status {
+                    panic!("Failed to unref TSFN in drain: {}", e.reason);
                 }
             }
         }
