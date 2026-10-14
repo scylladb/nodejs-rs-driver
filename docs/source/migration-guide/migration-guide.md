@@ -651,5 +651,32 @@ client.on('log', (level, target, message, furtherInfo) => { ... });
 ### Cross-client event visibility
 
 All clients share the same underlying Rust tracing subscriber. Each client
-receives log events from the entire process, including those triggered by
-other `Client` instances.
+receives the log events of its own Node.js environment (the main thread or
+one worker thread). This includes events triggered by other `Client`
+instances in the same environment. A client does not receive the events of
+clients in other worker threads.
+
+### Order of log events and results
+
+Rust log events reach the `'log'` listener asynchronously, on a later tick
+of the event loop. But a log event that the driver emits before an operation
+completes always reaches the listener before the Promise of that operation
+settles (or before its callback is called). So you can read the collected
+events right after `await`:
+
+```js
+const warnings = [];
+client.on('log', (level, target, message) => {
+    if (level === 'warning') warnings.push(message);
+});
+try {
+    await client.connect();
+} catch (err) {
+    // The warnings logged during connect() are already here.
+    console.log(warnings);
+}
+```
+
+After `client.shutdown()`, the client receives no more log events.
+This includes the events that the driver emitted before the shutdown,
+but that did not reach the listener yet.
