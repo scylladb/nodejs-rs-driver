@@ -98,7 +98,8 @@ class TimeUuid extends Uuid {
      * If not provided a random clockId will be generated.
      * @param callback An optional callback to be invoked with the error as first parameter and the created
      * `TimeUuid` as second parameter. When a callback is provided, the random portions of the
-     * `TimeUuid` instance are created asynchronously.
+     * `TimeUuid` instance are created asynchronously. The callback always runs after this
+     * method returns, including when both IDs are supplied or validation fails.
      *
      *  Without a callback, missing nodeId and/or clockId portions use cached random bytes.
      *  A synchronous cache refill might block; use the callback-based version in that case.
@@ -167,7 +168,8 @@ class TimeUuid extends Uuid {
      * If not provided a random clockId will be generated.
      * @param callback An optional callback to be invoked with the error as first parameter and the created
      * `TimeUuid` as second parameter. When a callback is provided, the random portions of the
-     * `TimeUuid` instance are created asynchronously.
+     * `TimeUuid` instance are created asynchronously. The callback always runs after this
+     * method returns, including when both IDs are supplied or validation fails.
      *
      * Without a callback, missing nodeId and/or clockId portions use cached random bytes.
      * A synchronous cache refill might block; use the callback-based version in that case.
@@ -319,18 +321,20 @@ function fromDateInternal(
                 ? getProvidedClockId(resolvedClockId)
                 : null;
     } catch (e) {
-        // A missing ID makes validation errors asynchronous in the callback API.
-        if (!resolvedNodeId || !resolvedClockId) {
-            return process.nextTick(() => done(e as Error));
-        }
-        return done(e as Error);
+        return process.nextTick(done, e as Error);
     }
 
     const hasNodeId = bufferDate ? nodeIdProvided : !!nodeIdBuffer;
     const hasClockId = bufferDate ? clockIdProvided : !!clockIdBuffer;
+    // Keep input copying and timestamp generation immediate when no randomness
+    // is needed. Only callback delivery moves to the next tick.
+    const complete: TimeUuidCallback =
+        hasNodeId && hasClockId
+            ? (err, value) => process.nextTick(done, err, value)
+            : done;
     const buffer = utils.allocBufferUnsafe(16);
     const finish = (err?: Error | null): void => {
-        if (err) return done(err);
+        if (err) return complete(err);
         let timeUuid: TimeUuid;
         try {
             // Preserve the callback API's handling of mutable supplied IDs:
@@ -350,9 +354,9 @@ function fromDateInternal(
                 timeUuid = new TimeUuid(buffer);
             }
         } catch (e) {
-            return done(e as Error);
+            return complete(e as Error);
         }
-        done(null, timeUuid);
+        complete(null, timeUuid);
     };
 
     if (hasNodeId && hasClockId) return finish();
@@ -361,7 +365,7 @@ function fromDateInternal(
     try {
         crypto.randomFill(buffer, randomOffset, randomLength, finish);
     } catch (e) {
-        done(e as Error);
+        process.nextTick(done, e as Error);
     }
 }
 
