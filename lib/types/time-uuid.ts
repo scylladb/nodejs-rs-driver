@@ -349,16 +349,15 @@ function writeTime(buffer: Buffer, time: number, ticks: number): void {
 }
 
 /**
- * Returns a buffer of length 2 representing the clock identifier
+ * Validates a provided clock identifier, or returns null if it is missing.
  * @private
  */
-function getClockId(clockId?: string | Buffer | null): Buffer {
+function getProvidedClockId(clockId?: string | Buffer | null): Buffer | null {
     let buffer: Buffer;
     if (typeof clockId === "string") {
         buffer = utils.allocBufferFromString(clockId, "ascii");
     } else if (!(clockId instanceof Buffer)) {
-        // Generate
-        return getRandomBytes(2);
+        return null;
     } else {
         buffer = clockId;
     }
@@ -369,16 +368,15 @@ function getClockId(clockId?: string | Buffer | null): Buffer {
 }
 
 /**
- * Returns a buffer of length 6 representing the clock identifier
+ * Validates a provided node identifier, or returns null if it is missing.
  * @private
  */
-function getNodeId(nodeId?: string | Buffer | null): Buffer {
+function getProvidedNodeId(nodeId?: string | Buffer | null): Buffer | null {
     let buffer: Buffer;
     if (typeof nodeId === "string") {
         buffer = utils.allocBufferFromString(nodeId, "ascii");
     } else if (!(nodeId instanceof Buffer)) {
-        // Generate
-        return getRandomBytes(6);
+        return null;
     } else {
         buffer = nodeId;
     }
@@ -455,15 +453,24 @@ function generateBuffer(
     clockId?: string | Buffer | null,
 ): Buffer {
     const timeWithTicks = getTimeWithTicks(date, ticks);
-    const nodeIdBuffer = getNodeId(nodeId);
-    const clockIdBuffer = getClockId(clockId);
+    const nodeIdBuffer = getProvidedNodeId(nodeId) || getRandomBytes(6);
+    const clockIdBuffer = getProvidedClockId(clockId) || getRandomBytes(2);
     const buffer = utils.allocBufferUnsafe(16);
+    clockIdBuffer.copy(buffer, 8, 0);
+    nodeIdBuffer.copy(buffer, 10, 0);
+    writeTimeAndUuidBits(buffer, timeWithTicks);
+    return buffer;
+}
+
+/** Writes the timestamp and sets UUID version/variant bits on a filled buffer.
+ * @private
+ */
+function writeTimeAndUuidBits(
+    buffer: Buffer,
+    timeWithTicks: { time: number; ticks: number },
+): void {
     // Positions 0-7 Timestamp
     writeTime(buffer, timeWithTicks.time, timeWithTicks.ticks);
-    // Position 8-9 Clock
-    clockIdBuffer.copy(buffer, 8, 0);
-    // Positions 10-15 Node
-    nodeIdBuffer.copy(buffer, 10, 0);
     // Version Byte: Time based
     // 0001xxxx
     // turn off first 4 bits
@@ -477,7 +484,6 @@ function generateBuffer(
     buffer[8] = buffer[8] & 0x3f;
     // turn on first bit
     buffer[8] = buffer[8] | 0x80;
-    return buffer;
 }
 
 export = TimeUuid;

@@ -336,6 +336,21 @@ describe("Uuid", function () {
 
 describe("TimeUuid", function () {
     describe("constructor()", function () {
+        it("should reject invalid supplied ID lengths", function () {
+            assert.throws(
+                () => new TimeUuid(null, null, Buffer.alloc(5)),
+                /Node identifier must have 6 bytes/,
+            );
+            assert.throws(
+                () => new TimeUuid(null, null, "host01", Buffer.alloc(1)),
+                /Clock identifier must have 2 bytes/,
+            );
+            assert.throws(
+                () => new TimeUuid(null, null, "", "02"),
+                /Node identifier must have 6 bytes/,
+            );
+        });
+
         it("should generate based on the parameters", function () {
             // Gregorian calendar epoch
             let val = new TimeUuid(
