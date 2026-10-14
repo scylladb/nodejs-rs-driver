@@ -310,8 +310,8 @@ function fromDateInternal(
     }
 
     const resolvedTicks = ticks as number | null | undefined;
-    let resolvedNodeId = nodeId as string | Buffer | null | undefined;
-    let resolvedClockId = clockId as string | Buffer | null | undefined;
+    const resolvedNodeId = nodeId as string | Buffer | null | undefined;
+    const resolvedClockId = clockId as string | Buffer | null | undefined;
 
     if (!callback) {
         return new TimeUuid(
@@ -323,37 +323,67 @@ function fromDateInternal(
     }
 
     const done = callback as unknown as TimeUuidCallback;
-    utils.parallel(
-        [
-            (next: (err: Error | null, value?: Buffer) => void) =>
-                getOrGenerateRandom(resolvedNodeId, 6, (err, buffer) =>
-                    next(err, (resolvedNodeId = buffer)),
-                ),
-            (next: (err: Error | null, value?: Buffer) => void) =>
-                getOrGenerateRandom(resolvedClockId, 2, (err, buffer) =>
-                    next(err, (resolvedClockId = buffer)),
-                ),
-        ],
-        (err?: Error | null) => {
-            if (err) {
-                return done(err);
-            }
+    const bufferDate = date instanceof Buffer;
+    const nodeIdProvided = !!resolvedNodeId;
+    const clockIdProvided = !!resolvedClockId;
+    let nodeIdBuffer: Buffer | null;
+    let clockIdBuffer: Buffer | null;
+    try {
+        // The callback API has historically treated empty-string IDs as missing.
+        // A Buffer date already holds the full UUID, so its IDs are ignored.
+        nodeIdBuffer =
+            nodeIdProvided && !bufferDate
+                ? getProvidedNodeId(resolvedNodeId)
+                : null;
+        clockIdBuffer =
+            clockIdProvided && !bufferDate
+                ? getProvidedClockId(resolvedClockId)
+                : null;
+    } catch (e) {
+        // A missing ID makes validation errors asynchronous in the callback API.
+        if (!resolvedNodeId || !resolvedClockId) {
+            return process.nextTick(() => done(e as Error));
+        }
+        return done(e as Error);
+    }
 
-            let timeUuid;
-            try {
-                timeUuid = new TimeUuid(
-                    date,
-                    resolvedTicks,
-                    resolvedNodeId,
-                    resolvedClockId,
+    const hasNodeId = bufferDate ? nodeIdProvided : !!nodeIdBuffer;
+    const hasClockId = bufferDate ? clockIdProvided : !!clockIdBuffer;
+    const buffer = utils.allocBufferUnsafe(16);
+    const finish = (err?: Error | null): void => {
+        if (err) return done(err);
+        let timeUuid: TimeUuid;
+        try {
+            // Preserve the callback API's handling of mutable supplied IDs:
+            // copy them after asynchronous randomness is ready.
+            if (clockIdBuffer) clockIdBuffer.copy(buffer, 8);
+            if (nodeIdBuffer) nodeIdBuffer.copy(buffer, 10);
+            // The constructor also accepts a Buffer at runtime. Preserve that
+            // behavior when fromDate is called with one and a callback.
+            if (bufferDate) {
+                timeUuid = new TimeUuid(date);
+            } else {
+                // For the callback API, take the time after randomness is ready.
+                writeTimeAndUuidBits(
+                    buffer,
+                    getTimeWithTicks(date, resolvedTicks),
                 );
-            } catch (e) {
-                return done(e as Error);
+                timeUuid = new TimeUuid(buffer);
             }
+        } catch (e) {
+            return done(e as Error);
+        }
+        done(null, timeUuid);
+    };
 
-            done(null, timeUuid);
-        },
-    );
+    if (hasNodeId && hasClockId) return finish();
+    const randomOffset = hasClockId ? 10 : 8;
+    const randomLength = hasClockId ? 6 : hasNodeId ? 2 : 8;
+    try {
+        crypto.randomFill(buffer, randomOffset, randomLength, finish);
+    } catch (e) {
+        done(e as Error);
+    }
 }
 
 function writeTime(buffer: Buffer, time: number, ticks: number): void {
@@ -444,17 +474,6 @@ function getTimeWithTicks(
         time: date.getTime(),
         ticks: getTicks(ticks),
     };
-}
-
-function getOrGenerateRandom(
-    id: string | Buffer | null | undefined,
-    length: number,
-    callback: (err: Error | null, buffer?: Buffer) => void,
-): void {
-    if (id) {
-        return callback(null, id as Buffer);
-    }
-    crypto.randomBytes(length, callback);
 }
 
 /**
