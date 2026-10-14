@@ -116,6 +116,39 @@ impl Visit for MessageVisitor {
     }
 }
 
+/// A `tracing` event, formatted on the thread that emitted it.
+/// It holds only plain data, so it can move to another thread.
+pub(crate) struct LogEvent {
+    level: Level,
+    target: String,
+    message: String,
+    further_info: String,
+}
+
+impl LogEvent {
+    fn from_event(event: &tracing::Event<'_>) -> Self {
+        let meta = event.metadata();
+        let mut visitor = MessageVisitor::new();
+        event.record(&mut visitor);
+        Self {
+            level: *meta.level(),
+            target: meta.target().to_owned(),
+            message: visitor.log_message,
+            further_info: visitor.additional_fields,
+        }
+    }
+
+    /// The arguments of a JS log callback: `(level, target, message, furtherInfo)`.
+    fn to_js_args(&self) -> (String, String, String, String) {
+        (
+            rust_level_to_js(&self.level).to_owned(),
+            self.target.clone(),
+            self.message.clone(),
+            self.further_info.clone(),
+        )
+    }
+}
+
 /// A single global `Layer` that, on each event, iterates every registered
 /// per-client callback and forwards the event data to those whose
 /// `min_level` is permissive enough.
@@ -146,22 +179,13 @@ impl<S: tracing::Subscriber> Layer<S> for JsForwardingLayer {
         }
 
         // At least one callback wants this event — extract the fields.
-        let level_str = rust_level_to_js(event_level);
-        let target = meta.target();
-
-        let mut visitor = MessageVisitor::new();
-        event.record(&mut visitor);
+        let log_event = LogEvent::from_event(event);
 
         for cb in callbacks.iter() {
-            if *event_level <= cb.min_level {
+            if log_event.level <= cb.min_level {
                 cb.callback.call(
                     FnArgs {
-                        data: (
-                            level_str.to_owned(),
-                            target.to_owned(),
-                            visitor.log_message.clone(),
-                            visitor.additional_fields.clone(),
-                        ),
+                        data: log_event.to_js_args(),
                     },
                     ThreadsafeFunctionCallMode::NonBlocking,
                 );
