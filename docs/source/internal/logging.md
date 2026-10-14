@@ -24,13 +24,38 @@ for logs, which does not allow distinguishing what client generated it).
 
 Since the use cases where someone will have two or more clients seem to be very rare (this is only our assumption),
 we decided that it's best to keep the API compatibility of how the logs are delivered. This means that when someone
-attaches a log listener to the client, the listener will receive events from all active clients (at the specified log level).
+attaches a log listener to the client, the listener will receive events from all active clients
+of the same Node.js environment (at the specified log level). An environment is the main thread or one worker thread.
 
 This has the benefit of keeping the old interface of logging (so a logging receiver set up for the DSx driver should work here),
 at the cost of duplicating the logs when multiple client sessions are active (every active client will receive a single instance
 of a log, no matter which client triggered this action).
 
 Again, this is something that can be reworked during 1.0 release, while keeping the old interface as backward compatible (but probably deprecated).
+
+## Delivery and ordering
+
+Rust log events reach JavaScript through the async bridge (`src/async_bridge`).
+They do not use a thread-safe function of their own.
+
+- Each environment has one queue. It holds both log events and completed futures.
+- A thread-local on the JavaScript thread and on each bridge runtime thread points to the queue of its environment.
+  Events from other threads are dropped.
+- The bridge TSFN drains the queue in FIFO order.
+- The log callbacks stay in `src/logging.rs`, on the JavaScript thread of their environment.
+  The drain passes each event to `logging::deliver_log`.
+
+Because of this:
+
+- A log event that happens before a future completes reaches the listeners before the Promise settles.
+- After `removeLogging` (and so after `client.shutdown()`), the callback gets no more events.
+  This includes events that are already in the queue.
+- A Rust log event emitted during a synchronous call arrives after the call returns.
+  The layer only queues the event. It does not call JavaScript in the middle of Rust code.
+- If a log callback throws, the exception is reported as uncaught.
+  The rest of the batch is still processed.
+
+See issue [#621](https://github.com/scylladb/nodejs-rs-driver/issues/621) for the reasons.
 
 ## Shutdown
 

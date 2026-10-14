@@ -12,7 +12,7 @@
 //! Each Node.js environment (the main thread or a worker thread) has its own:
 //! - `FutureRegistry`, which lives only on the JavaScript thread,
 //! - Tokio runtime with one worker thread,
-//! - `CompletionQueue`, which both threads use,
+//! - `CompletionQueue`, which both threads use, for completions and log events,
 //! - weak TSFN, which tokio threads use upon future completion to wake
 //!   the JavaScript thread.
 //!
@@ -58,12 +58,24 @@
 //! The TSFN is referenced only while futures are pending. So the bridge
 //! keeps Node.js alive only until the last Promise settles.
 //!
+//! # Log events
+//!
+//! The queue also carries `tracing` events (`QueueEntry::Log`).
+//! `push_log` sends each event to the queue of the current thread's
+//! environment (`CURRENT_QUEUE`). The drain passes each event to
+//! `crate::logging::deliver_log`, which calls the log callbacks.
+//! One FIFO queue gives the order: a log event that happens before a
+//! completion reaches JavaScript before the Promise settles.
+//! Log events do not change the count of pending futures. So they do not
+//! keep Node.js alive.
+//!
 //! # What moves between the threads
 //!
 //! ```text
 //!                 created on    travels through                   used on
 //!  DeferredPtr    JS thread ───► Tokio task, then SettleCallback ───► JS thread (resolve / reject)
 //!  SettleCallback worker    ───► CompletionQueue                 ───► JS thread (called, freed)
+//!  LogEvent       any       ───► CompletionQueue                 ───► JS thread (log callbacks)
 //! ```
 //!
 //! # Modules
