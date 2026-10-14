@@ -56,7 +56,7 @@ pub struct QueryExecutor {
 
 enum QueryValues {
     Unprepared {
-        params: Vec<EncodedValuesWrapper>,
+        params: SerializedValuesWrapper,
         statement: Statement,
     },
     Prepared {
@@ -84,7 +84,7 @@ fn validate_value_count(
     let actual = usize::from(params.inner.element_count());
     if actual != expected {
         let error = scylla::errors::SerializationError::new(BuiltinTypeCheckError {
-            rust_name: std::any::type_name::<Vec<EncodedValuesWrapper>>(),
+            rust_name: std::any::type_name::<SerializedValuesWrapper>(),
             kind: BuiltinTypeCheckErrorKind::WrongColumnCount {
                 rust_cols: actual,
                 cql_cols: expected,
@@ -263,15 +263,14 @@ impl SessionWrapper {
     ///
     /// Returns a wrapper of the result provided by the rust driver
     ///
-    /// All parameters must be in a type recognizable by ParameterWrapper
-    /// -- each value must be tuple of its ComplexType and the value itself.
-    /// If the provided types will not be correct, this query will fail.
+    /// The values must be encoded by JS into one buffer (see [`SerializedValuesWrapper`]).
+    /// If the values do not match the column types, this query will fail.
     #[allow(clippy::too_many_arguments)]
     pub fn query_unpaged(
         &self,
         env: Env,
         query: String,
-        params: Vec<EncodedValuesWrapper>,
+        params: SerializedValuesWrapper,
         consistency: Option<u16>,
         fetch_size: Option<i32>,
         is_idempotent: Option<bool>,
@@ -466,7 +465,7 @@ impl SessionWrapper {
         &self,
         env: Env,
         query: String,
-        params: Vec<EncodedValuesWrapper>,
+        params: SerializedValuesWrapper,
         consistency: Option<u16>,
         fetch_size: Option<i32>,
         is_idempotent: Option<bool>,
@@ -584,7 +583,7 @@ pub fn session_query_unpaged(
     session: &External<SessionWrapper>,
     env: Env,
     query: String,
-    params: Vec<EncodedValuesWrapper>,
+    params: SerializedValuesWrapper,
     consistency: Option<u16>,
     fetch_size: Option<i32>,
     is_idempotent: Option<bool>,
@@ -718,7 +717,7 @@ pub fn session_query_single_page(
     session: &External<SessionWrapper>,
     env: Env,
     query: String,
-    params: Vec<EncodedValuesWrapper>,
+    params: SerializedValuesWrapper,
     consistency: Option<u16>,
     fetch_size: Option<i32>,
     is_idempotent: Option<bool>,

@@ -78,7 +78,7 @@ export class RustSession {
 
     querySinglePage(
         query: string,
-        params: Array<rust.EncodedValuesWrapper>,
+        params: rust.SerializedValuesWrapper,
         options: RustQueryOptions,
         pagingState?: Buffer,
     ): Promise<rust.ExternalObject<rust.QueryResultWrapper>> {
@@ -93,7 +93,7 @@ export class RustSession {
 
     queryUnpaged(
         query: string,
-        params: Array<rust.EncodedValuesWrapper>,
+        params: rust.SerializedValuesWrapper,
         options: RustQueryOptions,
     ): Promise<rust.ExternalObject<rust.QueryResultWrapper>> {
         return rust.sessionQueryUnpaged(this.#inner, query, params, ...options);

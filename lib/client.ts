@@ -665,7 +665,11 @@ class Client extends events.EventEmitter {
             | undefined;
 
         // Parse parameters according to provided hints, with type guessing
-        let encoded = encodeParams(hints2 || [], params, this.#encoder);
+        const encoded = this.#frameWriter.params(
+            hints2 || [],
+            params,
+            this.#encoder,
+        );
 
         if (paged) {
             return new RustResult(
