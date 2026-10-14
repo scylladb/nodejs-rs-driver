@@ -16,13 +16,12 @@ const Client = require("../../lib/client");
 const allEvents = [];
 
 /**
- * Allow any in-flight NonBlocking ThreadsafeFunction calls to drain
- * Repeating it will heuristically reduce chance of leaked events.
+ * Wait until the Rust log events emitted so far reach the callbacks.
+ * Log events and Promise completions share one FIFO queue.
+ * So when this Promise settles, the earlier log events are delivered.
  */
-async function drain() {
-    for (let i = 0; i < 20; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 0));
-    }
+async function flushLogs() {
+    await rust.testsCasyncResolveImmediate();
 }
 
 describe("Logging", function () {
@@ -47,7 +46,7 @@ describe("Logging", function () {
     describe("testsEmitLogEvents", function () {
         it("should forward events at all five tracing levels", async function () {
             rust.testsEmitLogEvents();
-            await drain();
+            await flushLogs();
 
             // TRACE -> "trace", DEBUG -> "debug", INFO -> "info", WARN -> "warning", ERROR -> "error"
             const levels = allEvents.map((e) => e.level);
@@ -60,7 +59,7 @@ describe("Logging", function () {
 
         it("should include the correct messages", async function () {
             rust.testsEmitLogEvents();
-            await drain();
+            await flushLogs();
 
             const messages = allEvents.map((e) => e.message);
             assert.include(messages, "trace message from rust");
@@ -72,7 +71,7 @@ describe("Logging", function () {
 
         it("should deliver extra fields via furtherInfo", async function () {
             rust.testsEmitLogEvents();
-            await drain();
+            await flushLogs();
 
             const furtherInfos = allEvents.map((e) => e.furtherInfo);
             assert.include(furtherInfos, 'test_field: "trace_extra"');
@@ -84,7 +83,7 @@ describe("Logging", function () {
 
         it("should set target to the Rust module path", async function () {
             rust.testsEmitLogEvents();
-            await drain();
+            await flushLogs();
 
             for (const event of allEvents) {
                 assert.isString(event.target);
@@ -110,7 +109,7 @@ describe("Logging", function () {
             );
 
             rust.testsEmitLogInfo("multi-callback test");
-            await drain();
+            await flushLogs();
 
             // Both callbacks should receive the event
             const first = allEvents.find(
@@ -143,7 +142,7 @@ describe("Logging", function () {
             );
 
             rust.testsEmitLogInfo("before remove");
-            await drain();
+            await flushLogs();
 
             assert.isDefined(
                 removableEvents.find((e) => e.message === "before remove"),
@@ -155,7 +154,7 @@ describe("Logging", function () {
             removableEvents.length = 0;
 
             rust.testsEmitLogInfo("after remove");
-            await drain();
+            await flushLogs();
 
             assert.strictEqual(
                 removableEvents.length,
@@ -188,7 +187,7 @@ describe("Logging", function () {
             );
 
             rust.testsEmitLogEvents(); // emits TRACE, DEBUG, INFO, WARN, ERROR
-            await drain();
+            await flushLogs();
 
             // Should only have error-level events
             for (const event of errorOnlyEvents) {
@@ -211,7 +210,7 @@ describe("Logging", function () {
     describe("visitor message format", function () {
         it("should format multiple extras as comma-separated key: value pairs in furtherInfo", async function () {
             rust.testsEmitLogWithMultipleExtras();
-            await drain();
+            await flushLogs();
 
             const event = allEvents.find(
                 (e) =>
@@ -237,7 +236,7 @@ describe("Logging", function () {
 
         it("should format string extras with debug quotes in furtherInfo", async function () {
             rust.testsEmitLogWithSingleStrExtra();
-            await drain();
+            await flushLogs();
 
             const event = allEvents.find(
                 (e) =>
@@ -254,7 +253,7 @@ describe("Logging", function () {
 
         it("should format non-string extras with debug representation in furtherInfo", async function () {
             rust.testsEmitLogWithMultipleExtras();
-            await drain();
+            await flushLogs();
 
             const event = allEvents.find(
                 (e) =>
@@ -272,7 +271,7 @@ describe("Logging", function () {
 
         it("should leave furtherInfo empty when there are no extra fields", async function () {
             rust.testsEmitLogMessageOnly();
-            await drain();
+            await flushLogs();
 
             const event = allEvents.find(
                 (e) => e.message === "message with no extras",
@@ -287,7 +286,7 @@ describe("Logging", function () {
 
         it("should map all five levels to correct JS strings", async function () {
             rust.testsEmitLogEvents();
-            await drain();
+            await flushLogs();
 
             const levelMap = {
                 "trace message from rust": "trace",
@@ -334,7 +333,6 @@ describe("Logging", function () {
                 // connect will fail without a real cluster — that's expected
             }
 
-            await drain();
             return { client, events };
         }
 

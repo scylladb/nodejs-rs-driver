@@ -107,11 +107,6 @@ describe("Client logging @SERVER_API", function () {
             );
 
             await firstClient.shutdown();
-            // Allow any in-flight NonBlocking ThreadsafeFunction calls to drain
-            // Repeating it will heuristically reduce chance of leaked events.
-            for (let i = 0; i < 20; i++) {
-                await new Promise((resolve) => setTimeout(resolve, 0));
-            }
 
             // Reset received events. Any event received after this point is either
             // - leaked event
