@@ -31,10 +31,10 @@ pub(super) struct FutureRegistry {
 }
 
 impl FutureRegistry {
-    pub(super) fn new(rt: tokio::runtime::Runtime) -> Self {
+    pub(super) fn new(rt: tokio::runtime::Runtime, queue: Arc<CompletionQueue>) -> Self {
         Self {
             active_count: Cell::new(0),
-            queue: Arc::new(CompletionQueue::new()),
+            queue,
             tokio_rt: RefCell::new(Some(rt)),
         }
     }

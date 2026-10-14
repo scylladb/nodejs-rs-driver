@@ -84,6 +84,7 @@ mod worker;
 use std::future::Future;
 use std::marker::PhantomData;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use napi::bindgen_prelude::ToNapiValue;
 use napi::{Env, Result, sys};
@@ -91,6 +92,7 @@ use napi_derive::napi;
 
 use crate::errors::{ConvertedError, ConvertedResult, JsResult, with_custom_error};
 use js_thread::{FutureRegistry, REGISTRIES};
+use shared::CompletionQueue;
 
 /// A JS Promise that a future on the bridge's Tokio runtime settles.
 /// `T` is the type the Promise resolves with. The Promise rejects with any error value
@@ -126,11 +128,12 @@ pub fn init_async_bridge(env: Env) -> JsResult<()> {
             return ConvertedResult::Ok(());
         }
 
+        let queue = Arc::new(CompletionQueue::new());
         let rt = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(1)
             .enable_all()
             .build()?;
-        let registry = Rc::new(FutureRegistry::new(rt));
+        let registry = Rc::new(FutureRegistry::new(rt, queue));
 
         // Create the TSFN from any c callback. This callback will be replaced in the build_callback step,
         // but we still need to provide c function, to use napi-rs callback builder.
