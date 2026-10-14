@@ -1,6 +1,7 @@
 import crypto = require("crypto");
 import utils = require("../utils");
 import { ValueCallback } from "../..";
+import { registerEntropyCacheSnapshotReset } from "./entropy-cache-snapshot";
 
 /** @module types */
 
@@ -152,6 +153,10 @@ class Uuid {
 // randomness natively. Benchmark before restoring per-value native calls.
 const uuidEntropyCache = Buffer.alloc(128 * 16);
 let uuidEntropyOffset = uuidEntropyCache.length;
+
+registerEntropyCacheSnapshotReset(uuidEntropyCache, () => {
+    uuidEntropyOffset = uuidEntropyCache.length;
+});
 
 /** @private */
 function randomUuidBuffer(): Buffer {

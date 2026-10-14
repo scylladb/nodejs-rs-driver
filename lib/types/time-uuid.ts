@@ -3,6 +3,7 @@ import crypto = require("crypto");
 import Long = require("long");
 
 import Uuid = require("./uuid");
+import { registerEntropyCacheSnapshotReset } from "./entropy-cache-snapshot";
 import utils = require("../utils");
 import { ValueCallback } from "../..";
 
@@ -28,6 +29,10 @@ const maxClockId = utils.allocBufferFromString("7f7f", "hex");
 // Cache entropy for synchronous generation without pointing outputs at the cache.
 const timeUuidEntropyCache = Buffer.alloc(128 * 8);
 let timeUuidEntropyOffset = timeUuidEntropyCache.length;
+
+registerEntropyCacheSnapshotReset(timeUuidEntropyCache, () => {
+    timeUuidEntropyOffset = timeUuidEntropyCache.length;
+});
 
 function fillRandomTimeUuidBytes(
     buffer: Buffer,

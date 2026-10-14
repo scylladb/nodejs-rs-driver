@@ -3,6 +3,7 @@
 const assert = require("assert");
 const crypto = require("crypto");
 const sinon = require("sinon");
+const v8 = require("v8");
 const helper = require("../test-helper");
 const utils = require("../../lib/utils");
 const Uuid = require("../../lib/types").Uuid;
@@ -15,6 +16,30 @@ function withFreshModule(path, check) {
         check(require(path));
     } finally {
         require.cache[path] = originalModule;
+    }
+}
+
+function withSnapshotCallbacks(path, check) {
+    const building = sinon
+        .stub(v8.startupSnapshot, "isBuildingSnapshot")
+        .returns(true);
+    const serialize = sinon.stub(v8.startupSnapshot, "addSerializeCallback");
+    const deserialize = sinon.stub(
+        v8.startupSnapshot,
+        "addDeserializeCallback",
+    );
+    const fill = sinon.spy(crypto, "randomFillSync");
+    try {
+        withFreshModule(path, (Type) => {
+            assert.strictEqual(serialize.callCount, 1);
+            assert.strictEqual(deserialize.callCount, 1);
+            check(Type, { serialize, deserialize, fill });
+        });
+    } finally {
+        fill.restore();
+        deserialize.restore();
+        serialize.restore();
+        building.restore();
     }
 }
 
@@ -172,7 +197,25 @@ describe("Uuid", function () {
                 fill.restore();
             }
         });
-
+        it("should discard cached entropy before serializing a startup snapshot", function () {
+            const uuidPath = require.resolve("../../lib/types/uuid");
+            withSnapshotCallbacks(
+                uuidPath,
+                (SnapshotUuid, { serialize, deserialize, fill }) => {
+                    const first = SnapshotUuid.random();
+                    const firstBytes = Buffer.from(first.buffer);
+                    assert.strictEqual(fill.callCount, 1);
+                    serialize.firstCall.args[0]();
+                    const second = SnapshotUuid.random();
+                    assert.strictEqual(fill.callCount, 2);
+                    deserialize.firstCall.args[0]();
+                    SnapshotUuid.random();
+                    assert.strictEqual(fill.callCount, 3);
+                    assert.deepStrictEqual(first.buffer, firstBytes);
+                    assert.strictEqual(second.buffer[6] >> 4, 4);
+                },
+            );
+        });
         it("should reuse random fills without sharing output buffers", function () {
             const fill = sinon.spy(crypto, "randomFillSync");
             try {
@@ -455,7 +498,22 @@ describe("TimeUuid", function () {
                 fill.restore();
             }
         });
-
+        it("should discard TimeUuid entropy before a startup snapshot", function () {
+            const timeUuidPath = require.resolve("../../lib/types/time-uuid");
+            withSnapshotCallbacks(
+                timeUuidPath,
+                (CachedTimeUuid, { serialize, deserialize, fill }) => {
+                    CachedTimeUuid.now();
+                    assert.strictEqual(fill.callCount, 1);
+                    serialize.firstCall.args[0]();
+                    CachedTimeUuid.now();
+                    assert.strictEqual(fill.callCount, 2);
+                    deserialize.firstCall.args[0]();
+                    CachedTimeUuid.now();
+                    assert.strictEqual(fill.callCount, 3);
+                },
+            );
+        });
         it("should generate based on the parameters", function () {
             // Gregorian calendar epoch
             let val = new TimeUuid(
