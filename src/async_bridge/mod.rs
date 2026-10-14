@@ -186,6 +186,15 @@ pub(crate) fn is_initialized(env: &Env) -> bool {
     FutureRegistry::get(env).is_some()
 }
 
+/// The number of entries in the queue of this environment that wait for
+/// the drain.
+///
+/// Tests use this to put several entries into one drain.
+#[cfg(feature = "tests")]
+pub(crate) fn queued_entries(env: &Env) -> usize {
+    FutureRegistry::get(env).map_or(0, |registry| registry.queue.completed.lock().unwrap().len())
+}
+
 /// Queues a `tracing` event for the environment of the current thread.
 ///
 /// `make` formats the event. It runs only if the thread has an environment.
