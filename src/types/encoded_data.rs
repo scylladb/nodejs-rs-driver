@@ -2,11 +2,16 @@ use napi::{
     bindgen_prelude::{FromNapiValue, Uint8Array, check_status},
     sys,
 };
+use scylla::serialize::row::{
+    BuiltinTypeCheckError, BuiltinTypeCheckErrorKind, RowSerializationContext, SerializeRow,
+};
+use scylla::serialize::writers::RowWriter;
 use scylla::{
     cluster::metadata::ColumnType,
     errors::SerializationError,
     serialize::value::{BuiltinSerializationError, BuiltinSerializationErrorKind, SerializeValue},
 };
+use scylla_cql_core::frame::types::RawValue;
 use scylla_cql_core::serialize::row::SerializedValues;
 
 use crate::errors::make_js_error;
@@ -49,6 +54,54 @@ impl FromNapiValue for SerializedValuesWrapper {
             )));
         }
         Ok(Self { inner })
+    }
+}
+
+/// Writes the pre-encoded values as they are.
+/// Unprepared statements need this: the driver prepares them internally,
+/// and then serializes the values against the column specs it received.
+/// The values are not type checked here. The JS encoder already did that.
+impl SerializeRow for SerializedValuesWrapper {
+    fn serialize(
+        &self,
+        ctx: &RowSerializationContext<'_>,
+        writer: &mut RowWriter,
+    ) -> Result<(), SerializationError> {
+        let actual = usize::from(self.inner.element_count());
+        let expected = ctx.columns().len();
+        if actual != expected {
+            return Err(SerializationError::new(BuiltinTypeCheckError {
+                rust_name: std::any::type_name::<Self>(),
+                kind: BuiltinTypeCheckErrorKind::WrongColumnCount {
+                    rust_cols: actual,
+                    cql_cols: expected,
+                },
+            }));
+        }
+        for (value, column) in self.inner.iter().zip(ctx.columns()) {
+            let cell = writer.make_cell_writer();
+            match value {
+                RawValue::Value(bytes) => {
+                    cell.set_value(bytes).map_err(|_| {
+                        mk_ser_err::<Self>(
+                            column.typ(),
+                            BuiltinSerializationErrorKind::SizeOverflow,
+                        )
+                    })?;
+                }
+                RawValue::Null => {
+                    cell.set_null();
+                }
+                RawValue::Unset => {
+                    cell.set_unset();
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn is_empty(&self) -> bool {
+        self.inner.element_count() == 0
     }
 }
 
