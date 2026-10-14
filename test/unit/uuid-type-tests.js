@@ -8,6 +8,16 @@ const utils = require("../../lib/utils");
 const Uuid = require("../../lib/types").Uuid;
 const TimeUuid = require("../../lib/types").TimeUuid;
 
+function withFreshModule(path, check) {
+    const originalModule = require.cache[path];
+    try {
+        delete require.cache[path];
+        check(require(path));
+    } finally {
+        require.cache[path] = originalModule;
+    }
+}
+
 describe("Uuid", function () {
     describe("constructor", function () {
         it("should validate the Buffer length", function () {
@@ -349,6 +359,101 @@ describe("TimeUuid", function () {
                 () => new TimeUuid(null, null, "", "02"),
                 /Node identifier must have 6 bytes/,
             );
+        });
+        it("should cache random bytes for missing IDs", function () {
+            const timeUuidPath = require.resolve("../../lib/types/time-uuid");
+            const fill = sinon.spy(crypto, "randomFillSync");
+            try {
+                withFreshModule(timeUuidPath, (CachedTimeUuid) => {
+                    const value = new CachedTimeUuid();
+                    assert.strictEqual(fill.callCount, 1);
+                    assert.strictEqual(fill.firstCall.args[0].length, 128 * 8);
+                    assert.strictEqual(value.buffer[6] >> 4, 1);
+                    assert.strictEqual(value.buffer[8] >> 6, 2);
+
+                    const withNode = new CachedTimeUuid(null, null, "host01");
+                    assert.strictEqual(fill.callCount, 1);
+                    assert.strictEqual(withNode.getNodeIdString(), "host01");
+
+                    const withClock = new CachedTimeUuid(
+                        null,
+                        null,
+                        null,
+                        "02",
+                    );
+                    assert.strictEqual(fill.callCount, 1);
+                    assert.strictEqual(
+                        withClock.getClockId()[1],
+                        "2".charCodeAt(0),
+                    );
+
+                    new CachedTimeUuid(null, null, "host01", "02");
+                    assert.strictEqual(fill.callCount, 1);
+
+                    for (let i = 0; i < 126; i++) new CachedTimeUuid();
+                    assert.strictEqual(fill.callCount, 1);
+                    new CachedTimeUuid();
+                    assert.strictEqual(fill.callCount, 2);
+                });
+            } finally {
+                fill.restore();
+            }
+        });
+        it("should refill before an uneven cache remainder is reused", function () {
+            const timeUuidPath = require.resolve("../../lib/types/time-uuid");
+            const fill = sinon.stub(crypto, "randomFillSync");
+            fill.callsFake((buffer) =>
+                buffer.fill(fill.callCount === 1 ? 0x11 : 0x22),
+            );
+            try {
+                withFreshModule(timeUuidPath, (CachedTimeUuid) => {
+                    const clockOnly = CachedTimeUuid.now("host01");
+                    assert.strictEqual(clockOnly.getClockId()[1], 0x11);
+                    for (let i = 0; i < 127; i++) {
+                        const value = CachedTimeUuid.now();
+                        assert.deepStrictEqual(
+                            value.getNodeId(),
+                            Buffer.alloc(6, 0x11),
+                        );
+                    }
+                    assert.strictEqual(fill.callCount, 1);
+                    const afterRefill = CachedTimeUuid.now();
+                    assert.strictEqual(fill.callCount, 2);
+                    assert.deepStrictEqual(
+                        afterRefill.getNodeId(),
+                        Buffer.alloc(6, 0x22),
+                    );
+                    assert.strictEqual(afterRefill.getClockId()[1], 0x22);
+                });
+            } finally {
+                fill.restore();
+            }
+        });
+        it("should retry a failed TimeUuid cache refill", function () {
+            const timeUuidPath = require.resolve("../../lib/types/time-uuid");
+            const originalFill = crypto.randomFillSync;
+            const failure = new Error("random fill failed");
+            let fills = 0;
+            const fill = sinon
+                .stub(crypto, "randomFillSync")
+                .callsFake((buffer) => {
+                    if (fills++ === 0) throw failure;
+                    return originalFill(buffer);
+                });
+            try {
+                withFreshModule(timeUuidPath, (CachedTimeUuid) => {
+                    assert.throws(
+                        () => new CachedTimeUuid(),
+                        (err) => err === failure,
+                    );
+                    const value = new CachedTimeUuid();
+                    assert.strictEqual(fill.callCount, 2);
+                    assert.strictEqual(value.buffer[6] >> 4, 1);
+                    assert.strictEqual(value.buffer[8] >> 6, 2);
+                });
+            } finally {
+                fill.restore();
+            }
         });
 
         it("should generate based on the parameters", function () {
