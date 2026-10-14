@@ -391,7 +391,10 @@ class Client extends events.EventEmitter {
             }
 
             this.rustClient = await RustSession.create(this.rustOptions);
-            this.metadata = new metadataModule.Metadata(this.rustClient);
+            this.metadata = new metadataModule.Metadata(
+                this.rustClient,
+                this.#frameWriter,
+            );
         } catch (err) {
             if (err instanceof Error && err.name === "InvalidLocalDatacenter") {
                 err = new errors.ArgumentError(err.message);

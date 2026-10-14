@@ -87,6 +87,34 @@ export class FrameWriter {
     }
 
     /**
+     * Writes values that are already encoded into one frame.
+     * `null` is written as null, and `undefined` as unset.
+     * @param values Encoded values.
+     * @returns The frame, valid until the next frame of this writer.
+     * @throws TypeError when a value is not a Uint8Array, null or undefined
+     * @throws ArgumentError when there are more than 65,535 values
+     */
+    buffers(values: Array<Uint8Array | null | undefined>): Buffer {
+        return this.#frame(() => {
+            let offset = this.#writeRowHeader(values.length, 0);
+            for (const value of values) {
+                if (
+                    value !== null &&
+                    value !== undefined &&
+                    !(value instanceof Uint8Array)
+                ) {
+                    throw new TypeError(
+                        "Expected a Buffer, null or undefined, obtained " +
+                            typeof value,
+                    );
+                }
+                offset = this.#writeEncodedCell(value, offset);
+            }
+            return offset;
+        });
+    }
+
+    /**
      * Writes one frame.
      * @param write Writes the frame from offset 0, and returns the offset after it.
      * @returns A view of the frame.

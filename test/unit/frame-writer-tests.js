@@ -86,6 +86,47 @@ describe("FrameWriter.params", function () {
     });
 });
 
+describe("FrameWriter.buffers", function () {
+    it("writes buffers, null and unset in order", function () {
+        assert.deepEqual(
+            decodeFrame(
+                writer.buffers([
+                    Buffer.from([1, 2]),
+                    null,
+                    undefined,
+                    new Uint8Array([3]),
+                    Buffer.alloc(0),
+                ]),
+            ),
+            ["0102", "null", "unset", "03", ""],
+        );
+    });
+
+    it("reads a Buffer view from its byte offset", function () {
+        const source = Buffer.from([9, 1, 2, 9]);
+        assert.deepEqual(decodeFrame(writer.buffers([source.subarray(1, 3)])), [
+            "0102",
+        ]);
+    });
+
+    it("rejects values that are not encoded", function () {
+        for (const bad of [42, "x", {}, [1]]) {
+            assert.throws(
+                () => writer.buffers([bad]),
+                TypeError,
+                /Expected a Buffer, null or undefined/,
+            );
+        }
+    });
+
+    it("rejects more than 65,535 values", function () {
+        assert.throws(
+            () => writer.buffers(Array(65536).fill(null)),
+            /Too many values/,
+        );
+    });
+});
+
 describe("FrameWriter", function () {
     const encoder = new Encoder(4, {});
     const int = { code: types.dataTypes.int };

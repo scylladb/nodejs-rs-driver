@@ -145,7 +145,7 @@ export class RustSession {
     }
 
     computeToken(
-        components: Array<rust.EncodedValuesWrapper>,
+        components: rust.SerializedValuesWrapper,
         keyspace: string,
         table: string,
     ): Token {

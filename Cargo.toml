@@ -12,8 +12,11 @@ bytes = "1"
 napi = { version = "3.6.0", default-features = false, features = ["napi4", "napi6"] }
 napi-derive = "3.4.0"
 # Keep these versions aligned: execute_unstable accepts scylla-cql-core's SerializedValues.
-# Its existing interop API is gated by unstable-python-rs until a Node-specific gate is available.
-scylla = { version = "=1.9.0", features = ["num-bigint-03", "openssl-010", "unstable-nodejs-rs", "unstable-python-rs", "unstable-client-routes"] }
+# The interop APIs for pre-serialized values are gated by other bindings' features
+# until a Node-specific gate is available:
+# - execute_unstable by unstable-python-rs
+# - ClusterState::compute_token_preserialized by unstable-csharp-rs
+scylla = { version = "=1.9.0", features = ["num-bigint-03", "openssl-010", "unstable-nodejs-rs", "unstable-python-rs", "unstable-csharp-rs", "unstable-client-routes"] }
 scylla-cql-core = "=1.9.0"
 tokio = { version = "1.34", features = ["full"] }
 futures = "0.3"
