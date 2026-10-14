@@ -109,7 +109,9 @@ async function waitForClientOptions(
     expectedDriverConfigCount,
 ) {
     const deadline = Date.now() + POLL_TIMEOUT_MS;
-    const expectedCount = rust.testsExpectedConnectionCount(client.rustClient);
+    const expectedCount = rust.testsExpectedConnectionCount(
+        client.rustClient.inner,
+    );
     let matching = [];
     let observedShardCount = 0;
     let observedDriverConfigCount = 0;

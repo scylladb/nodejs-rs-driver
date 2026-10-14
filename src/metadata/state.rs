@@ -12,6 +12,7 @@ use crate::utils::js_instance::JsInstance;
 use crate::utils::napi_ref::NapiRef;
 use crate::utils::to_napi_obj::NamedMap;
 use napi::Env;
+use napi::bindgen_prelude::External;
 use napi::bindgen_prelude::{FnArgs, JavaScriptClassExt, JsObjectValue, Object, Reference};
 use scylla::cluster::metadata::{
     Column, ColumnKind, Keyspace, MaterializedView, Strategy, Table, UserDefinedType,
@@ -402,14 +403,12 @@ fn convert_rust_strategy<'env>(
     Ok(JsInstance::from_object(instance))
 }
 
-#[napi]
 impl SessionWrapper {
     /// Gets the definition of a table.
     ///
     /// The table is converted lazily and cached against its keyspace: repeated lookups for the
     /// same table, whether through this method or through `KeyspaceWrapper::tables`, return the
     /// same JS object.
-    #[napi(ts_return_type = "import('./lib/metadata/table-metadata').TableMetadata | null")]
     pub fn get_table<'env>(
         &self,
         env: &'env Env,
@@ -431,7 +430,6 @@ impl SessionWrapper {
     /// The view is converted lazily and cached against its keyspace: repeated lookups for the
     /// same view, whether through this method or through `KeyspaceWrapper::views`, return the
     /// same JS object.
-    #[napi(ts_return_type = "import('./lib/metadata/materialized-view').MaterializedView | null")]
     pub fn get_materialized_view<'env>(
         &self,
         env: &'env Env,
@@ -453,7 +451,6 @@ impl SessionWrapper {
     /// The UDT is converted lazily and cached against its keyspace: repeated lookups for the
     /// same UDT, whether through this method or through `KeyspaceWrapper::udts`,
     /// return the same JS object.
-    #[napi(ts_return_type = "import('./lib/metadata/user-defined-type').Udt | null")]
     pub fn get_udt<'env>(
         &self,
         env: &'env Env,
@@ -474,7 +471,6 @@ impl SessionWrapper {
     ///
     /// The keyspace is converted lazily and cached: repeated lookups for the same name
     /// return the same JS object.
-    #[napi(ts_return_type = "KeyspaceWrapper | null")]
     pub fn get_keyspace_metadata(
         &self,
         env: &Env,
@@ -491,7 +487,6 @@ impl SessionWrapper {
     ///
     /// Keyspaces are converted lazily and cached: repeated lookups for the same keyspace,
     /// whether through this method or through `get_keyspace_metadata`, return the same JS object.
-    #[napi(ts_return_type = "Readonly<Record<string, KeyspaceWrapper>>")]
     pub fn get_all_keyspaces<'env>(
         &self,
         env: &'env Env,
@@ -502,6 +497,60 @@ impl SessionWrapper {
             })
         })
     }
+}
+
+// JS reads the session with these functions. See [`SessionWrapper`].
+
+/// JS binding of [`SessionWrapper::get_table`].
+#[napi(ts_return_type = "import('./lib/metadata/table-metadata').TableMetadata | null")]
+pub fn session_get_table<'env>(
+    session: &External<SessionWrapper>,
+    env: &'env Env,
+    keyspace: String,
+    table: String,
+) -> JsResult<Option<JsInstance<'env, js_constructible_class::TableMetadata>>> {
+    session.get_table(env, keyspace, table)
+}
+
+/// JS binding of [`SessionWrapper::get_materialized_view`].
+#[napi(ts_return_type = "import('./lib/metadata/materialized-view').MaterializedView | null")]
+pub fn session_get_materialized_view<'env>(
+    session: &External<SessionWrapper>,
+    env: &'env Env,
+    keyspace: String,
+    view: String,
+) -> JsResult<Option<JsInstance<'env, js_constructible_class::MaterializedView>>> {
+    session.get_materialized_view(env, keyspace, view)
+}
+
+/// JS binding of [`SessionWrapper::get_udt`].
+#[napi(ts_return_type = "import('./lib/metadata/user-defined-type').Udt | null")]
+pub fn session_get_udt<'env>(
+    session: &External<SessionWrapper>,
+    env: &'env Env,
+    keyspace: String,
+    name: String,
+) -> JsResult<Option<JsInstance<'env, js_constructible_class::Udt>>> {
+    session.get_udt(env, keyspace, name)
+}
+
+/// JS binding of [`SessionWrapper::get_keyspace_metadata`].
+#[napi(ts_return_type = "KeyspaceWrapper | null")]
+pub fn session_get_keyspace_metadata(
+    session: &External<SessionWrapper>,
+    env: &Env,
+    name: String,
+) -> JsResult<Option<Reference<KeyspaceWrapper>>> {
+    session.get_keyspace_metadata(env, name)
+}
+
+/// JS binding of [`SessionWrapper::get_all_keyspaces`].
+#[napi(ts_return_type = "Readonly<Record<string, KeyspaceWrapper>>")]
+pub fn session_get_all_keyspaces<'env>(
+    session: &External<SessionWrapper>,
+    env: &'env Env,
+) -> JsResult<JsInstance<'env, KeyspaceRecord>> {
+    session.get_all_keyspaces(env)
 }
 
 /// **Public JS API**: this is the object users get from `Metadata#getKeyspace`, exposed as

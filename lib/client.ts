@@ -19,6 +19,7 @@ import ClientState = require("./metadata/client-state");
 import packageInfo = require("../package.json");
 import { ExecutionOptions, DefaultExecutionOptions } from "./execution-options";
 import { ResultColumnsCache, RustResult } from "./types/results-wrapper";
+import { RustSession } from "./rust-session";
 import promiseUtils = require("./promise-utils");
 import rust = require("../index");
 import ResultSet = require("./types/result-set");
@@ -97,7 +98,7 @@ class Client extends events.EventEmitter {
      * @internal
      * @ignore
      */
-    rustClient: rust.SessionWrapper | undefined;
+    rustClient: RustSession | undefined;
     #encoder: Encoder;
     #loggingId: number | undefined;
     // Map insertion order determines which prepared handle is evicted first.
@@ -390,9 +391,7 @@ class Client extends events.EventEmitter {
                 );
             }
 
-            this.rustClient = await rust.SessionWrapper.createSession(
-                this.rustOptions,
-            );
+            this.rustClient = await RustSession.create(this.rustOptions);
             this.metadata = new metadataModule.Metadata(this.rustClient);
         } catch (err) {
             if (err instanceof Error && err.name === "InvalidLocalDatacenter") {
@@ -574,7 +573,7 @@ class Client extends events.EventEmitter {
                 return new RustResult(
                     await rust.executorFetchNextPage(
                         executor,
-                        this.rustClient!,
+                        this.rustClient!.inner,
                         pageState,
                     ),
                 );
@@ -627,7 +626,7 @@ class Client extends events.EventEmitter {
                 await this.rustClient!.executePreparedSinglePage(
                     prepared.handle,
                     encoded,
-                    ...rustOptions,
+                    rustOptions,
                     pageState,
                 ),
             );
@@ -636,7 +635,7 @@ class Client extends events.EventEmitter {
             await this.rustClient!.executePreparedUnpaged(
                 prepared.handle,
                 encoded,
-                ...rustOptions,
+                rustOptions,
             ),
         );
     }
@@ -670,13 +669,13 @@ class Client extends events.EventEmitter {
                 await this.rustClient!.querySinglePage(
                     query,
                     encoded,
-                    ...rustOptions,
+                    rustOptions,
                     pageState,
                 ),
             );
         }
         return new RustResult(
-            await this.rustClient!.queryUnpaged(query, encoded, ...rustOptions),
+            await this.rustClient!.queryUnpaged(query, encoded, rustOptions),
         );
     }
 
@@ -997,9 +996,9 @@ class Client extends events.EventEmitter {
         let batch = shouldBePrepared
             ? this.rustClient!.createPreparedBatch(
                   allPrepared.map((prepared) => prepared.handle),
-                  ...rustOptions,
+                  rustOptions,
               )
-            : this.rustClient!.createBatch(allQueries, ...rustOptions);
+            : this.rustClient!.createBatch(allQueries, rustOptions);
         let wrappedResult = new RustResult(
             await this.rustClient!.batch(batch, parametersRows),
         );

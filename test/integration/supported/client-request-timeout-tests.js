@@ -81,7 +81,7 @@ describe("Client request timeout", function () {
             ]);
 
             rust.testsSetSessionDefaultRequestTimeout(
-                client.rustClient,
+                client.rustClient.inner,
                 SESSION_DEFAULT_REQUEST_TIMEOUT_MS,
             );
             await rust.testsSetRequestTimeoutProxyDelay(EXECUTION_DELAY_MS);

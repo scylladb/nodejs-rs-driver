@@ -1,3 +1,4 @@
+use napi::bindgen_prelude::External;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -84,13 +85,11 @@ fn host_ctor_args<'a>(node: &'a Arc<Node>, env: &'a Env) -> napi::Result<HostCto
     )))
 }
 
-#[napi]
 impl SessionWrapper {
     /// Returns all nodes known by the Rust driver as a `HostMap`, keyed by address, for the
     /// current cluster state (refreshing the cached cluster state snapshot first, if the Rust
     /// driver has produced a newer one since the last access). The same JS `HostMap` object is
     /// returned across calls, for as long as the underlying cluster state doesn't change.
-    #[napi(ts_return_type = "import('../lib/host').HostMap")]
     pub fn get_all_hosts<'env>(
         &self,
         env: &'env Env,
@@ -110,7 +109,6 @@ impl SessionWrapper {
     ///
     /// The hosts are the very same JS objects `get_all_hosts` hands out, so a replica's node can
     /// be compared against a host of the cluster by identity.
-    #[napi(ts_return_type = "import('../lib/host').Replica[]")]
     pub fn get_replicas<'env>(
         &self,
         env: &'env Env,
@@ -125,4 +123,27 @@ impl SessionWrapper {
             })
         })
     }
+}
+
+// JS reads the session with these functions. See [`SessionWrapper`].
+
+/// JS binding of [`SessionWrapper::get_all_hosts`].
+#[napi(ts_return_type = "import('../lib/host').HostMap")]
+pub fn session_get_all_hosts<'env>(
+    session: &External<SessionWrapper>,
+    env: &'env Env,
+) -> JsResult<JsInstance<'env, js_constructible_class::HostMap>> {
+    session.get_all_hosts(env)
+}
+
+/// JS binding of [`SessionWrapper::get_replicas`].
+#[napi(ts_return_type = "import('../lib/host').Replica[]")]
+pub fn session_get_replicas<'env>(
+    session: &External<SessionWrapper>,
+    env: &'env Env,
+    keyspace: String,
+    table: String,
+    token: BigInt,
+) -> JsResult<Vec<JsInstance<'env, ReplicaValue>>> {
+    session.get_replicas(env, keyspace, table, token)
 }

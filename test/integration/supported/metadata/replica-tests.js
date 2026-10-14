@@ -39,7 +39,7 @@ describe("Metadata replicas", function () {
 
         if (
             helper.getServerInfo().isScylla &&
-            (await rust.scyllaSupportsTablets(client.rustClient))
+            (await rust.scyllaSupportsTablets(client.rustClient.inner))
         ) {
             tabletKeyspace = helper.getRandomName("ks");
             await helper.ddl(

@@ -32,7 +32,14 @@ pub struct BatchWrapper {
     inner: Arc<Batch>,
 }
 
-#[napi]
+/// The session of the driver.
+///
+/// JS gets it as an `External`, not as an instance of a `#[napi]` class,
+/// for the same reason as [`QueryResultWrapper`].
+/// A method call on a class instance costs `napi_unwrap` and a borrow check of napi-rs.
+/// JS uses the session in each execution, so this cost adds up.
+/// JS calls the methods through the `session_*` functions, for example
+/// [`session_execute_prepared_single_page`].
 pub struct SessionWrapper {
     pub(crate) inner: Arc<Session>,
     /// Cache of the last `ClusterSnapshot` that was computed, alongside the `Arc<ClusterState>`
@@ -144,6 +151,12 @@ impl QueryExecutor {
         }
     }
 }
+impl ToNapiValue for SessionWrapper {
+    unsafe fn to_napi_value(env: sys::napi_env, val: Self) -> napi::Result<sys::napi_value> {
+        unsafe { External::to_napi_value(env, External::new(val)) }
+    }
+}
+
 impl ToNapiValue for QueryExecutor {
     unsafe fn to_napi_value(env: sys::napi_env, val: Self) -> napi::Result<sys::napi_value> {
         unsafe { External::to_napi_value(env, External::new(val)) }
@@ -155,7 +168,7 @@ impl ToNapiValue for QueryExecutor {
 pub fn executor_fetch_next_page(
     env: Env,
     executor: &External<QueryExecutor>,
-    session: &SessionWrapper,
+    session: &External<SessionWrapper>,
     paging_state: Option<Buffer>,
 ) -> JsAsyncResult<QueryResultWrapper> {
     BridgedPromise::spawn(&env, || {
@@ -168,7 +181,6 @@ pub fn executor_fetch_next_page(
     })
 }
 
-#[napi]
 impl SessionWrapper {
     async fn execute_unpaged_serialized(
         session: &Session,
@@ -192,7 +204,6 @@ impl SessionWrapper {
     }
 
     /// Creates session based on the provided session options.
-    #[napi(ts_return_type = "Promise<SessionWrapper>")]
     pub fn create_session(env: Env, options: SessionOptions) -> JsAsyncResult<SessionWrapper> {
         BridgedPromise::spawn(&env, || {
             Ok(async move {
@@ -209,7 +220,6 @@ impl SessionWrapper {
     }
 
     /// Returns the name of the current keyspace
-    #[napi]
     pub fn get_keyspace(&self) -> Option<String> {
         self.inner.get_keyspace().as_deref().map(ToOwned::to_owned)
     }
@@ -221,7 +231,6 @@ impl SessionWrapper {
     /// Failing to perform the check is not reported as an error: the Rust driver's failure is
     /// logged as a warning (and thus reaches the client's log emitter through the logging
     /// bridge) and reported as "no agreement".
-    #[napi(ts_return_type = "Promise<boolean>")]
     pub fn check_schema_agreement(&self, env: Env) -> JsAsyncResult<bool> {
         BridgedPromise::spawn(&env, || {
             let inner = Arc::clone(&self.inner);
@@ -245,7 +254,6 @@ impl SessionWrapper {
     /// fails, this retries at the driver's `schema_agreement_interval` until agreement is
     /// reached or `schema_agreement_timeout` elapses, rejecting if agreement could not be
     /// reached in time - or could not be checked at all, for example if no node is reachable.
-    #[napi(ts_return_type = "Promise<void>")]
     pub fn wait_for_schema_agreement(&self, env: Env) -> JsAsyncResult<()> {
         BridgedPromise::spawn(&env, || {
             let inner = Arc::clone(&self.inner);
@@ -263,7 +271,6 @@ impl SessionWrapper {
     /// All parameters must be in a type recognizable by ParameterWrapper
     /// -- each value must be tuple of its ComplexType and the value itself.
     /// If the provided types will not be correct, this query will fail.
-    #[napi(ts_return_type = "Promise<ExternalObject<QueryResultWrapper>>")]
     #[allow(clippy::too_many_arguments)]
     pub fn query_unpaged(
         &self,
@@ -300,9 +307,6 @@ impl SessionWrapper {
     /// Prepares a statement through rust driver for a given session.
     /// Returns the native prepared handle and its bind metadata. The bind metadata
     /// remains fixed for this handle even if the schema changes.
-    #[napi(
-        ts_return_type = "Promise<[ExternalObject<PreparedStatementWrapper>, Array<[ComplexType, string]>]>"
-    )]
     pub fn prepare_statement(
         &self,
         env: Env,
@@ -329,7 +333,6 @@ impl SessionWrapper {
     ///
     /// All parameters must be already serialized according to the bind metadata
     /// of the prepared statement.
-    #[napi(ts_return_type = "Promise<ExternalObject<QueryResultWrapper>>")]
     #[allow(clippy::too_many_arguments)]
     pub fn execute_prepared_unpaged(
         &self,
@@ -368,7 +371,6 @@ impl SessionWrapper {
     /// Executes all statements in the provided batch. Those statements can be either prepared or unprepared.
     ///
     /// Returns a wrapper of the result provided by the rust driver
-    #[napi(ts_return_type = "Promise<ExternalObject<QueryResultWrapper>>")]
     pub fn batch(
         &self,
         env: Env,
@@ -390,7 +392,6 @@ impl SessionWrapper {
     /// For the first page, paging state is not required.
     /// For the following pages you need to provide page state
     /// received from the previous page
-    #[napi(ts_return_type = "Promise<ExternalObject<QueryResultWrapper>>")]
     #[allow(clippy::too_many_arguments)]
     pub fn query_single_page(
         &self,
@@ -431,7 +432,6 @@ impl SessionWrapper {
     /// For the first page, paging state is not required.
     /// For the following pages you need to provide page state
     /// received from the previous page
-    #[napi(ts_return_type = "Promise<ExternalObject<QueryResultWrapper>>")]
     #[allow(clippy::too_many_arguments)]
     pub fn execute_prepared_single_page(
         &self,
@@ -476,7 +476,6 @@ impl SessionWrapper {
     }
 
     /// Creates object representing batch of statements.
-    #[napi(ts_return_type = "BatchWrapper")]
     #[allow(clippy::too_many_arguments)]
     pub fn create_batch(
         &self,
@@ -512,13 +511,10 @@ impl SessionWrapper {
     }
 
     /// Creates object representing batch of already prepared statements.
-    #[napi(ts_return_type = "BatchWrapper")]
     #[allow(clippy::too_many_arguments)]
     pub fn create_prepared_batch(
         &self,
-        #[napi(ts_arg_type = "Array<ExternalObject<PreparedStatementWrapper>>")] statements: Vec<
-            ExternalRef<PreparedStatementWrapper>,
-        >,
+        statements: Vec<ExternalRef<PreparedStatementWrapper>>,
         consistency: Option<u16>,
         fetch_size: Option<i32>,
         is_idempotent: Option<bool>,
@@ -548,6 +544,239 @@ impl SessionWrapper {
             })
         })
     }
+}
+
+// JS reads the session with these functions. See [`SessionWrapper`].
+
+/// JS binding of [`SessionWrapper::create_session`].
+#[napi(ts_return_type = "Promise<ExternalObject<SessionWrapper>>")]
+pub fn create_session(env: Env, options: SessionOptions) -> JsAsyncResult<SessionWrapper> {
+    SessionWrapper::create_session(env, options)
+}
+
+/// JS binding of [`SessionWrapper::get_keyspace`].
+#[napi]
+pub fn session_get_keyspace(session: &External<SessionWrapper>) -> Option<String> {
+    session.get_keyspace()
+}
+
+/// JS binding of [`SessionWrapper::check_schema_agreement`].
+#[napi(ts_return_type = "Promise<boolean>")]
+pub fn session_check_schema_agreement(
+    session: &External<SessionWrapper>,
+    env: Env,
+) -> JsAsyncResult<bool> {
+    session.check_schema_agreement(env)
+}
+
+/// JS binding of [`SessionWrapper::wait_for_schema_agreement`].
+#[napi(ts_return_type = "Promise<void>")]
+pub fn session_wait_for_schema_agreement(
+    session: &External<SessionWrapper>,
+    env: Env,
+) -> JsAsyncResult<()> {
+    session.wait_for_schema_agreement(env)
+}
+
+/// JS binding of [`SessionWrapper::query_unpaged`].
+#[napi(ts_return_type = "Promise<ExternalObject<QueryResultWrapper>>")]
+#[allow(clippy::too_many_arguments)]
+pub fn session_query_unpaged(
+    session: &External<SessionWrapper>,
+    env: Env,
+    query: String,
+    params: Vec<EncodedValuesWrapper>,
+    consistency: Option<u16>,
+    fetch_size: Option<i32>,
+    is_idempotent: Option<bool>,
+    request_timeout: Option<i32>,
+    serial_consistency: Option<i16>,
+    timestamp: Option<BigInt>,
+    trace_query: Option<bool>,
+) -> JsAsyncResult<QueryResultWrapper> {
+    session.query_unpaged(
+        env,
+        query,
+        params,
+        consistency,
+        fetch_size,
+        is_idempotent,
+        request_timeout,
+        serial_consistency,
+        timestamp,
+        trace_query,
+    )
+}
+
+/// JS binding of [`SessionWrapper::prepare_statement`].
+#[napi(
+    ts_return_type = "Promise<[ExternalObject<PreparedStatementWrapper>, Array<[ComplexType, string]>]>"
+)]
+pub fn session_prepare_statement(
+    session: &External<SessionWrapper>,
+    env: Env,
+    statement: String,
+) -> JsAsyncResult<PreparedHandleWithBindMetadata> {
+    session.prepare_statement(env, statement)
+}
+
+/// JS binding of [`SessionWrapper::execute_prepared_unpaged`].
+#[napi(ts_return_type = "Promise<ExternalObject<QueryResultWrapper>>")]
+#[allow(clippy::too_many_arguments)]
+pub fn session_execute_prepared_unpaged(
+    session: &External<SessionWrapper>,
+    env: Env,
+    handle: &External<PreparedStatementWrapper>,
+    params: SerializedValuesWrapper,
+    consistency: Option<u16>,
+    fetch_size: Option<i32>,
+    is_idempotent: Option<bool>,
+    request_timeout: Option<i32>,
+    serial_consistency: Option<i16>,
+    timestamp: Option<BigInt>,
+    trace_query: Option<bool>,
+) -> JsAsyncResult<QueryResultWrapper> {
+    session.execute_prepared_unpaged(
+        env,
+        handle,
+        params,
+        consistency,
+        fetch_size,
+        is_idempotent,
+        request_timeout,
+        serial_consistency,
+        timestamp,
+        trace_query,
+    )
+}
+
+/// JS binding of [`SessionWrapper::batch`].
+#[napi(ts_return_type = "Promise<ExternalObject<QueryResultWrapper>>")]
+pub fn session_batch(
+    session: &External<SessionWrapper>,
+    env: Env,
+    batch: &BatchWrapper,
+    params: Vec<Vec<EncodedValuesWrapper>>,
+) -> JsAsyncResult<QueryResultWrapper> {
+    session.batch(env, batch, params)
+}
+
+/// JS binding of [`SessionWrapper::query_single_page`].
+#[napi(ts_return_type = "Promise<ExternalObject<QueryResultWrapper>>")]
+#[allow(clippy::too_many_arguments)]
+pub fn session_query_single_page(
+    session: &External<SessionWrapper>,
+    env: Env,
+    query: String,
+    params: Vec<EncodedValuesWrapper>,
+    consistency: Option<u16>,
+    fetch_size: Option<i32>,
+    is_idempotent: Option<bool>,
+    request_timeout: Option<i32>,
+    serial_consistency: Option<i16>,
+    timestamp: Option<BigInt>,
+    trace_query: Option<bool>,
+    paging_state: Option<Buffer>,
+) -> JsAsyncResult<QueryResultWrapper> {
+    session.query_single_page(
+        env,
+        query,
+        params,
+        consistency,
+        fetch_size,
+        is_idempotent,
+        request_timeout,
+        serial_consistency,
+        timestamp,
+        trace_query,
+        paging_state,
+    )
+}
+
+/// JS binding of [`SessionWrapper::execute_prepared_single_page`].
+#[napi(ts_return_type = "Promise<ExternalObject<QueryResultWrapper>>")]
+#[allow(clippy::too_many_arguments)]
+pub fn session_execute_prepared_single_page(
+    session: &External<SessionWrapper>,
+    env: Env,
+    handle: &External<PreparedStatementWrapper>,
+    params: SerializedValuesWrapper,
+    consistency: Option<u16>,
+    fetch_size: Option<i32>,
+    is_idempotent: Option<bool>,
+    request_timeout: Option<i32>,
+    serial_consistency: Option<i16>,
+    timestamp: Option<BigInt>,
+    trace_query: Option<bool>,
+    paging_state: Option<Buffer>,
+) -> JsAsyncResult<QueryResultWrapper> {
+    session.execute_prepared_single_page(
+        env,
+        handle,
+        params,
+        consistency,
+        fetch_size,
+        is_idempotent,
+        request_timeout,
+        serial_consistency,
+        timestamp,
+        trace_query,
+        paging_state,
+    )
+}
+
+/// JS binding of [`SessionWrapper::create_batch`].
+#[napi(ts_return_type = "BatchWrapper")]
+#[allow(clippy::too_many_arguments)]
+pub fn session_create_batch(
+    session: &External<SessionWrapper>,
+    statements: Vec<String>,
+    consistency: Option<u16>,
+    fetch_size: Option<i32>,
+    is_idempotent: Option<bool>,
+    request_timeout: Option<i32>,
+    serial_consistency: Option<i16>,
+    timestamp: Option<BigInt>,
+    trace_query: Option<bool>,
+) -> JsResult<BatchWrapper> {
+    session.create_batch(
+        statements,
+        consistency,
+        fetch_size,
+        is_idempotent,
+        request_timeout,
+        serial_consistency,
+        timestamp,
+        trace_query,
+    )
+}
+
+/// JS binding of [`SessionWrapper::create_prepared_batch`].
+#[napi(ts_return_type = "BatchWrapper")]
+#[allow(clippy::too_many_arguments)]
+pub fn session_create_prepared_batch(
+    session: &External<SessionWrapper>,
+    #[napi(ts_arg_type = "Array<ExternalObject<PreparedStatementWrapper>>")] statements: Vec<
+        ExternalRef<PreparedStatementWrapper>,
+    >,
+    consistency: Option<u16>,
+    fetch_size: Option<i32>,
+    is_idempotent: Option<bool>,
+    request_timeout: Option<i32>,
+    serial_consistency: Option<i16>,
+    timestamp: Option<BigInt>,
+    trace_query: Option<bool>,
+) -> JsResult<BatchWrapper> {
+    session.create_prepared_batch(
+        statements,
+        consistency,
+        fetch_size,
+        is_idempotent,
+        request_timeout,
+        serial_consistency,
+        timestamp,
+        trace_query,
+    )
 }
 
 #[derive(Debug)]

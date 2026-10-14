@@ -815,7 +815,7 @@ const helper = {
         if (!client.connected) {
             await client.connect();
         }
-        return await rust.ddl(client.rustClient, query);
+        return await rust.ddl(client.rustClient.inner, query);
     },
     assertValueEqual: function (val1, val2) {
         if (val1 === null && val2 === null) {
@@ -1649,7 +1649,7 @@ const helper = {
     keyspaceDefinitionWithTabletsDisabled: function (session, keyspaceSchema) {
         if (
             this.getServerInfo().isScylla &&
-            rust.scyllaSupportsTablets(session.rustClient)
+            rust.scyllaSupportsTablets(session.rustClient.inner)
         ) {
             keyspaceSchema += " AND TABLETS = {'enabled': false}";
         }
