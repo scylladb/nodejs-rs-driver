@@ -70,6 +70,8 @@ pub(super) type SettleCallback = Box<dyn FnOnce(Env) + Send>;
 pub(super) enum QueueEntry {
     /// A future completed. Settles its Promise.
     Settle(SettleCallback),
+    /// A `tracing` event. `crate::logging::deliver_log` handles it.
+    Log(crate::logging::LogEvent),
 }
 
 thread_local! {

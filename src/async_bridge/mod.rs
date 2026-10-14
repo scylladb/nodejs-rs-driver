@@ -92,7 +92,7 @@ use napi_derive::napi;
 
 use crate::errors::{ConvertedError, ConvertedResult, JsResult, with_custom_error};
 use js_thread::{FutureRegistry, REGISTRIES};
-use shared::{CURRENT_QUEUE, CompletionQueue};
+use shared::{CURRENT_QUEUE, CompletionQueue, QueueEntry};
 
 /// A JS Promise that a future on the bridge's Tokio runtime settles.
 /// `T` is the type the Promise resolves with. The Promise rejects with any error value
@@ -179,6 +179,30 @@ pub fn init_async_bridge(env: Env) -> JsResult<()> {
 /// Marks the current thread as a thread of the environment that owns `queue`.
 fn set_current_queue(queue: Option<Arc<CompletionQueue>>) {
     CURRENT_QUEUE.with(|current| *current.borrow_mut() = queue);
+}
+
+/// Whether `init_async_bridge` ran for this environment.
+pub(crate) fn is_initialized(env: &Env) -> bool {
+    FutureRegistry::get(env).is_some()
+}
+
+/// Queues a `tracing` event for the environment of the current thread.
+///
+/// `make` formats the event. It runs only if the thread has an environment.
+/// The event goes to the same queue as the completed futures, so the
+/// drain handles both in the order of the pushes.
+///
+/// Runs on: any thread. Events from threads of no environment are dropped.
+pub(crate) fn push_log(make: impl FnOnce() -> crate::logging::LogEvent) {
+    // `try_with` fails while the thread-local is destroyed. Drop the event then.
+    let _ = CURRENT_QUEUE.try_with(|current| {
+        // A shared borrow is enough. `make` can emit a nested event, which
+        // takes another shared borrow. Only `set_current_queue` borrows
+        // mutably, and it never runs inside `make` or `push`.
+        if let Some(queue) = current.borrow().as_ref() {
+            queue.push(QueueEntry::Log(make()));
+        }
+    });
 }
 
 impl<T> BridgedPromise<T>

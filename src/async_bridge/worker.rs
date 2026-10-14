@@ -43,7 +43,8 @@ where
 impl CompletionQueue {
     /// Called when a future completes.
     /// Only the first push after a drain calls the TSFN.
-    fn push(&self, entry: QueueEntry) {
+    /// Also called when a thread emits a `tracing` event.
+    pub(super) fn push(&self, entry: QueueEntry) {
         self.completed.lock().unwrap().push(entry);
         if !self.signaled.swap(true, Ordering::AcqRel) {
             let guard = self.tsfn.lock().unwrap();

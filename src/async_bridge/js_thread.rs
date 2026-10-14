@@ -102,6 +102,8 @@ impl FutureRegistry {
         for entry in completed {
             match entry {
                 QueueEntry::Settle(settle) => self.settle_one(env, settle),
+                // Log entries do not change the count of pending futures.
+                QueueEntry::Log(event) => crate::logging::deliver_log(env, event),
             }
         }
     }
