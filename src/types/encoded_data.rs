@@ -11,7 +11,7 @@ use scylla::{
     errors::SerializationError,
     serialize::value::{BuiltinSerializationError, BuiltinSerializationErrorKind, SerializeValue},
 };
-use scylla_cql_core::frame::types::RawValue;
+use scylla_cql_core::frame::types::{RawValue, read_short};
 use scylla_cql_core::serialize::row::SerializedValues;
 
 use crate::errors::make_js_error;
@@ -54,6 +54,42 @@ impl FromNapiValue for SerializedValuesWrapper {
             )));
         }
         Ok(Self { inner })
+    }
+}
+
+/// The values of all statements of a batch, from one JS buffer:
+/// `[u16 statement count]`, then one [`SerializedValuesWrapper`] frame per statement.
+/// The bytes are copied while converting the N-API argument.
+pub struct BatchValuesWrapper {
+    pub(crate) rows: Vec<SerializedValuesWrapper>,
+}
+
+impl FromNapiValue for BatchValuesWrapper {
+    /// # Safety
+    ///
+    /// `env` and `napi_val` must be valid for this synchronous N-API call.
+    unsafe fn from_napi_value(env: sys::napi_env, napi_val: sys::napi_value) -> napi::Result<Self> {
+        let frame: &[u8] = unsafe { <&[u8]>::from_napi_value(env, napi_val) }
+            .map_err(|_| make_js_error("Expected encoded batch values in a Buffer".to_owned()))?;
+        let mut rest = frame;
+        let malformed = |err: &dyn std::fmt::Display| {
+            make_js_error(format!("Malformed encoded batch values: {err}"))
+        };
+        let count = read_short(&mut rest).map_err(|err| malformed(&err))?;
+        let rows = (0..count)
+            .map(|_| {
+                SerializedValues::new_from_frame(&mut rest)
+                    .map(|inner| SerializedValuesWrapper { inner })
+                    .map_err(|err| malformed(&err))
+            })
+            .collect::<napi::Result<Vec<_>>>()?;
+        if !rest.is_empty() {
+            return Err(malformed(&format_args!(
+                "{} unexpected trailing bytes",
+                rest.len()
+            )));
+        }
+        Ok(Self { rows })
     }
 }
 

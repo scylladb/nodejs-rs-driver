@@ -30,6 +30,12 @@ export type EncodedValuesWrapper = Uint8Array | null | undefined
  */
 export type SerializedValuesWrapper = Uint8Array
 
+/**
+ * Values of all statements of a batch:
+ * `[u16 statement count]`, then one `SerializedValuesWrapper` frame per statement.
+ */
+export type BatchValuesWrapper = Uint8Array
+
 /** Opaque native prepared statement stored by the client. */
 export interface PreparedStatementWrapper {}
 

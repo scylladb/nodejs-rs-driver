@@ -101,7 +101,7 @@ export class RustSession {
 
     batch(
         statements: Array<string>,
-        params: Array<Array<rust.EncodedValuesWrapper>>,
+        params: rust.BatchValuesWrapper,
         options: RustQueryOptions,
     ): Promise<rust.ExternalObject<rust.QueryResultWrapper>> {
         return rust.sessionBatch(this.#inner, statements, params, ...options);
@@ -109,7 +109,7 @@ export class RustSession {
 
     batchPrepared(
         statements: Array<rust.ExternalObject<rust.PreparedStatementWrapper>>,
-        params: Array<Array<rust.EncodedValuesWrapper>>,
+        params: rust.BatchValuesWrapper,
         options: RustQueryOptions,
     ): Promise<rust.ExternalObject<rust.QueryResultWrapper>> {
         return rust.sessionBatchPrepared(

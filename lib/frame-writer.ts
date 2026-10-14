@@ -45,12 +45,40 @@ export class FrameWriter {
         params: Array<CqlValue>,
         encoder: Encoder,
     ): Buffer {
+        return this.#frame(() =>
+            this.#writeParamsRow(expectedTypes, params, encoder, 0),
+        );
+    }
+
+    /**
+     * Encodes the params of all statements of a batch into one frame:
+     * `[u16 statement count]`, then one {@link params} row per statement.
+     * @param expectedTypes List of expected types, one list per statement.
+     * @param params Params, one array per statement.
+     * @param encoder
+     * @returns The frame, valid until the next frame of this writer.
+     * @throws ArgumentError when there are more than 65,535 statements,
+     * or more than 65,535 params in one statement
+     */
+    batch(
+        expectedTypes: Array<Array<ColumnInfo | null>>,
+        params: Array<Array<CqlValue>>,
+        encoder: Encoder,
+    ): Buffer {
+        if (params.length > MAX_FRAME_VALUES) {
+            throw new errors.ArgumentError(
+                `Too many statements: ${params.length}, the maximum is ${MAX_FRAME_VALUES}`,
+            );
+        }
         return this.#frame(() => {
-            const count = params ? params.length : 0;
-            let offset = this.#writeRowHeader(count, 0);
-            for (let i = 0; i < count; i++) {
-                offset = this.#writeEncodedCell(
-                    encoder.encode(params[i], expectedTypes[i]),
+            this.#ensure(0, 2);
+            this.#buffer.writeUInt16BE(params.length, 0);
+            let offset = 2;
+            for (let i = 0; i < params.length; i++) {
+                offset = this.#writeParamsRow(
+                    expectedTypes[i],
+                    params[i],
+                    encoder,
                     offset,
                 );
             }
@@ -142,5 +170,28 @@ export class FrameWriter {
         this.#ensure(offset, 4 + bytes);
         this.#buffer.writeInt32BE(length, offset);
         return offset + 4;
+    }
+
+    /**
+     * Writes one row of params at `offset`: `[u16 count]`,
+     * then for each value `[i32 length][bytes]`.
+     * @returns The offset after the row.
+     * @throws ArgumentError when there are more than 65,535 params
+     */
+    #writeParamsRow(
+        expectedTypes: Array<ColumnInfo | null>,
+        params: Array<CqlValue>,
+        encoder: Encoder,
+        offset: number,
+    ): number {
+        const count = params ? params.length : 0;
+        offset = this.#writeRowHeader(count, offset);
+        for (let i = 0; i < count; i++) {
+            offset = this.#writeEncodedCell(
+                encoder.encode(params[i], expectedTypes[i]),
+                offset,
+            );
+        }
+        return offset;
     }
 }

@@ -127,3 +127,74 @@ describe("FrameWriter.params with Rust", function () {
         assert.deepEqual(await pending, ["00000001"]);
     });
 });
+
+describe("batch values", function () {
+    const encoder = new Encoder(4, {});
+    const int = { code: types.dataTypes.int };
+
+    function batchFrame(rows) {
+        const count = Buffer.alloc(2);
+        count.writeUInt16BE(rows.length);
+        return Buffer.concat([count, ...rows.map(frame)]);
+    }
+
+    it("reads one row per statement", function () {
+        assert.deepEqual(
+            rust.testsBatchValues(batchFrame([[[1]], [], [null, undefined]])),
+            [["01"], [], ["null", "unset"]],
+        );
+    });
+
+    it("rejects a malformed batch frame", function () {
+        assert.throws(
+            () => rust.testsBatchValues(Buffer.from([0])),
+            /Malformed encoded batch values/,
+        );
+        // The count says 2 statements, the frame holds 1.
+        assert.throws(
+            () =>
+                rust.testsBatchValues(
+                    Buffer.concat([Buffer.from([0, 2]), frame([])]),
+                ),
+            /Malformed encoded batch values/,
+        );
+        assert.throws(
+            () =>
+                rust.testsBatchValues(
+                    Buffer.concat([batchFrame([[]]), Buffer.from([0])]),
+                ),
+            /trailing bytes/,
+        );
+        assert.throws(
+            () => rust.testsBatchValues([]),
+            /Expected encoded batch values in a Buffer/,
+        );
+    });
+
+    it("FrameWriter.batch writes each statement with its own types", function () {
+        const encoded = writer.batch(
+            [[int], [], [null, int]],
+            [[1], [], ["a", 2]],
+            encoder,
+        );
+        assert.deepEqual(rust.testsBatchValues(encoded), [
+            ["00000001"],
+            [],
+            ["61", "00000002"],
+        ]);
+    });
+
+    it("FrameWriter.batch grows the writer's buffer across statements", function () {
+        const big = "y".repeat(5000);
+        const rows = Array.from({ length: 50 }, () => [big]);
+        const values = rust.testsBatchValues(
+            writer.batch(
+                rows.map(() => []),
+                rows,
+                encoder,
+            ),
+        );
+        assert.lengthOf(values, 50);
+        assert.lengthOf(values[49][0], 10000);
+    });
+});

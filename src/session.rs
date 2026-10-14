@@ -22,7 +22,7 @@ use crate::requests::request::PreparedStatementWrapper;
 use crate::requests::request::QueryOptionsObj;
 use crate::result::{NextPage, QueryResultWrapper, ResultMetadataTracker};
 use crate::session::config::configure_session_builder;
-use crate::types::encoded_data::{EncodedValuesWrapper, SerializedValuesWrapper};
+use crate::types::encoded_data::{BatchValuesWrapper, SerializedValuesWrapper};
 use crate::types::type_wrappers::ComplexType;
 use crate::utils::bigint_to_i64;
 use crate::utils::js_thread_only::JsThreadOnly;
@@ -370,7 +370,7 @@ impl SessionWrapper {
         &self,
         env: Env,
         statements: Vec<String>,
-        params: Vec<Vec<EncodedValuesWrapper>>,
+        params: BatchValuesWrapper,
         consistency: Option<u16>,
         fetch_size: Option<i32>,
         is_idempotent: Option<bool>,
@@ -407,7 +407,7 @@ impl SessionWrapper {
         &self,
         env: Env,
         statements: Vec<ExternalRef<PreparedStatementWrapper>>,
-        params: Vec<Vec<EncodedValuesWrapper>>,
+        params: BatchValuesWrapper,
         consistency: Option<u16>,
         fetch_size: Option<i32>,
         is_idempotent: Option<bool>,
@@ -439,7 +439,7 @@ impl SessionWrapper {
     fn execute_batch(
         &self,
         env: Env,
-        params: Vec<Vec<EncodedValuesWrapper>>,
+        params: BatchValuesWrapper,
         options: &QueryOptionsObj,
         statements: impl Iterator<Item = BatchStatement>,
     ) -> JsAsyncResult<QueryResultWrapper> {
@@ -449,7 +449,7 @@ impl SessionWrapper {
             let batch = self.apply_batch_options(batch, options)?;
             let inner = Arc::clone(&self.inner);
             Ok(async move {
-                let res = inner.batch(&batch, params).await?;
+                let res = inner.batch(&batch, params.rows).await?;
                 QueryResultWrapper::from_unprepared_or_batch(res, None)
             })
         })
@@ -655,7 +655,7 @@ pub fn session_batch(
     session: &External<SessionWrapper>,
     env: Env,
     statements: Vec<String>,
-    params: Vec<Vec<EncodedValuesWrapper>>,
+    params: BatchValuesWrapper,
     consistency: Option<u16>,
     fetch_size: Option<i32>,
     is_idempotent: Option<bool>,
@@ -687,7 +687,7 @@ pub fn session_batch_prepared(
     #[napi(ts_arg_type = "Array<ExternalObject<PreparedStatementWrapper>>")] statements: Vec<
         ExternalRef<PreparedStatementWrapper>,
     >,
-    params: Vec<Vec<EncodedValuesWrapper>>,
+    params: BatchValuesWrapper,
     consistency: Option<u16>,
     fetch_size: Option<i32>,
     is_idempotent: Option<bool>,

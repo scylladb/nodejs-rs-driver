@@ -23,11 +23,7 @@ import { RustSession } from "./rust-session";
 import promiseUtils = require("./promise-utils");
 import rust = require("../index");
 import ResultSet = require("./types/result-set");
-import {
-    encodeParams,
-    convertComplexType,
-    ColumnInfo,
-} from "./types/cql-utils";
+import { convertComplexType, ColumnInfo } from "./types/cql-utils";
 import { FrameWriter } from "./frame-writer";
 import Encoder = require("./encoder");
 import { HostMap } from "./host";
@@ -949,7 +945,8 @@ class Client extends events.EventEmitter {
         let shouldBePrepared = execOptions.isPrepared();
         let allQueries: string[] = [];
         let allPrepared: PreparedInfo[] = [];
-        let parametersRows: Array<any> = [];
+        let allTypes: Array<Array<ColumnInfo | null>> = [];
+        let allParams: Array<Array<any>> = [];
         let hints = execOptions.getHints() || [];
 
         for (let i = 0; i < queries.length; i++) {
@@ -992,24 +989,31 @@ class Client extends events.EventEmitter {
                 types = hints[i] || [];
             }
 
-            if (cleanParams) {
-                cleanParams = encodeParams(types, cleanParams, this.#encoder);
-            }
             allQueries.push(statement);
-            parametersRows.push(cleanParams);
+            allTypes.push(types);
+            allParams.push(cleanParams || []);
         }
+
+        // Encode only after the loop: the loop awaits prepares, and the encoded
+        // values are a view of the client's FrameWriter buffer, which another
+        // request could reuse.
+        const encoded = this.#frameWriter.batch(
+            allTypes,
+            allParams,
+            this.#encoder,
+        );
 
         let rustOptions = execOptions.getRustOptions();
         let wrappedResult = new RustResult(
             shouldBePrepared
                 ? await this.rustClient!.batchPrepared(
                       allPrepared.map((prepared) => prepared.handle),
-                      parametersRows,
+                      encoded,
                       rustOptions,
                   )
                 : await this.rustClient!.batch(
                       allQueries,
-                      parametersRows,
+                      encoded,
                       rustOptions,
                   ),
         );
