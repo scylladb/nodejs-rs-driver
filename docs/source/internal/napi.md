@@ -87,11 +87,14 @@ The bridge selects a path from the number of outstanding futures at submission:
   eventually stores its completion in the shared queue. Notifications are
   coalesced so one JS callback can settle multiple pending results.
 - At higher concurrency, Tokio performs all polling. Workers enqueue completion
-  callbacks and coalesce wakeups. Below 256 outstanding futures, each drain
-  settles at most 64 callbacks or runs for 50 microseconds. At 256 or more, it
-  allows 1024 callbacks or 2 milliseconds to amortize callback and refill costs.
-  It requeues any remainder and returns to Node. Time budgets are soft because
-  an individual conversion cannot be interrupted.
+  callbacks and coalesce wakeups. Each drain settles at most 1024 callbacks.
+  Below 256 outstanding futures, its time budget is 50 microseconds; at 256 or
+  more, it is 2 milliseconds. Cheap moderate-load snapshots remain together,
+  avoiding extra callbacks and refill work ahead of older completions. The JS
+  registry retains any unfinished snapshot in its original allocation, before
+  newer worker results, and returns to Node. Time budgets are soft because an
+  individual conversion cannot be interrupted. A single-result snapshot skips
+  clock checks, and shutdown drops both shared and retained completions.
 
 This preserves batching for pending futures while avoiding the worker and
 completion queue for immediately ready low-load futures. There is no delay to fill a batch, no public mode switch, and new

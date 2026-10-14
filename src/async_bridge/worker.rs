@@ -42,8 +42,13 @@ where
 
 impl CompletionQueue {
     /// Reschedule a bounded drain, retaining shutdown and failed-send cleanup.
-    /// Runs on the JavaScript thread after returning the unprocessed callbacks.
+    /// Runs on the JavaScript thread after retaining the unfinished snapshot.
     pub(super) fn signal(&self) {
+        // A worker commonly queued the next notification while JS settled the
+        // snapshot. Avoid competing with that worker for the TSFN lock again.
+        if self.signaled.load(Ordering::Acquire) {
+            return;
+        }
         let guard = self.tsfn.lock().unwrap();
         let Some(tsfn) = guard.as_ref() else {
             return;
@@ -71,7 +76,7 @@ impl CompletionQueue {
             drop(settle);
             return;
         };
-        self.completed.lock().unwrap().push_back(settle);
+        self.completed.lock().unwrap().push(settle);
         let discarded = if !self.signaled.swap(true, Ordering::AcqRel)
             && tsfn.call((), ThreadsafeFunctionCallMode::NonBlocking) != Status::Ok
         {

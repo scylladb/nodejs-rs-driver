@@ -270,6 +270,49 @@ describe("casync bridge", function () {
             assert.strictEqual(rust.testsBridgePendingCompletions(), 0);
         });
 
+        it("drops results retained between drains when a worker terminates", async function () {
+            this.timeout(10000);
+            rust.testsCasyncTrackedStats(true);
+            const worker = new Worker(
+                path.resolve(__dirname, "casync-worker-completed.js.worker"),
+                { workerData: { retained: true } },
+            );
+            try {
+                await new Promise((resolve, reject) => {
+                    const timeout = setTimeout(
+                        () =>
+                            reject(new Error("worker did not retain results")),
+                        7000,
+                    );
+                    worker.once("message", (message) => {
+                        clearTimeout(timeout);
+                        assert.strictEqual(message, "retained");
+                        resolve();
+                    });
+                    worker.once("error", (error) => {
+                        clearTimeout(timeout);
+                        reject(error);
+                    });
+                    worker.once("exit", () => {
+                        clearTimeout(timeout);
+                        reject(new Error("worker exited before termination"));
+                    });
+                });
+                const [converted, dropped] =
+                    rust.testsCasyncTrackedStats(false);
+                assert.isAbove(converted, 0);
+                assert.isAtMost(converted, 1024);
+                assert.strictEqual(dropped, converted);
+                assert.strictEqual(await worker.terminate(), 1);
+                assert.deepEqual(rust.testsCasyncTrackedStats(false), [
+                    converted,
+                    2048,
+                ]);
+            } finally {
+                await worker.terminate();
+            }
+        });
+
         it("permits future submission during value conversion", async function () {
             assert.strictEqual(await rust.testsCasyncNestedPromise(), 42);
             assert.strictEqual(

@@ -14,11 +14,12 @@
 //!
 //! At higher concurrency, Tokio performs all future polling. Workers enqueue
 //! completion callbacks, and only the first enqueue after a drain signals the
-//! TSFN. With fewer than 256 outstanding futures, each drain handles at most 64
-//! results or 50 microseconds. At 256 or more, the limits grow to 1024 results or
-//! 2 milliseconds, amortizing callbacks and refill microtasks at high load. A
-//! drain requeues its remainder and returns so Promise reactions can run between
-//! chunks. Time limits are soft: a single conversion cannot be preempted.
+//! TSFN. Each drain handles at most 1024 results. With fewer than 256 outstanding
+//! futures, the time budget is 50 microseconds; at 256 or more, it is 2 milliseconds.
+//! Cheap moderate-load snapshots stay together instead of putting refill work
+//! ahead of older results. Unfinished snapshots remain on the JavaScript thread,
+//! and Promise reactions can run between chunks. Time limits are soft: a single
+//! conversion cannot be preempted. A one-result snapshot needs no clock check.
 //!
 //! ```text
 //! JavaScript submission
@@ -41,7 +42,7 @@
 //! opaque pointers and are used only on the originating JavaScript thread.
 //!
 //! The drain clears `signaled` before taking a batch. A worker pushing after the
-//! take therefore schedules another callback. A bounded drain puts its remainder
+//! take therefore schedules another callback. A bounded drain retains its remainder
 //! ahead of newer completions and signals again if no wakeup is pending. Locks
 //! and registry borrows are released before conversion, which can invoke JS and
 //! submit another future synchronously.
@@ -186,13 +187,7 @@ pub fn tests_bridge_stats(env: Env, reset: bool) -> Vec<f64> {
 #[cfg(feature = "tests")]
 #[napi]
 pub fn tests_bridge_pending_completions(env: Env) -> u32 {
-    FutureRegistry::get(&env)
-        .unwrap()
-        .queue
-        .completed
-        .lock()
-        .unwrap()
-        .len() as u32
+    FutureRegistry::get(&env).unwrap().pending_completions() as u32
 }
 
 /// Force queued notifications to be discarded instead of dispatched during

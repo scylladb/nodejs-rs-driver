@@ -231,7 +231,10 @@ pub fn tests_casync_conversion_error_with_null_byte(
 static TRACKED_DROPS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 static TRACKED_CONVERSIONS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 
-pub struct TrackedResult(u32);
+pub struct TrackedResult {
+    value: u32,
+    conversion_delay: Duration,
+}
 
 impl Drop for TrackedResult {
     fn drop(&mut self) {
@@ -242,18 +245,29 @@ impl Drop for TrackedResult {
 impl ToNapiValue for TrackedResult {
     unsafe fn to_napi_value(env: sys::napi_env, value: Self) -> napi::Result<sys::napi_value> {
         TRACKED_CONVERSIONS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        if !value.conversion_delay.is_zero() {
+            // Test the drain's time budget independently of result count.
+            std::thread::sleep(value.conversion_delay);
+        }
         // SAFETY: The bridge invokes conversion on the owning JS thread.
-        unsafe { u32::to_napi_value(env, value.0) }
+        unsafe { u32::to_napi_value(env, value.value) }
     }
 }
 
 /// A pending future whose completed native value records conversion and Drop.
 #[napi(ts_return_type = "Promise<number>")]
-pub fn tests_casync_tracked_result(env: Env, value: u32) -> JsAsyncResult<TrackedResult> {
+pub fn tests_casync_tracked_result(
+    env: Env,
+    value: u32,
+    conversion_delay_ms: Option<u32>,
+) -> JsAsyncResult<TrackedResult> {
     BridgedPromise::spawn(&env, || {
         Ok(async move {
             tokio::time::sleep(Duration::from_millis(1)).await;
-            Ok::<_, ConvertedError>(TrackedResult(value))
+            Ok::<_, ConvertedError>(TrackedResult {
+                value,
+                conversion_delay: Duration::from_millis(conversion_delay_ms.unwrap_or(0) as u64),
+            })
         })
     })
 }

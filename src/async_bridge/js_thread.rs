@@ -26,13 +26,12 @@ use crate::errors::{ConvertedError, ConvertedResult};
 // Settle immediately ready low-load futures without a worker handoff.
 // Pending futures always share the completion queue to amortize JS callbacks.
 const INLINE_POLL_THRESHOLD: usize = 8;
-const MAX_COMPLETIONS_PER_DRAIN: usize = 64;
+const MAX_COMPLETIONS_PER_DRAIN: usize = 1024;
 const MAX_DRAIN_TIME: Duration = Duration::from_micros(50);
-// Tiny chunks at high concurrency repeatedly interrupt completion delivery to
-// run refill microtasks. Larger chunks recover throughput without an unbounded
-// callback. See benchmark/async-bridge for the concurrency sweep.
+// Keep inexpensive snapshots together at moderate concurrency. A small count
+// limit inserts refill microtasks ahead of older results still waiting to settle.
+// The time budget still bounds callbacks that perform expensive conversions.
 const HIGH_LOAD_THRESHOLD: usize = 256;
-const HIGH_LOAD_MAX_COMPLETIONS: usize = 1024;
 const HIGH_LOAD_MAX_DRAIN_TIME: Duration = Duration::from_millis(2);
 
 /// FutureRegistry — one per N-API environment.
@@ -43,6 +42,7 @@ pub(super) struct FutureRegistry {
     #[cfg(feature = "tests")]
     counters: Cell<[u64; 8]>,
     pub(super) queue: Arc<CompletionQueue>,
+    pending: RefCell<std::vec::IntoIter<SettleCallback>>,
     tokio_rt: RefCell<Option<tokio::runtime::Runtime>>,
 }
 
@@ -53,6 +53,7 @@ impl FutureRegistry {
             #[cfg(feature = "tests")]
             counters: Cell::new([0; 8]),
             queue: Arc::new(CompletionQueue::new()),
+            pending: RefCell::new(Vec::new().into_iter()),
             tokio_rt: RefCell::new(Some(rt)),
         }
     }
@@ -144,44 +145,41 @@ impl FutureRegistry {
         // Clear the flag before taking the batch. A push after the take
         // then signals the TSFN again, so no completion is lost.
         self.queue.signaled.store(false, Ordering::Release);
-        let (limit, budget) = if self.active_count.get() >= HIGH_LOAD_THRESHOLD {
-            (HIGH_LOAD_MAX_COMPLETIONS, HIGH_LOAD_MAX_DRAIN_TIME)
+        let budget = if self.active_count.get() >= HIGH_LOAD_THRESHOLD {
+            HIGH_LOAD_MAX_DRAIN_TIME
         } else {
-            (MAX_COMPLETIONS_PER_DRAIN, MAX_DRAIN_TIME)
+            MAX_DRAIN_TIME
         };
-        let completed: Vec<_> = {
+        let (mut completed, queued_pending) = {
+            let mut pending = self.pending.borrow_mut();
             let mut queued = self.queue.completed.lock().unwrap();
-            let count = queued.len().min(limit);
-            queued.drain(..count).collect()
+            if pending.len() == 0 {
+                (std::mem::take(&mut *queued).into_iter(), false)
+            } else {
+                (std::mem::take(&mut *pending), !queued.is_empty())
+            }
         };
 
         #[cfg(feature = "tests")]
         self.count(5);
-        let started = Instant::now();
-        let mut completed = completed.into_iter();
-        #[cfg(feature = "tests")]
+        // One result cannot be preempted, so a clock read cannot affect it.
+        let deadline = (completed.len() > 1).then(|| Instant::now() + budget);
         let mut count = 0;
-        for settle in completed.by_ref() {
+        while let Some(settle) = completed.next() {
             self.complete(env, settle);
+            count += 1;
             #[cfg(feature = "tests")]
+            self.count(4);
+            if count == MAX_COMPLETIONS_PER_DRAIN
+                || (completed.len() != 0 && deadline.is_some_and(|t| Instant::now() >= t))
             {
-                count += 1;
-                self.count(4);
-            }
-            if started.elapsed() >= budget {
                 break;
             }
         }
-        // Leave a large backlog in place rather than copying it on every
-        // bounded drain. Only this chunk's unprocessed callbacks go back in
-        // front, ahead of completions received while JavaScript was running.
-        let pending = {
-            let mut queued = self.queue.completed.lock().unwrap();
-            for settle in completed.rev() {
-                queued.push_front(settle);
-            }
-            !queued.is_empty()
-        };
+        // Retain the original allocation and finish older results before taking
+        // a newer worker snapshot. No copy, requeue, or second queue lock.
+        let pending = completed.len() != 0 || queued_pending;
+        *self.pending.borrow_mut() = completed;
         if pending {
             #[cfg(feature = "tests")]
             self.count(7);
@@ -230,6 +228,11 @@ impl FutureRegistry {
         counters.into_iter().map(|n| n as f64).collect()
     }
 
+    #[cfg(feature = "tests")]
+    pub(super) fn pending_completions(&self) -> usize {
+        self.pending.borrow().len() + self.queue.completed.lock().unwrap().len()
+    }
+
     // This function is registered in the startup to be called during node cleanup process.
     pub(super) fn shutdown(&self) {
         self.active_count.set(0);
@@ -241,6 +244,9 @@ impl FutureRegistry {
         };
         // Release locks before dropping callbacks and their captured resources.
         drop((tsfn, completed));
+        // A bounded drain can retain already-completed results locally.
+        let pending = std::mem::take(&mut *self.pending.borrow_mut());
+        drop(pending);
         if let Some(rt) = self.tokio_rt.borrow_mut().take() {
             rt.shutdown_background();
         }
