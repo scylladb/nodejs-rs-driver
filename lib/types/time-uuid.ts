@@ -3,7 +3,7 @@ import crypto = require("crypto");
 import Long = require("long");
 
 import Uuid = require("./uuid");
-import { registerEntropyCacheSnapshotReset } from "./entropy-cache-snapshot";
+import { fillRandomBytes } from "./entropy-cache";
 import utils = require("../utils");
 import { ValueCallback } from "../..";
 
@@ -25,32 +25,6 @@ const minNodeId = utils.allocBufferFromString("808080808080", "hex");
 const minClockId = utils.allocBufferFromString("8080", "hex");
 const maxNodeId = utils.allocBufferFromString("7f7f7f7f7f7f", "hex");
 const maxClockId = utils.allocBufferFromString("7f7f", "hex");
-
-// Cache entropy for synchronous generation without pointing outputs at the cache.
-const timeUuidEntropyCache = Buffer.alloc(128 * 8);
-let timeUuidEntropyOffset = timeUuidEntropyCache.length;
-
-registerEntropyCacheSnapshotReset(timeUuidEntropyCache, () => {
-    timeUuidEntropyOffset = timeUuidEntropyCache.length;
-});
-
-function fillRandomTimeUuidBytes(
-    buffer: Buffer,
-    offset: number,
-    length: number,
-): void {
-    if (timeUuidEntropyOffset + length > timeUuidEntropyCache.length) {
-        crypto.randomFillSync(timeUuidEntropyCache);
-        timeUuidEntropyOffset = 0;
-    }
-    timeUuidEntropyCache.copy(
-        buffer,
-        offset,
-        timeUuidEntropyOffset,
-        timeUuidEntropyOffset + length,
-    );
-    timeUuidEntropyOffset += length;
-}
 
 /**
  * Counter used to generate up to 10000 different timeuuid values with the same Date
@@ -501,7 +475,7 @@ function generateBuffer(
     if (!nodeIdBuffer || !clockIdBuffer) {
         const randomOffset = clockIdBuffer ? 10 : 8;
         const randomLength = clockIdBuffer ? 6 : nodeIdBuffer ? 2 : 8;
-        fillRandomTimeUuidBytes(buffer, randomOffset, randomLength);
+        fillRandomBytes(buffer, randomOffset, randomLength);
     }
     writeTimeAndUuidBits(buffer, timeWithTicks);
     return buffer;

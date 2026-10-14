@@ -1,7 +1,6 @@
-import crypto = require("crypto");
 import utils = require("../utils");
 import { ValueCallback } from "../..";
-import { registerEntropyCacheSnapshotReset } from "./entropy-cache-snapshot";
+import { fillRandomBytes } from "./entropy-cache";
 
 /** @module types */
 
@@ -149,25 +148,10 @@ class Uuid {
     }
 }
 
-// Refill entropy for 128 UUIDs at once to avoid a call from Node into Rust
-// and a Buffer conversion for every value. Node crypto still obtains the
-// randomness natively. Benchmark before restoring per-value native calls.
-const uuidEntropyCache = Buffer.alloc(128 * 16);
-let uuidEntropyOffset = uuidEntropyCache.length;
-
-registerEntropyCacheSnapshotReset(uuidEntropyCache, () => {
-    uuidEntropyOffset = uuidEntropyCache.length;
-});
-
 /** @private */
 function randomUuidBuffer(): Buffer {
-    if (uuidEntropyOffset === uuidEntropyCache.length) {
-        crypto.randomFillSync(uuidEntropyCache);
-        uuidEntropyOffset = 0;
-    }
     const buffer = Buffer.allocUnsafeSlow(16); // Give each UUID its own ArrayBuffer.
-    uuidEntropyCache.copy(buffer, 0, uuidEntropyOffset, uuidEntropyOffset + 16);
-    uuidEntropyOffset += 16;
+    fillRandomBytes(buffer, 0, 16);
     buffer[6] = (buffer[6] & 0x0f) | 0x40; // Version 4 in the high nibble.
     buffer[8] = (buffer[8] & 0x3f) | 0x80; // IETF variant: top bits 10.
     return buffer;

@@ -3,6 +3,8 @@ uuid.js
 uuid.d.ts
 entropy-cache-snapshot.js
 entropy-cache-snapshot.d.ts
+entropy-cache.js
+entropy-cache.d.ts
 big-decimal.js
 big-decimal.d.ts
 local-time.js
