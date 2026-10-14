@@ -92,7 +92,7 @@ use napi_derive::napi;
 
 use crate::errors::{ConvertedError, ConvertedResult, JsResult, with_custom_error};
 use js_thread::{FutureRegistry, REGISTRIES};
-use shared::CompletionQueue;
+use shared::{CURRENT_QUEUE, CompletionQueue};
 
 /// A JS Promise that a future on the bridge's Tokio runtime settles.
 /// `T` is the type the Promise resolves with. The Promise rejects with any error value
@@ -129,9 +129,12 @@ pub fn init_async_bridge(env: Env) -> JsResult<()> {
         }
 
         let queue = Arc::new(CompletionQueue::new());
+        let thread_queue = Arc::clone(&queue);
         let rt = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(1)
             .enable_all()
+            // Also runs for the threads of the blocking pool.
+            .on_thread_start(move || set_current_queue(Some(Arc::clone(&thread_queue))))
             .build()?;
         let registry = Rc::new(FutureRegistry::new(rt, queue));
 
@@ -153,6 +156,7 @@ pub fn init_async_bridge(env: Env) -> JsResult<()> {
                 Ok(())
             })?;
         registry.queue.set_tsfn(tsfn);
+        set_current_queue(Some(Arc::clone(&registry.queue)));
 
         // Cleanup hook — shut down the runtime when Node exits.
         env.add_env_cleanup_hook(key, |key| {
@@ -162,6 +166,7 @@ pub fn init_async_bridge(env: Env) -> JsResult<()> {
                     registry.shutdown();
                 }
             });
+            set_current_queue(None);
         })?;
         REGISTRIES.with(|registries| {
             registries.borrow_mut().insert(key, registry);
@@ -169,6 +174,11 @@ pub fn init_async_bridge(env: Env) -> JsResult<()> {
 
         Ok(())
     })
+}
+
+/// Marks the current thread as a thread of the environment that owns `queue`.
+fn set_current_queue(queue: Option<Arc<CompletionQueue>>) {
+    CURRENT_QUEUE.with(|current| *current.borrow_mut() = queue);
 }
 
 impl<T> BridgedPromise<T>

@@ -2,8 +2,9 @@
 //!
 //! Each method says which thread calls it.
 
-use std::sync::Mutex;
+use std::cell::RefCell;
 use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, Mutex};
 
 use napi::bindgen_prelude::check_status;
 use napi::{Env, Result, Status, sys};
@@ -69,6 +70,14 @@ pub(super) type SettleCallback = Box<dyn FnOnce(Env) + Send>;
 pub(super) enum QueueEntry {
     /// A future completed. Settles its Promise.
     Settle(SettleCallback),
+}
+
+thread_local! {
+    /// The completion queue of the environment that this thread belongs to.
+    ///
+    /// It is set on the JavaScript thread of an environment and on each
+    /// thread of its Tokio runtime. On other threads it is `None`.
+    pub(super) static CURRENT_QUEUE: RefCell<Option<Arc<CompletionQueue>>> = const { RefCell::new(None) };
 }
 
 /// No argument no return value, weak ThreadSafeFunction type.
