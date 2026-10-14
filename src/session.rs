@@ -11,12 +11,12 @@ use scylla::client::session::Session;
 use scylla::errors::{ExecutionError, RequestAttemptError};
 use scylla::response::{PagingState, PagingStateResponse};
 use scylla::serialize::row::{BuiltinTypeCheckError, BuiltinTypeCheckErrorKind};
-use scylla::statement::batch::Batch;
+use scylla::statement::batch::{Batch, BatchStatement};
 use scylla::statement::prepared::PreparedStatement;
 use scylla::statement::{Consistency, SerialConsistency, Statement};
 
 use crate::async_bridge::{BridgedPromise, JsAsyncResult};
-use crate::errors::{ConvertedError, ConvertedResult, JsResult, make_js_error, with_custom_error};
+use crate::errors::{ConvertedError, ConvertedResult, make_js_error};
 use crate::metadata::state::ClusterSnapshot;
 use crate::requests::request::PreparedStatementWrapper;
 use crate::requests::request::QueryOptionsObj;
@@ -26,11 +26,6 @@ use crate::types::encoded_data::{EncodedValuesWrapper, SerializedValuesWrapper};
 use crate::types::type_wrappers::ComplexType;
 use crate::utils::bigint_to_i64;
 use crate::utils::js_thread_only::JsThreadOnly;
-
-#[napi]
-pub struct BatchWrapper {
-    inner: Arc<Batch>,
-}
 
 /// The session of the driver.
 ///
@@ -368,17 +363,91 @@ impl SessionWrapper {
         })
     }
 
-    /// Executes all statements in the provided batch. Those statements can be either prepared or unprepared.
+    /// Executes a batch of unprepared statements with the provided options.
     ///
     /// Returns a wrapper of the result provided by the rust driver
+    #[allow(clippy::too_many_arguments)]
     pub fn batch(
         &self,
         env: Env,
-        batch: &BatchWrapper,
+        statements: Vec<String>,
         params: Vec<Vec<EncodedValuesWrapper>>,
+        consistency: Option<u16>,
+        fetch_size: Option<i32>,
+        is_idempotent: Option<bool>,
+        request_timeout: Option<i32>,
+        serial_consistency: Option<i16>,
+        timestamp: Option<BigInt>,
+        trace_query: Option<bool>,
+    ) -> JsAsyncResult<QueryResultWrapper> {
+        let options = QueryOptionsObj::new(
+            consistency,
+            fetch_size,
+            is_idempotent,
+            request_timeout,
+            serial_consistency,
+            timestamp,
+            trace_query,
+        );
+        self.execute_batch(
+            env,
+            params,
+            &options,
+            statements
+                .into_iter()
+                .map(Statement::from)
+                .map(BatchStatement::Query),
+        )
+    }
+
+    /// Executes a batch of already prepared statements with the provided options.
+    ///
+    /// Returns a wrapper of the result provided by the rust driver
+    #[allow(clippy::too_many_arguments)]
+    pub fn batch_prepared(
+        &self,
+        env: Env,
+        statements: Vec<ExternalRef<PreparedStatementWrapper>>,
+        params: Vec<Vec<EncodedValuesWrapper>>,
+        consistency: Option<u16>,
+        fetch_size: Option<i32>,
+        is_idempotent: Option<bool>,
+        request_timeout: Option<i32>,
+        serial_consistency: Option<i16>,
+        timestamp: Option<BigInt>,
+        trace_query: Option<bool>,
+    ) -> JsAsyncResult<QueryResultWrapper> {
+        let options = QueryOptionsObj::new(
+            consistency,
+            fetch_size,
+            is_idempotent,
+            request_timeout,
+            serial_consistency,
+            timestamp,
+            trace_query,
+        );
+        self.execute_batch(
+            env,
+            params,
+            &options,
+            statements
+                .iter()
+                .map(|handle| BatchStatement::PreparedStatement(handle.prepared.clone())),
+        )
+    }
+
+    /// Builds a batch of the given statements, applies the options, and executes it.
+    fn execute_batch(
+        &self,
+        env: Env,
+        params: Vec<Vec<EncodedValuesWrapper>>,
+        options: &QueryOptionsObj,
+        statements: impl Iterator<Item = BatchStatement>,
     ) -> JsAsyncResult<QueryResultWrapper> {
         BridgedPromise::spawn(&env, || {
-            let batch = Arc::clone(&batch.inner);
+            let mut batch: Batch = Default::default();
+            statements.for_each(|statement| batch.append_statement(statement));
+            let batch = self.apply_batch_options(batch, options)?;
             let inner = Arc::clone(&self.inner);
             Ok(async move {
                 let res = inner.batch(&batch, params).await?;
@@ -471,76 +540,6 @@ impl SessionWrapper {
                 });
 
                 QueryExecutor::fetch_next_page_internal(&inner, &executor, paging_state).await
-            })
-        })
-    }
-
-    /// Creates object representing batch of statements.
-    #[allow(clippy::too_many_arguments)]
-    pub fn create_batch(
-        &self,
-        statements: Vec<String>,
-        consistency: Option<u16>,
-        fetch_size: Option<i32>,
-        is_idempotent: Option<bool>,
-        request_timeout: Option<i32>,
-        serial_consistency: Option<i16>,
-        timestamp: Option<BigInt>,
-        trace_query: Option<bool>,
-    ) -> JsResult<BatchWrapper> {
-        let options = QueryOptionsObj::new(
-            consistency,
-            fetch_size,
-            is_idempotent,
-            request_timeout,
-            serial_consistency,
-            timestamp,
-            trace_query,
-        );
-        with_custom_error(|| {
-            let mut batch: Batch = Default::default();
-            statements
-                .into_iter()
-                .for_each(|q| batch.append_statement(q.as_str()));
-
-            batch = self.apply_batch_options(batch, &options)?;
-            ConvertedResult::Ok(BatchWrapper {
-                inner: Arc::new(batch),
-            })
-        })
-    }
-
-    /// Creates object representing batch of already prepared statements.
-    #[allow(clippy::too_many_arguments)]
-    pub fn create_prepared_batch(
-        &self,
-        statements: Vec<ExternalRef<PreparedStatementWrapper>>,
-        consistency: Option<u16>,
-        fetch_size: Option<i32>,
-        is_idempotent: Option<bool>,
-        request_timeout: Option<i32>,
-        serial_consistency: Option<i16>,
-        timestamp: Option<BigInt>,
-        trace_query: Option<bool>,
-    ) -> JsResult<BatchWrapper> {
-        let options = QueryOptionsObj::new(
-            consistency,
-            fetch_size,
-            is_idempotent,
-            request_timeout,
-            serial_consistency,
-            timestamp,
-            trace_query,
-        );
-        with_custom_error(|| {
-            let mut batch: Batch = Default::default();
-            statements
-                .iter()
-                .for_each(|handle| batch.append_statement(handle.prepared.clone()));
-
-            batch = self.apply_batch_options(batch, &options)?;
-            ConvertedResult::Ok(BatchWrapper {
-                inner: Arc::new(batch),
             })
         })
     }
@@ -652,13 +651,64 @@ pub fn session_execute_prepared_unpaged(
 
 /// JS binding of [`SessionWrapper::batch`].
 #[napi(ts_return_type = "Promise<ExternalObject<QueryResultWrapper>>")]
+#[allow(clippy::too_many_arguments)]
 pub fn session_batch(
     session: &External<SessionWrapper>,
     env: Env,
-    batch: &BatchWrapper,
+    statements: Vec<String>,
     params: Vec<Vec<EncodedValuesWrapper>>,
+    consistency: Option<u16>,
+    fetch_size: Option<i32>,
+    is_idempotent: Option<bool>,
+    request_timeout: Option<i32>,
+    serial_consistency: Option<i16>,
+    timestamp: Option<BigInt>,
+    trace_query: Option<bool>,
 ) -> JsAsyncResult<QueryResultWrapper> {
-    session.batch(env, batch, params)
+    session.batch(
+        env,
+        statements,
+        params,
+        consistency,
+        fetch_size,
+        is_idempotent,
+        request_timeout,
+        serial_consistency,
+        timestamp,
+        trace_query,
+    )
+}
+
+/// JS binding of [`SessionWrapper::batch_prepared`].
+#[napi(ts_return_type = "Promise<ExternalObject<QueryResultWrapper>>")]
+#[allow(clippy::too_many_arguments)]
+pub fn session_batch_prepared(
+    session: &External<SessionWrapper>,
+    env: Env,
+    #[napi(ts_arg_type = "Array<ExternalObject<PreparedStatementWrapper>>")] statements: Vec<
+        ExternalRef<PreparedStatementWrapper>,
+    >,
+    params: Vec<Vec<EncodedValuesWrapper>>,
+    consistency: Option<u16>,
+    fetch_size: Option<i32>,
+    is_idempotent: Option<bool>,
+    request_timeout: Option<i32>,
+    serial_consistency: Option<i16>,
+    timestamp: Option<BigInt>,
+    trace_query: Option<bool>,
+) -> JsAsyncResult<QueryResultWrapper> {
+    session.batch_prepared(
+        env,
+        statements,
+        params,
+        consistency,
+        fetch_size,
+        is_idempotent,
+        request_timeout,
+        serial_consistency,
+        timestamp,
+        trace_query,
+    )
 }
 
 /// JS binding of [`SessionWrapper::query_single_page`].
@@ -722,60 +772,6 @@ pub fn session_execute_prepared_single_page(
         timestamp,
         trace_query,
         paging_state,
-    )
-}
-
-/// JS binding of [`SessionWrapper::create_batch`].
-#[napi(ts_return_type = "BatchWrapper")]
-#[allow(clippy::too_many_arguments)]
-pub fn session_create_batch(
-    session: &External<SessionWrapper>,
-    statements: Vec<String>,
-    consistency: Option<u16>,
-    fetch_size: Option<i32>,
-    is_idempotent: Option<bool>,
-    request_timeout: Option<i32>,
-    serial_consistency: Option<i16>,
-    timestamp: Option<BigInt>,
-    trace_query: Option<bool>,
-) -> JsResult<BatchWrapper> {
-    session.create_batch(
-        statements,
-        consistency,
-        fetch_size,
-        is_idempotent,
-        request_timeout,
-        serial_consistency,
-        timestamp,
-        trace_query,
-    )
-}
-
-/// JS binding of [`SessionWrapper::create_prepared_batch`].
-#[napi(ts_return_type = "BatchWrapper")]
-#[allow(clippy::too_many_arguments)]
-pub fn session_create_prepared_batch(
-    session: &External<SessionWrapper>,
-    #[napi(ts_arg_type = "Array<ExternalObject<PreparedStatementWrapper>>")] statements: Vec<
-        ExternalRef<PreparedStatementWrapper>,
-    >,
-    consistency: Option<u16>,
-    fetch_size: Option<i32>,
-    is_idempotent: Option<bool>,
-    request_timeout: Option<i32>,
-    serial_consistency: Option<i16>,
-    timestamp: Option<BigInt>,
-    trace_query: Option<bool>,
-) -> JsResult<BatchWrapper> {
-    session.create_prepared_batch(
-        statements,
-        consistency,
-        fetch_size,
-        is_idempotent,
-        request_timeout,
-        serial_consistency,
-        timestamp,
-        trace_query,
     )
 }
 
