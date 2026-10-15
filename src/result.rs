@@ -6,7 +6,7 @@ use crate::{
 };
 use bytes::Bytes;
 use napi::{
-    bindgen_prelude::{Buffer, ToNapiValue, check_status},
+    bindgen_prelude::{Buffer, External, ToNapiValue, check_status},
     sys,
 };
 use scylla::{
@@ -34,8 +34,13 @@ enum QueryResultVariant {
     RowsResult(QueryRowsResult),
 }
 
-/// Wrapper for a whole query result
-#[napi]
+/// Wrapper for a whole query result.
+///
+/// JS gets it as an `External`, not as an instance of a `#[napi]` class.
+/// An instance of a class costs `napi_new_instance` and `napi_wrap` on creation,
+/// and `napi_unwrap` and a borrow check on each method call.
+/// An `External` costs one `napi_create_external`, and one `napi_get_value_external`
+/// on each call. JS reads the result with the `result*` functions below.
 pub struct QueryResultWrapper {
     inner: QueryResultVariant,
     /// The result metadata generation of the prepared handle that produced this result.
@@ -210,7 +215,12 @@ impl ToNapiValue for PageBuffer {
     }
 }
 
-#[napi]
+impl ToNapiValue for QueryResultWrapper {
+    unsafe fn to_napi_value(env: sys::napi_env, val: Self) -> napi::Result<sys::napi_value> {
+        unsafe { External::to_napi_value(env, External::new(val)) }
+    }
+}
+
 impl QueryResultWrapper {
     /// Converts rust query result into query result wrapper that can be passed to NAPI-RS.
     /// For results of unprepared statements and of batches, which have no metadata generation.
@@ -261,8 +271,7 @@ impl QueryResultWrapper {
     }
 
     /// Returns the raw paging state of the next page, or None when this is the last page.
-    #[napi(ts_return_type = "Buffer | null")]
-    pub fn get_paging_state(&self) -> Option<CopyableBuffer<'_>> {
+    fn get_paging_state(&self) -> Option<CopyableBuffer<'_>> {
         self.next_page.as_ref().map(|next| {
             CopyableBuffer::new(
                 next.paging_state
@@ -273,8 +282,7 @@ impl QueryResultWrapper {
     }
 
     /// Returns the executor that fetches the next pages, or None when this is the last page.
-    #[napi]
-    pub fn get_executor(&self) -> Option<QueryExecutor> {
+    fn get_executor(&self) -> Option<QueryExecutor> {
         self.next_page.as_ref().map(|next| next.executor.clone())
     }
 
@@ -283,22 +291,19 @@ impl QueryResultWrapper {
     /// Returns None for non-row results, and for results of unprepared statements and of batches.
     /// Goal: let JS reuse converted result metadata, to avoid N-API conversion cost.
     /// See ResultMetadataTracker in the Rust code.
-    #[napi]
-    pub fn get_metadata_generation(&self) -> Option<u32> {
+    fn get_metadata_generation(&self) -> Option<u32> {
         self.metadata_generation
     }
 
     /// Extracts all the rows of the result as an independent buffer and a row count.
-    #[napi]
-    pub fn get_rows(&self) -> Option<(Buffer, u32)> {
+    fn get_rows(&self) -> Option<(Buffer, u32)> {
         self.rows_bytes_and_count()
             .map(|(bytes, count)| (Buffer::from(bytes.to_vec()), count))
     }
 
     /// Used by the TypeScript decoder when it copies buffer-valued cells.
     /// JavaScript must not mutate the returned page while Rust retains it.
-    #[napi(ts_return_type = "[Buffer, number] | null")]
-    pub fn get_rows_shared(&self) -> Option<(PageBuffer, u32)> {
+    fn get_rows_shared(&self) -> Option<(PageBuffer, u32)> {
         self.rows_bytes_and_count()
             .map(|(bytes, count)| (PageBuffer(bytes.clone()), count))
     }
@@ -326,8 +331,7 @@ impl QueryResultWrapper {
     }
 
     /// Get the names of the columns in order, as they appear in the query result
-    #[napi]
-    pub fn get_columns_names(&self) -> Vec<String> {
+    fn get_columns_names(&self) -> Vec<String> {
         match &self.inner {
             QueryResultVariant::RowsResult(v) => v,
             QueryResultVariant::EmptyResult(_) => {
@@ -341,8 +345,7 @@ impl QueryResultWrapper {
     }
 
     /// Get the names of the columns in order, as they appear in the query result
-    #[napi]
-    pub fn get_columns_types(&self) -> Vec<ComplexType<'_>> {
+    fn get_columns_types(&self) -> Vec<ComplexType<'_>> {
         match &self.inner {
             QueryResultVariant::RowsResult(v) => v,
             QueryResultVariant::EmptyResult(_) => {
@@ -356,8 +359,7 @@ impl QueryResultWrapper {
     }
 
     /// Get the coordinator that answered the query
-    #[napi]
-    pub fn get_coordinator(&self) -> String {
+    fn get_coordinator(&self) -> String {
         let coordinator = match &self.inner {
             QueryResultVariant::EmptyResult(query_result) => query_result.request_coordinator(),
             QueryResultVariant::RowsResult(query_rows_result) => {
@@ -368,8 +370,7 @@ impl QueryResultWrapper {
     }
 
     /// Get the specification of all columns as they appear in the query result
-    #[napi]
-    pub fn get_columns_specs(&self) -> Vec<MetaColumnWrapper> {
+    fn get_columns_specs(&self) -> Vec<MetaColumnWrapper> {
         match &self.inner {
             QueryResultVariant::RowsResult(v) => v,
             QueryResultVariant::EmptyResult(_) => {
@@ -387,8 +388,7 @@ impl QueryResultWrapper {
     }
 
     /// Get all warnings generated in the query
-    #[napi]
-    pub fn get_warnings(&self) -> Vec<String> {
+    fn get_warnings(&self) -> Vec<String> {
         match &self.inner {
             QueryResultVariant::RowsResult(v) => v.warnings().map(|e| e.to_owned()).collect(),
             QueryResultVariant::EmptyResult(v) => v.warnings().map(|e| e.to_owned()).collect(),
@@ -396,8 +396,7 @@ impl QueryResultWrapper {
     }
 
     /// Get all tracing ids generated in the query
-    #[napi]
-    pub fn get_trace_id(&self) -> Option<Buffer> {
+    fn get_trace_id(&self) -> Option<Buffer> {
         match &self.inner {
             QueryResultVariant::RowsResult(v) => v
                 .tracing_id()
@@ -407,6 +406,79 @@ impl QueryResultWrapper {
                 .map(|val| Buffer::from(val.as_bytes().as_slice())),
         }
     }
+}
+
+// The functions that JS uses to read a `QueryResultWrapper`.
+// See [`QueryResultWrapper`] for why they are not methods of a `#[napi]` class.
+
+/// Returns the raw paging state of the next page, or null when this is the last page.
+#[napi(ts_return_type = "Buffer | null")]
+pub fn result_get_paging_state(
+    result: &External<QueryResultWrapper>,
+) -> Option<CopyableBuffer<'_>> {
+    result.get_paging_state()
+}
+
+/// Returns the executor that fetches the next pages, or null when this is the last page.
+#[napi(ts_return_type = "ExternalObject<QueryExecutor> | null")]
+pub fn result_get_executor(result: &External<QueryResultWrapper>) -> Option<QueryExecutor> {
+    result.get_executor()
+}
+
+/// Returns the result metadata generation of the prepared handle that produced this result.
+/// See [`QueryResultWrapper::get_metadata_generation`].
+#[napi]
+pub fn result_get_metadata_generation(result: &External<QueryResultWrapper>) -> Option<u32> {
+    result.get_metadata_generation()
+}
+
+/// Extracts all the rows of the result as an independent buffer and a row count.
+#[napi]
+pub fn result_get_rows(result: &External<QueryResultWrapper>) -> Option<(Buffer, u32)> {
+    result.get_rows()
+}
+
+/// Returns the rows of the result as a buffer that shares the page with Rust, and a row count.
+/// See [`QueryResultWrapper::get_rows_shared`].
+#[napi(ts_return_type = "[Buffer, number] | null")]
+pub fn result_get_rows_shared(result: &External<QueryResultWrapper>) -> Option<(PageBuffer, u32)> {
+    result.get_rows_shared()
+}
+
+/// Get the names of the columns in order, as they appear in the query result.
+#[napi]
+pub fn result_get_columns_names(result: &External<QueryResultWrapper>) -> Vec<String> {
+    result.get_columns_names()
+}
+
+/// Get the types of the columns in order, as they appear in the query result.
+#[napi]
+pub fn result_get_columns_types(result: &External<QueryResultWrapper>) -> Vec<ComplexType<'_>> {
+    result.get_columns_types()
+}
+
+/// Get the coordinator that answered the query.
+#[napi]
+pub fn result_get_coordinator(result: &External<QueryResultWrapper>) -> String {
+    result.get_coordinator()
+}
+
+/// Get the specification of all columns as they appear in the query result.
+#[napi]
+pub fn result_get_columns_specs(result: &External<QueryResultWrapper>) -> Vec<MetaColumnWrapper> {
+    result.get_columns_specs()
+}
+
+/// Get all warnings generated in the query.
+#[napi]
+pub fn result_get_warnings(result: &External<QueryResultWrapper>) -> Vec<String> {
+    result.get_warnings()
+}
+
+/// Get the tracing id of the query.
+#[napi]
+pub fn result_get_trace_id(result: &External<QueryResultWrapper>) -> Option<Buffer> {
+    result.get_trace_id()
 }
 
 #[cfg(test)]

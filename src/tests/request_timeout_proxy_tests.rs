@@ -4,6 +4,7 @@
 //! metadata, and prepare its schema without races. The delay can then be enabled
 //! for query execution requests on non-control connections only.
 
+use napi::bindgen_prelude::External;
 use std::net::SocketAddr;
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -31,7 +32,10 @@ fn running_proxy() -> &'static Mutex<Option<RunningProxy>> {
 /// explicitly selects a timeout-disabled profile instead of inheriting the
 /// session default.
 #[napi]
-pub fn tests_set_session_default_request_timeout(session: &SessionWrapper, timeout_ms: u32) {
+pub fn tests_set_session_default_request_timeout(
+    session: &External<SessionWrapper>,
+    timeout_ms: u32,
+) {
     let mut handle = session.inner.get_default_execution_profile_handle().clone();
     let profile = handle
         .pointee_to_builder()

@@ -1,3 +1,4 @@
+use napi::bindgen_prelude::External;
 use std::sync::Arc;
 
 use scylla::client::execution_profile::ExecutionProfileBuilder;
@@ -84,8 +85,12 @@ fn apply_ddl_lbp(statement: &mut Statement, host_id: Uuid) {
 }
 
 /// Helper for executing DDL statements in tests.
-#[napi(ts_return_type = "Promise<QueryResultWrapper>")]
-pub fn ddl(env: Env, session: &SessionWrapper, query: String) -> JsAsyncResult<QueryResultWrapper> {
+#[napi(ts_return_type = "Promise<ExternalObject<QueryResultWrapper>>")]
+pub fn ddl(
+    env: Env,
+    session: &External<SessionWrapper>,
+    query: String,
+) -> JsAsyncResult<QueryResultWrapper> {
     let session = Arc::clone(&session.inner);
     BridgedPromise::spawn(&env, || {
         Ok(async move {

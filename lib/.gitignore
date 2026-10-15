@@ -27,3 +27,5 @@ cache.js
 cache.d.ts
 encoder.js
 encoder.d.ts
+rust-session.js
+rust-session.d.ts

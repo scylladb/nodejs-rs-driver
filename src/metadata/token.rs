@@ -1,4 +1,5 @@
 use napi::Env;
+use napi::bindgen_prelude::External;
 use napi::bindgen_prelude::{BigInt, FnArgs};
 use scylla::cluster::metadata::{ColumnType, NativeType};
 use scylla::serialize::SerializationError;
@@ -38,14 +39,12 @@ impl SerializeRow for PreSerializedPartitionKey {
     }
 }
 
-#[napi]
 impl SessionWrapper {
     /// Computes the token of a partition key of the given table, given the already-serialized
     /// values of the key's columns.
     ///
     /// It is the caller's responsibility to pass values that really are the partition key's
     /// columns, in order, each encoded with the CQL type of its column.
-    #[napi(ts_return_type = "import('./lib/token').Token")]
     pub fn compute_token<'env>(
         &self,
         env: &'env Env,
@@ -66,11 +65,23 @@ impl SessionWrapper {
     }
 }
 
-#[napi]
+// JS reads the session with these functions. See [`SessionWrapper`].
+
+/// JS binding of [`SessionWrapper::compute_token`].
+#[napi(ts_return_type = "import('./lib/token').Token")]
+pub fn session_compute_token<'env>(
+    session: &External<SessionWrapper>,
+    env: &'env Env,
+    components: Vec<EncodedValuesWrapper>,
+    keyspace: String,
+    table: String,
+) -> JsResult<JsInstance<'env, js_constructible_class::Token>> {
+    session.compute_token(env, components, keyspace, table)
+}
+
 impl SessionWrapper {
     /// Returns every token of the cluster's token ring, sorted ascending. Each adjacent pair is one
     /// range of the ring, the last pair wrapping from the highest token back to the lowest.
-    #[napi(ts_return_type = "import('./lib/token').Token[]")]
     pub fn get_ring_tokens<'env>(
         &self,
         env: &'env Env,
@@ -90,4 +101,15 @@ impl SessionWrapper {
             })
         })
     }
+}
+
+// JS reads the session with these functions. See [`SessionWrapper`].
+
+/// JS binding of [`SessionWrapper::get_ring_tokens`].
+#[napi(ts_return_type = "import('./lib/token').Token[]")]
+pub fn session_get_ring_tokens<'env>(
+    session: &External<SessionWrapper>,
+    env: &'env Env,
+) -> JsResult<Vec<JsInstance<'env, js_constructible_class::Token>>> {
+    session.get_ring_tokens(env)
 }

@@ -1,3 +1,4 @@
+use napi::bindgen_prelude::External;
 use napi::bindgen_prelude::{Buffer, FnArgs, ToNapiValue};
 use napi::{Env, sys};
 use scylla::observability::tracing::{TracingEvent, TracingInfo};
@@ -107,11 +108,9 @@ impl ToNapiValue for TracingInfoResult {
     }
 }
 
-#[napi]
 impl SessionWrapper {
     /// Retrieves the tracing information for a previously executed, traced query,
     /// given the tracing id returned by that query's result.
-    #[napi(ts_return_type = "Promise<import('./lib/metadata/query-trace').QueryTrace>")]
     pub fn get_tracing_info(
         &self,
         env: Env,
@@ -129,4 +128,16 @@ impl SessionWrapper {
             })
         })
     }
+}
+
+// JS reads the session with these functions. See [`SessionWrapper`].
+
+/// JS binding of [`SessionWrapper::get_tracing_info`].
+#[napi(ts_return_type = "Promise<import('./lib/metadata/query-trace').QueryTrace>")]
+pub fn session_get_tracing_info(
+    session: &External<SessionWrapper>,
+    env: Env,
+    tracing_id: Buffer,
+) -> JsAsyncResult<TracingInfoResult> {
+    session.get_tracing_info(env, tracing_id)
 }

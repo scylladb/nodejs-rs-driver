@@ -18,7 +18,8 @@ import clientOptions = require("./client-options");
 import ClientState = require("./metadata/client-state");
 import packageInfo = require("../package.json");
 import { ExecutionOptions, DefaultExecutionOptions } from "./execution-options";
-import { ResultColumnsCache } from "./types/results-wrapper";
+import { ResultColumnsCache, RustResult } from "./types/results-wrapper";
+import { RustSession } from "./rust-session";
 import promiseUtils = require("./promise-utils");
 import rust = require("../index");
 import ResultSet = require("./types/result-set");
@@ -97,7 +98,7 @@ class Client extends events.EventEmitter {
      * @internal
      * @ignore
      */
-    rustClient: rust.SessionWrapper | undefined;
+    rustClient: RustSession | undefined;
     #encoder: Encoder;
     #loggingId: number | undefined;
     // Map insertion order determines which prepared handle is evicted first.
@@ -390,9 +391,7 @@ class Client extends events.EventEmitter {
                 );
             }
 
-            this.rustClient = await rust.SessionWrapper.createSession(
-                this.rustOptions,
-            );
+            this.rustClient = await RustSession.create(this.rustOptions);
             this.metadata = new metadataModule.Metadata(this.rustClient);
         } catch (err) {
             if (err instanceof Error && err.name === "InvalidLocalDatacenter") {
@@ -528,7 +527,7 @@ class Client extends events.EventEmitter {
 
         let rustOptions = execOptions.getRustOptions();
 
-        let result: rust.QueryResultWrapper;
+        let result: RustResult;
         let columnsCache: ResultColumnsCache | undefined;
 
         if (execOptions.isPrepared()) {
@@ -566,14 +565,17 @@ class Client extends events.EventEmitter {
         if (resultPageState) {
             const executor = result.getExecutor();
             // A result with a next page also has the executor that fetches it.
-            assert(executor instanceof rust.QueryExecutor);
+            assert(executor !== null);
 
             resultSet.rawNextPageAsync = async (
                 pageState: Buffer,
-            ): Promise<rust.QueryResultWrapper> => {
-                return await executor.fetchNextPage(
-                    this.rustClient!,
-                    pageState,
+            ): Promise<RustResult> => {
+                return new RustResult(
+                    await rust.executorFetchNextPage(
+                        executor,
+                        this.rustClient!.inner,
+                        pageState,
+                    ),
                 );
             };
         }
@@ -605,7 +607,7 @@ class Client extends events.EventEmitter {
         rustOptions: RustQueryOptions,
         paged: boolean,
         pageState?: Buffer,
-    ): Promise<rust.QueryResultWrapper> {
+    ): Promise<RustResult> {
         let unifiedParams: Array<any>;
         if (Array.isArray(params)) {
             unifiedParams = params;
@@ -620,17 +622,21 @@ class Client extends events.EventEmitter {
         );
 
         if (paged) {
-            return this.rustClient!.executePreparedSinglePage(
-                prepared.handle,
-                encoded,
-                ...rustOptions,
-                pageState,
+            return new RustResult(
+                await this.rustClient!.executePreparedSinglePage(
+                    prepared.handle,
+                    encoded,
+                    rustOptions,
+                    pageState,
+                ),
             );
         }
-        return this.rustClient!.executePreparedUnpaged(
-            prepared.handle,
-            encoded,
-            ...rustOptions,
+        return new RustResult(
+            await this.rustClient!.executePreparedUnpaged(
+                prepared.handle,
+                encoded,
+                rustOptions,
+            ),
         );
     }
 
@@ -641,7 +647,7 @@ class Client extends events.EventEmitter {
         rustOptions: RustQueryOptions,
         paged: boolean,
         pageState?: Buffer,
-    ): Promise<rust.QueryResultWrapper> {
+    ): Promise<RustResult> {
         // We do not accept already prepared statements for unprepared queries
         if (typeof query !== "string") {
             throw new Error("Expected to obtain a string query");
@@ -659,14 +665,18 @@ class Client extends events.EventEmitter {
         let encoded = encodeParams(hints2 || [], params, this.#encoder);
 
         if (paged) {
-            return this.rustClient!.querySinglePage(
-                query,
-                encoded,
-                ...rustOptions,
-                pageState,
+            return new RustResult(
+                await this.rustClient!.querySinglePage(
+                    query,
+                    encoded,
+                    rustOptions,
+                    pageState,
+                ),
             );
         }
-        return this.rustClient!.queryUnpaged(query, encoded, ...rustOptions);
+        return new RustResult(
+            await this.rustClient!.queryUnpaged(query, encoded, rustOptions),
+        );
     }
 
     /**
@@ -986,10 +996,12 @@ class Client extends events.EventEmitter {
         let batch = shouldBePrepared
             ? this.rustClient!.createPreparedBatch(
                   allPrepared.map((prepared) => prepared.handle),
-                  ...rustOptions,
+                  rustOptions,
               )
-            : this.rustClient!.createBatch(allQueries, ...rustOptions);
-        let wrappedResult = await this.rustClient!.batch(batch, parametersRows);
+            : this.rustClient!.createBatch(allQueries, rustOptions);
+        let wrappedResult = new RustResult(
+            await this.rustClient!.batch(batch, parametersRows),
+        );
         return new ResultSet(wrappedResult, this.#encoder);
     }
 

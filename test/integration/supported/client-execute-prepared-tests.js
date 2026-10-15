@@ -17,6 +17,7 @@ const commonKs = helper.getRandomName("ks");
 const numericTests = require("./numeric-tests");
 const pagingTests = require("./paging-tests");
 const { arbitraryValueToBigInt } = require("../../../lib/new-utils");
+const { RustResult } = require("../../../lib/types/results-wrapper");
 
 describe("Client @SERVER_API", function () {
     this.timeout(120000);
@@ -2489,7 +2490,7 @@ describe("Client @SERVER_API", function () {
              * @returns {{typeReads: () => number, restore: () => void}}
              */
             function trackResultColumns() {
-                const proto = rust.QueryResultWrapper.prototype;
+                const proto = RustResult.prototype;
                 const originalTypes = proto.getColumnsTypes;
                 let typeReads = 0;
                 proto.getColumnsTypes = function () {

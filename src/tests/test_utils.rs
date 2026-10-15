@@ -1,3 +1,4 @@
+use napi::bindgen_prelude::External;
 use scylla::client::session::Session;
 
 use std::sync::Arc;
@@ -43,7 +44,10 @@ pub(crate) async fn supports_feature(session: &Session, feature: &str) -> bool {
 }
 
 #[napi(ts_return_type = "Promise<boolean>")]
-pub fn scylla_supports_tablets(env: Env, session: &SessionWrapper) -> JsAsyncResult<bool> {
+pub fn scylla_supports_tablets(
+    env: Env,
+    session: &External<SessionWrapper>,
+) -> JsAsyncResult<bool> {
     let session = Arc::clone(&session.inner);
     BridgedPromise::spawn(&env, || {
         Ok(async move { ConvertedResult::Ok(supports_feature(&session, "TABLETS").await) })
@@ -53,7 +57,7 @@ pub fn scylla_supports_tablets(env: Env, session: &SessionWrapper) -> JsAsyncRes
 /// Returns the number of connections a newly built session is expected to open:
 /// one control connection plus one default pool connection per shard of every node.
 #[napi]
-pub fn tests_expected_connection_count(session: &SessionWrapper) -> u32 {
+pub fn tests_expected_connection_count(session: &External<SessionWrapper>) -> u32 {
     let count = 1 + session
         .inner
         .get_cluster_state()

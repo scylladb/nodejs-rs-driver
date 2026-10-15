@@ -20,7 +20,7 @@ import { SchemaFunction } from "./schema-function";
 import { Aggregate } from "./aggregate";
 import { QueryTrace } from "./query-trace";
 import ClientState = require("./client-state");
-import { SessionWrapper as RustClient } from "../../index";
+import { RustSession as RustClient } from "../rust-session";
 
 export { QueryTrace, TracingEvent } from "./query-trace";
 export { Aggregate } from "./aggregate";
