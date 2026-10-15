@@ -12,7 +12,7 @@
 //! Each Node.js environment (the main thread or a worker thread) has its own:
 //! - `FutureRegistry`, which lives only on the JavaScript thread,
 //! - Tokio runtime with one worker thread,
-//! - `CompletionQueue`, which both threads use,
+//! - `CompletionQueue`, which both threads use, for completions and log events,
 //! - weak TSFN, which tokio threads use upon future completion to wake
 //!   the JavaScript thread.
 //!
@@ -58,12 +58,24 @@
 //! The TSFN is referenced only while futures are pending. So the bridge
 //! keeps Node.js alive only until the last Promise settles.
 //!
+//! # Log events
+//!
+//! The queue also carries `tracing` events (`QueueEntry::Log`).
+//! `push_log` sends each event to the queue of the current thread's
+//! environment (`CURRENT_QUEUE`). The drain passes each event to
+//! `crate::logging::deliver_log`, which calls the log callbacks.
+//! One FIFO queue gives the order: a log event that happens before a
+//! completion reaches JavaScript before the Promise settles.
+//! Log events do not change the count of pending futures. So they do not
+//! keep Node.js alive.
+//!
 //! # What moves between the threads
 //!
 //! ```text
 //!                 created on    travels through                   used on
 //!  DeferredPtr    JS thread ───► Tokio task, then SettleCallback ───► JS thread (resolve / reject)
 //!  SettleCallback worker    ───► CompletionQueue                 ───► JS thread (called, freed)
+//!  LogEvent       any       ───► CompletionQueue                 ───► JS thread (log callbacks)
 //! ```
 //!
 //! # Modules
@@ -84,6 +96,7 @@ mod worker;
 use std::future::Future;
 use std::marker::PhantomData;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use napi::bindgen_prelude::ToNapiValue;
 use napi::{Env, Result, sys};
@@ -91,6 +104,7 @@ use napi_derive::napi;
 
 use crate::errors::{ConvertedError, ConvertedResult, JsResult, with_custom_error};
 use js_thread::{FutureRegistry, REGISTRIES};
+use shared::{CURRENT_QUEUE, CompletionQueue, QueueEntry};
 
 /// A JS Promise that a future on the bridge's Tokio runtime settles.
 /// `T` is the type the Promise resolves with. The Promise rejects with any error value
@@ -126,11 +140,15 @@ pub fn init_async_bridge(env: Env) -> JsResult<()> {
             return ConvertedResult::Ok(());
         }
 
+        let queue = Arc::new(CompletionQueue::new());
+        let thread_queue = Arc::clone(&queue);
         let rt = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(1)
             .enable_all()
+            // Also runs for the threads of the blocking pool.
+            .on_thread_start(move || set_current_queue(Some(Arc::clone(&thread_queue))))
             .build()?;
-        let registry = Rc::new(FutureRegistry::new(rt));
+        let registry = Rc::new(FutureRegistry::new(rt, queue));
 
         // Create the TSFN from any c callback. This callback will be replaced in the build_callback step,
         // but we still need to provide c function, to use napi-rs callback builder.
@@ -150,6 +168,7 @@ pub fn init_async_bridge(env: Env) -> JsResult<()> {
                 Ok(())
             })?;
         registry.queue.set_tsfn(tsfn);
+        set_current_queue(Some(Arc::clone(&registry.queue)));
 
         // Cleanup hook — shut down the runtime when Node exits.
         env.add_env_cleanup_hook(key, |key| {
@@ -159,6 +178,7 @@ pub fn init_async_bridge(env: Env) -> JsResult<()> {
                     registry.shutdown();
                 }
             });
+            set_current_queue(None);
         })?;
         REGISTRIES.with(|registries| {
             registries.borrow_mut().insert(key, registry);
@@ -166,6 +186,44 @@ pub fn init_async_bridge(env: Env) -> JsResult<()> {
 
         Ok(())
     })
+}
+
+/// Marks the current thread as a thread of the environment that owns `queue`.
+fn set_current_queue(queue: Option<Arc<CompletionQueue>>) {
+    CURRENT_QUEUE.with(|current| *current.borrow_mut() = queue);
+}
+
+/// Whether `init_async_bridge` ran for this environment.
+pub(crate) fn is_initialized(env: &Env) -> bool {
+    FutureRegistry::get(env).is_some()
+}
+
+/// The number of entries in the queue of this environment that wait for
+/// the drain.
+///
+/// Tests use this to put several entries into one drain.
+#[cfg(feature = "tests")]
+pub(crate) fn queued_entries(env: &Env) -> usize {
+    FutureRegistry::get(env).map_or(0, |registry| registry.queue.completed.lock().unwrap().len())
+}
+
+/// Queues a `tracing` event for the environment of the current thread.
+///
+/// `make` formats the event. It runs only if the thread has an environment.
+/// The event goes to the same queue as the completed futures, so the
+/// drain handles both in the order of the pushes.
+///
+/// Runs on: any thread. Events from threads of no environment are dropped.
+pub(crate) fn push_log(make: impl FnOnce() -> crate::logging::LogEvent) {
+    // `try_with` fails while the thread-local is destroyed. Drop the event then.
+    let _ = CURRENT_QUEUE.try_with(|current| {
+        // A shared borrow is enough. `make` can emit a nested event, which
+        // takes another shared borrow. Only `set_current_queue` borrows
+        // mutably, and it never runs inside `make` or `push`.
+        if let Some(queue) = current.borrow().as_ref() {
+            queue.push(QueueEntry::Log(make()));
+        }
+    });
 }
 
 impl<T> BridgedPromise<T>

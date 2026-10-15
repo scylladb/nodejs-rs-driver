@@ -5,6 +5,7 @@ const rust = require("../../index");
 const { types } = require("../../main");
 const { logLevels } = types;
 const Client = require("../../lib/client");
+const { Worker } = require("worker_threads");
 
 // ---------------------------------------------------------------------------
 // Because `tracing` has a single global subscriber per process, all tests
@@ -16,13 +17,12 @@ const Client = require("../../lib/client");
 const allEvents = [];
 
 /**
- * Allow any in-flight NonBlocking ThreadsafeFunction calls to drain
- * Repeating it will heuristically reduce chance of leaked events.
+ * Wait until the Rust log events emitted so far reach the callbacks.
+ * Log events and Promise completions share one FIFO queue.
+ * So when this Promise settles, the earlier log events are delivered.
  */
-async function drain() {
-    for (let i = 0; i < 20; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 0));
-    }
+async function flushLogs() {
+    await rust.testsCasyncResolveImmediate();
 }
 
 describe("Logging", function () {
@@ -47,7 +47,7 @@ describe("Logging", function () {
     describe("testsEmitLogEvents", function () {
         it("should forward events at all five tracing levels", async function () {
             rust.testsEmitLogEvents();
-            await drain();
+            await flushLogs();
 
             // TRACE -> "trace", DEBUG -> "debug", INFO -> "info", WARN -> "warning", ERROR -> "error"
             const levels = allEvents.map((e) => e.level);
@@ -60,7 +60,7 @@ describe("Logging", function () {
 
         it("should include the correct messages", async function () {
             rust.testsEmitLogEvents();
-            await drain();
+            await flushLogs();
 
             const messages = allEvents.map((e) => e.message);
             assert.include(messages, "trace message from rust");
@@ -72,7 +72,7 @@ describe("Logging", function () {
 
         it("should deliver extra fields via furtherInfo", async function () {
             rust.testsEmitLogEvents();
-            await drain();
+            await flushLogs();
 
             const furtherInfos = allEvents.map((e) => e.furtherInfo);
             assert.include(furtherInfos, 'test_field: "trace_extra"');
@@ -84,7 +84,7 @@ describe("Logging", function () {
 
         it("should set target to the Rust module path", async function () {
             rust.testsEmitLogEvents();
-            await drain();
+            await flushLogs();
 
             for (const event of allEvents) {
                 assert.isString(event.target);
@@ -110,7 +110,7 @@ describe("Logging", function () {
             );
 
             rust.testsEmitLogInfo("multi-callback test");
-            await drain();
+            await flushLogs();
 
             // Both callbacks should receive the event
             const first = allEvents.find(
@@ -143,7 +143,7 @@ describe("Logging", function () {
             );
 
             rust.testsEmitLogInfo("before remove");
-            await drain();
+            await flushLogs();
 
             assert.isDefined(
                 removableEvents.find((e) => e.message === "before remove"),
@@ -155,7 +155,7 @@ describe("Logging", function () {
             removableEvents.length = 0;
 
             rust.testsEmitLogInfo("after remove");
-            await drain();
+            await flushLogs();
 
             assert.strictEqual(
                 removableEvents.length,
@@ -188,7 +188,7 @@ describe("Logging", function () {
             );
 
             rust.testsEmitLogEvents(); // emits TRACE, DEBUG, INFO, WARN, ERROR
-            await drain();
+            await flushLogs();
 
             // Should only have error-level events
             for (const event of errorOnlyEvents) {
@@ -211,7 +211,7 @@ describe("Logging", function () {
     describe("visitor message format", function () {
         it("should format multiple extras as comma-separated key: value pairs in furtherInfo", async function () {
             rust.testsEmitLogWithMultipleExtras();
-            await drain();
+            await flushLogs();
 
             const event = allEvents.find(
                 (e) =>
@@ -237,7 +237,7 @@ describe("Logging", function () {
 
         it("should format string extras with debug quotes in furtherInfo", async function () {
             rust.testsEmitLogWithSingleStrExtra();
-            await drain();
+            await flushLogs();
 
             const event = allEvents.find(
                 (e) =>
@@ -254,7 +254,7 @@ describe("Logging", function () {
 
         it("should format non-string extras with debug representation in furtherInfo", async function () {
             rust.testsEmitLogWithMultipleExtras();
-            await drain();
+            await flushLogs();
 
             const event = allEvents.find(
                 (e) =>
@@ -272,7 +272,7 @@ describe("Logging", function () {
 
         it("should leave furtherInfo empty when there are no extra fields", async function () {
             rust.testsEmitLogMessageOnly();
-            await drain();
+            await flushLogs();
 
             const event = allEvents.find(
                 (e) => e.message === "message with no extras",
@@ -287,7 +287,7 @@ describe("Logging", function () {
 
         it("should map all five levels to correct JS strings", async function () {
             rust.testsEmitLogEvents();
-            await drain();
+            await flushLogs();
 
             const levelMap = {
                 "trace message from rust": "trace",
@@ -308,6 +308,190 @@ describe("Logging", function () {
                     expectedLevel,
                     `message "${msg}" should have level "${expectedLevel}"`,
                 );
+            }
+        });
+    });
+
+    describe("ordering with Promise settlement", function () {
+        it("should deliver a log event before the Promise of its future settles", async function () {
+            const results = await Promise.all(
+                Array.from({ length: 200 }, async (_, i) => {
+                    const message = `ordering test ${i}`;
+                    await rust.testsLogThenResolve(message);
+                    // No flush: the event must already be here.
+                    return allEvents.some((e) => e.message === message);
+                }),
+            );
+            assert.isTrue(
+                results.every((delivered) => delivered),
+                "every log event should arrive before its Promise settles",
+            );
+        });
+
+        it("should drop queued events of a callback removed before the drain", async function () {
+            const removedEvents = [];
+            const removedId = rust.setupLogging((level, target, message) => {
+                removedEvents.push(message);
+            }, logLevels.trace);
+
+            // The event is queued, but not delivered yet.
+            rust.testsEmitLogInfo("queued before remove");
+            rust.removeLogging(removedId);
+            await flushLogs();
+
+            assert.deepEqual(removedEvents, []);
+            assert.isDefined(
+                allEvents.find((e) => e.message === "queued before remove"),
+                "other callbacks should still receive the event",
+            );
+        });
+
+        // A log callback can throw while a drain runs. Then the rest of
+        // the drain must still work, and Node must get the original value
+        // that was thrown.
+        //
+        // Each test puts these entries into one drain, in this order:
+        // 1. A log event. Its callback throws.
+        // 2. Two Promise completions.
+        //
+        // The test checks that:
+        // - Both Promises resolve. So the exception did not stay pending
+        //   and did not block the N-API calls that come after it.
+        // - The `uncaughtException` listener gets the thrown value once.
+        // - The listener gets the original value, not a converted copy.
+        //
+        // The thrown values are the ones that failed before the fix:
+        // - An Error with a cyclic cause. Its conversion overflowed the
+        //   stack and crashed the process.
+        // - A Symbol. Its conversion to a string threw a new exception.
+        //   That exception stayed pending, so the Promises did not settle.
+        // A plain Error is the base case.
+        describe("when a log callback throws", function () {
+            let mochaListeners;
+            let throwingId;
+
+            function restoreMochaListeners() {
+                if (mochaListeners !== undefined) {
+                    process.removeAllListeners("uncaughtException");
+                    for (const listener of mochaListeners) {
+                        process.on("uncaughtException", listener);
+                    }
+                    mochaListeners = undefined;
+                }
+            }
+
+            // Mocha does not stop an `await` after a timeout. So a Promise
+            // that never settles would skip the cleanup in the test.
+            // `afterEach` runs after a timeout too.
+            afterEach(function () {
+                restoreMochaListeners();
+                if (throwingId !== undefined) {
+                    rust.removeLogging(throwingId);
+                    throwingId = undefined;
+                }
+            });
+
+            const throwCases = [
+                {
+                    name: "an Error",
+                    makeThrown: () => new Error("log callback error"),
+                },
+                {
+                    name: "an Error with a cyclic cause",
+                    makeThrown: () => {
+                        const err = new Error("cyclic cause");
+                        err.cause = err;
+                        return err;
+                    },
+                },
+                {
+                    name: "a Symbol",
+                    makeThrown: () => Symbol("log callback symbol"),
+                },
+            ];
+
+            for (const { name, makeThrown } of throwCases) {
+                it(`should settle the other Promises of a drain when the callback throws ${name}`, async function () {
+                    const thrown = makeThrown();
+                    throwingId = rust.setupLogging((level, target, message) => {
+                        if (message === "throw in callback") {
+                            throw thrown;
+                        }
+                    }, logLevels.trace);
+
+                    // Mocha reports uncaught exceptions as failures.
+                    // Catch the expected one here.
+                    mochaListeners = process.listeners("uncaughtException");
+                    process.removeAllListeners("uncaughtException");
+                    const uncaught = [];
+                    process.on("uncaughtException", (err) =>
+                        uncaught.push(err),
+                    );
+
+                    // The log event and the completions go to one drain.
+                    // The log event comes first.
+                    const values = await Promise.all(
+                        rust.testsLogThenResolveInOneDrain(
+                            "throw in callback",
+                            2,
+                        ),
+                    );
+                    // Restore Mocha's listeners before the asserts. Else the
+                    // listener above catches errors of Mocha itself.
+                    restoreMochaListeners();
+
+                    assert.deepEqual(values, [42, 42]);
+                    assert.strictEqual(uncaught.length, 1);
+                    // Mocha cannot print a value with a cyclic cause.
+                    // So compare the identity without the values in the
+                    // failure message.
+                    assert.isTrue(
+                        uncaught[0] === thrown,
+                        "the listener should get the original thrown value",
+                    );
+                });
+            }
+        });
+
+        it("should not deliver log events of another environment", async function () {
+            const worker = new Worker(
+                `
+                const { parentPort } = require("worker_threads");
+                const rust = require(${JSON.stringify(require.resolve("../../index"))});
+                require(${JSON.stringify(require.resolve("../../lib/client"))});
+                const events = [];
+                const id = rust.setupLogging((level, target, message) => {
+                    events.push(message);
+                }, "trace");
+                parentPort.on("message", async () => {
+                    rust.testsEmitLogInfo("from worker");
+                    await rust.testsCasyncResolveImmediate();
+                    rust.removeLogging(id);
+                    parentPort.postMessage(events);
+                });
+                parentPort.postMessage("ready");
+                `,
+                { eval: true },
+            );
+            try {
+                await new Promise((resolve) => worker.once("message", resolve));
+                rust.testsEmitLogInfo("from main");
+                await flushLogs();
+                worker.postMessage("check");
+                const workerEvents = await new Promise((resolve) =>
+                    worker.once("message", resolve),
+                );
+
+                assert.include(workerEvents, "from worker");
+                assert.notInclude(workerEvents, "from main");
+                assert.isDefined(
+                    allEvents.find((e) => e.message === "from main"),
+                );
+                assert.isUndefined(
+                    allEvents.find((e) => e.message === "from worker"),
+                );
+            } finally {
+                await worker.terminate();
             }
         });
     });
@@ -334,7 +518,6 @@ describe("Logging", function () {
                 // connect will fail without a real cluster — that's expected
             }
 
-            await drain();
             return { client, events };
         }
 

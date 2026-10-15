@@ -104,10 +104,18 @@ clients can coexist, each with its own `logLevel`.
 
 :::{note}
 All clients share the same underlying Rust tracing subscriber.
-This means every client receives log events from the entire process —
-including events triggered by other `Client` instances. Keep this in mind
+This means every client receives the log events of its own Node.js
+environment (the main thread or one worker thread), including events
+triggered by other `Client` instances in that environment. Keep this in mind
 when filtering or routing events.
 :::
+
+## Delivery order
+
+Rust log events reach the listener asynchronously, on a later tick of the
+event loop. A log event that the driver emits before an operation completes
+reaches the listener before the Promise of that operation settles.
+After `client.shutdown()`, the client receives no more log events.
 
 ## Example
 
