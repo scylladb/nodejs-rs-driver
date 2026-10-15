@@ -937,7 +937,7 @@ dependencies = [
 
 [[package]]
 name = "scylladb-javascript-driver"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "bytes",
  "futures",
