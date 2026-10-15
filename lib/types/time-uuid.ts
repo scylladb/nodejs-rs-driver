@@ -317,13 +317,19 @@ function fromDateInternal(
     try {
         // The callback API has historically treated empty-string IDs as missing.
         // A Buffer date already holds the full UUID, so its IDs are ignored.
+        // Keep supplied Buffers for completion-time validation: their lengths
+        // can change while asynchronous randomness is pending.
         nodeIdBuffer =
             nodeIdProvided && !bufferDate
-                ? getProvidedNodeId(resolvedNodeId)
+                ? resolvedNodeId instanceof Buffer
+                    ? resolvedNodeId
+                    : getProvidedNodeId(resolvedNodeId)
                 : null;
         clockIdBuffer =
             clockIdProvided && !bufferDate
-                ? getProvidedClockId(resolvedClockId)
+                ? resolvedClockId instanceof Buffer
+                    ? resolvedClockId
+                    : getProvidedClockId(resolvedClockId)
                 : null;
     } catch (e) {
         return process.nextTick(done, e as Error);
@@ -342,12 +348,10 @@ function fromDateInternal(
         if (err) return complete(err);
         let timeUuid: TimeUuid;
         try {
-            if (!hasNodeId || !hasClockId) {
-                // Supplied buffers can be detached while randomness is pending.
-                // Revalidate before copying so no identifier bytes stay unwritten.
-                getProvidedNodeId(nodeIdBuffer);
-                getProvidedClockId(clockIdBuffer);
-            }
+            // Validate the current lengths before copying; a supplied Buffer
+            // may have grown, shrunk, or been detached during asynchronous filling.
+            getProvidedNodeId(nodeIdBuffer);
+            getProvidedClockId(clockIdBuffer);
             // Preserve the callback API's handling of mutable supplied IDs:
             // copy them after asynchronous randomness is ready.
             if (clockIdBuffer) clockIdBuffer.copy(buffer, 8);

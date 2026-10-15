@@ -1065,44 +1065,72 @@ describe("TimeUuid", function () {
                 );
             });
 
-            it("should reject supplied ID buffers detached before asynchronous completion", async () => {
+            it("should validate supplied ID buffers at asynchronous completion", async () => {
                 for (const factory of ["now", "fromDate"]) {
                     for (const [kind, length] of [
                         ["Node", 6],
                         ["Clock", 2],
                     ]) {
-                        const id = Buffer.allocUnsafeSlow(length).fill(1);
-                        let returned = false;
-                        let calls = 0;
-                        const completed = new Promise((resolve) => {
-                            const callback = (err, value) => {
-                                calls++;
-                                resolve({ err, value, returned });
-                            };
-                            const ids =
-                                kind === "Node" ? [id, null] : [null, id];
-                            if (factory === "now") {
-                                TimeUuid.now(...ids, callback);
+                        for (const change of ["detach", "grow", "shrink"]) {
+                            const storage = new ArrayBuffer(
+                                change === "grow" ? length - 1 : length,
+                                { maxByteLength: length },
+                            );
+                            const id = Buffer.from(storage).fill(1);
+                            let returned = false;
+                            let calls = 0;
+                            const completed = new Promise((resolve) => {
+                                const callback = (err, value) => {
+                                    calls++;
+                                    resolve({ err, value, returned });
+                                };
+                                const ids =
+                                    kind === "Node" ? [id, null] : [null, id];
+                                if (factory === "now") {
+                                    TimeUuid.now(...ids, callback);
+                                } else {
+                                    TimeUuid.fromDate(
+                                        new Date(),
+                                        0,
+                                        ...ids,
+                                        callback,
+                                    );
+                                }
+                            });
+                            if (change === "detach") {
+                                structuredClone(storage, {
+                                    transfer: [storage],
+                                });
                             } else {
-                                TimeUuid.fromDate(
-                                    new Date(),
-                                    0,
-                                    ...ids,
-                                    callback,
+                                storage.resize(
+                                    change === "grow" ? length : length - 1,
                                 );
                             }
-                        });
-                        structuredClone(id.buffer, { transfer: [id.buffer] });
-                        returned = true;
-                        const result = await completed;
-                        assert.strictEqual(result.returned, true);
-                        assert.ok(result.err instanceof Error);
-                        assert.strictEqual(
-                            result.err.message,
-                            `${kind} identifier must have ${length} bytes`,
-                        );
-                        assert.strictEqual(result.value, undefined);
-                        assert.strictEqual(calls, 1);
+                            returned = true;
+                            const result = await completed;
+                            assert.strictEqual(result.returned, true);
+                            if (change === "grow") {
+                                assert.ifError(result.err);
+                                assert.ok(result.value instanceof TimeUuid);
+                                const expected = Buffer.from(id);
+                                if (kind === "Clock")
+                                    expected[0] = (expected[0] & 0x3f) | 0x80;
+                                assert.deepStrictEqual(
+                                    kind === "Node"
+                                        ? result.value.getNodeId()
+                                        : result.value.getClockId(),
+                                    expected,
+                                );
+                            } else {
+                                assert.ok(result.err instanceof Error);
+                                assert.strictEqual(
+                                    result.err.message,
+                                    `${kind} identifier must have ${length} bytes`,
+                                );
+                                assert.strictEqual(result.value, undefined);
+                            }
+                            assert.strictEqual(calls, 1);
+                        }
                     }
                 }
             });
