@@ -342,6 +342,12 @@ function fromDateInternal(
         if (err) return complete(err);
         let timeUuid: TimeUuid;
         try {
+            if (!hasNodeId || !hasClockId) {
+                // Supplied buffers can be detached while randomness is pending.
+                // Revalidate before copying so no identifier bytes stay unwritten.
+                getProvidedNodeId(nodeIdBuffer);
+                getProvidedClockId(clockIdBuffer);
+            }
             // Preserve the callback API's handling of mutable supplied IDs:
             // copy them after asynchronous randomness is ready.
             if (clockIdBuffer) clockIdBuffer.copy(buffer, 8);

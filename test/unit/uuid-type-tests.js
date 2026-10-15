@@ -1065,6 +1065,48 @@ describe("TimeUuid", function () {
                 );
             });
 
+            it("should reject supplied ID buffers detached before asynchronous completion", async () => {
+                for (const factory of ["now", "fromDate"]) {
+                    for (const [kind, length] of [
+                        ["Node", 6],
+                        ["Clock", 2],
+                    ]) {
+                        const id = Buffer.allocUnsafeSlow(length).fill(1);
+                        let returned = false;
+                        let calls = 0;
+                        const completed = new Promise((resolve) => {
+                            const callback = (err, value) => {
+                                calls++;
+                                resolve({ err, value, returned });
+                            };
+                            const ids =
+                                kind === "Node" ? [id, null] : [null, id];
+                            if (factory === "now") {
+                                TimeUuid.now(...ids, callback);
+                            } else {
+                                TimeUuid.fromDate(
+                                    new Date(),
+                                    0,
+                                    ...ids,
+                                    callback,
+                                );
+                            }
+                        });
+                        structuredClone(id.buffer, { transfer: [id.buffer] });
+                        returned = true;
+                        const result = await completed;
+                        assert.strictEqual(result.returned, true);
+                        assert.ok(result.err instanceof Error);
+                        assert.strictEqual(
+                            result.err.message,
+                            `${kind} identifier must have ${length} bytes`,
+                        );
+                        assert.strictEqual(result.value, undefined);
+                        assert.strictEqual(calls, 1);
+                    }
+                }
+            });
+
             it("should read the current time after asynchronous randomness completes", async () => {
                 const clock = sandbox.useFakeTimers({
                     now: 1000,
