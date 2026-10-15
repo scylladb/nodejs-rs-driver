@@ -1,6 +1,7 @@
 "use strict";
 
 const { assert } = require("chai");
+const { runInNewContext } = require("node:vm");
 const Encoder = require("../../lib/encoder");
 const types = require("../../lib/types");
 const { FrameWriter } = require("../../lib/frame-writer");
@@ -109,8 +110,25 @@ describe("FrameWriter.buffers", function () {
         ]);
     });
 
+    it("writes a Uint8Array view from another realm", function () {
+        const value = runInNewContext(
+            "new Uint8Array([9, 1, 2, 9]).subarray(1, 3)",
+        );
+        assert.deepEqual(decodeFrame(writer.buffers([value])), ["0102"]);
+    });
+
     it("rejects values that are not encoded", function () {
-        for (const bad of [42, "x", {}, [1]]) {
+        for (const bad of [
+            42,
+            "x",
+            {},
+            [1],
+            new Int8Array(2),
+            new Uint8ClampedArray(2),
+            new Uint16Array(2),
+            new DataView(new ArrayBuffer(2)),
+            runInNewContext("new Uint16Array(2)"),
+        ]) {
             assert.throws(
                 () => writer.buffers([bad]),
                 TypeError,

@@ -1,3 +1,4 @@
+import { isUint8Array } from "node:util/types";
 import type { CqlValue } from "../main";
 import Encoder = require("./encoder");
 import errors = require("./errors");
@@ -111,7 +112,7 @@ export class FrameWriter {
                 if (
                     value !== null &&
                     value !== undefined &&
-                    !(value instanceof Uint8Array)
+                    !isUint8Array(value)
                 ) {
                     throw new TypeError(
                         "Expected a Buffer, null or undefined, obtained " +
