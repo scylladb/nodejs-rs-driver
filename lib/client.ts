@@ -993,14 +993,18 @@ class Client extends events.EventEmitter {
         }
 
         let rustOptions = execOptions.getRustOptions();
-        let batch = shouldBePrepared
-            ? this.rustClient!.createPreparedBatch(
-                  allPrepared.map((prepared) => prepared.handle),
-                  rustOptions,
-              )
-            : this.rustClient!.createBatch(allQueries, rustOptions);
         let wrappedResult = new RustResult(
-            await this.rustClient!.batch(batch, parametersRows),
+            shouldBePrepared
+                ? await this.rustClient!.batchPrepared(
+                      allPrepared.map((prepared) => prepared.handle),
+                      parametersRows,
+                      rustOptions,
+                  )
+                : await this.rustClient!.batch(
+                      allQueries,
+                      parametersRows,
+                      rustOptions,
+                  ),
         );
         return new ResultSet(wrappedResult, this.#encoder);
     }

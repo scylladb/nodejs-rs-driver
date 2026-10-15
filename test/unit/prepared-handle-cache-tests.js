@@ -32,9 +32,8 @@ function makeClient(maxPrepared = 512) {
             const types = query.includes("?") ? [[{ baseType: 9 }, "v"]] : [];
             return [handle, types];
         },
-        createPreparedBatch: (handles) => ({ handles }),
-        batch: async (batch, rows) => {
-            batches.push({ handles: batch.handles, rows });
+        batchPrepared: async (handles, rows) => {
+            batches.push({ handles, rows });
             return { rows: [] };
         },
         executePreparedUnpaged: async (handle) => {

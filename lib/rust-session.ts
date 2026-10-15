@@ -99,29 +99,25 @@ export class RustSession {
         return rust.sessionQueryUnpaged(this.#inner, query, params, ...options);
     }
 
-    createBatch(
+    batch(
         statements: Array<string>,
+        params: Array<Array<rust.EncodedValuesWrapper>>,
         options: RustQueryOptions,
-    ): rust.BatchWrapper {
-        return rust.sessionCreateBatch(this.#inner, statements, ...options);
+    ): Promise<rust.ExternalObject<rust.QueryResultWrapper>> {
+        return rust.sessionBatch(this.#inner, statements, params, ...options);
     }
 
-    createPreparedBatch(
+    batchPrepared(
         statements: Array<rust.ExternalObject<rust.PreparedStatementWrapper>>,
+        params: Array<Array<rust.EncodedValuesWrapper>>,
         options: RustQueryOptions,
-    ): rust.BatchWrapper {
-        return rust.sessionCreatePreparedBatch(
+    ): Promise<rust.ExternalObject<rust.QueryResultWrapper>> {
+        return rust.sessionBatchPrepared(
             this.#inner,
             statements,
+            params,
             ...options,
         );
-    }
-
-    batch(
-        batch: rust.BatchWrapper,
-        params: Array<Array<rust.EncodedValuesWrapper>>,
-    ): Promise<rust.ExternalObject<rust.QueryResultWrapper>> {
-        return rust.sessionBatch(this.#inner, batch, params);
     }
 
     getKeyspace(): string | null {
