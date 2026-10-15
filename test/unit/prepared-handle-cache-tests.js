@@ -32,8 +32,8 @@ function makeClient(maxPrepared = 512) {
             const types = query.includes("?") ? [[{ baseType: 9 }, "v"]] : [];
             return [handle, types];
         },
-        batchPrepared: async (handles, rows) => {
-            batches.push({ handles, rows });
+        batchPrepared: async (handles, types, params) => {
+            batches.push({ handles, params });
             return { rows: [] };
         },
         executePreparedUnpaged: async (handle) => {
@@ -144,7 +144,7 @@ describe("prepared statement handle cache", function () {
             assert.strictEqual(batches.length, 1);
             assert.deepStrictEqual(batches[0].handles, [a, b, a]);
             assert.deepStrictEqual(
-                batches[0].rows.map((row) => row.length),
+                batches[0].params.map((row) => row.length),
                 [1, 0, 1],
             );
         });

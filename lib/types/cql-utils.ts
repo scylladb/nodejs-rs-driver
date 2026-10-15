@@ -1,6 +1,4 @@
 import { ComplexType, CqlType } from "../../index";
-import type { CqlValue } from "../../main";
-import Encoder = require("../encoder");
 import { UdtField } from "../metadata/user-defined-type";
 
 /** Options grouping for column information.
@@ -81,29 +79,6 @@ export class ColumnInfo {
         this.customTypeName = customTypeName;
         this.options = options;
     }
-}
-
-/**
- * Encode whole array of params according to provided type information.
- * @param expectedTypes List of expected types.
- * @param params
- * @param encoder
- * @returns Returns: null for null values, undefined for unset values
- * and encoded buffers for all other values.
- * @throws ResponseError when received different amount of parameters than expected
- */
-export function encodeParams(
-    expectedTypes: Array<ColumnInfo | null>,
-    params: Array<CqlValue>,
-    encoder: Encoder,
-): Array<Buffer | null | undefined> {
-    if (expectedTypes.length == 0 && !params) return [];
-    const res: Array<Buffer | null | undefined> = [];
-    for (let i = 0; i < params.length; i++) {
-        const tmp = encoder.encode(params[i], expectedTypes[i]);
-        res.push(tmp);
-    }
-    return res;
 }
 
 /**

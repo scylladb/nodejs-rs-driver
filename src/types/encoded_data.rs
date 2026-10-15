@@ -1,29 +1,29 @@
-use napi::{
-    bindgen_prelude::{FromNapiValue, Uint8Array, check_status},
-    sys,
+use napi::{bindgen_prelude::FromNapiValue, sys};
+use scylla::serialize::row::{
+    BuiltinTypeCheckError, BuiltinTypeCheckErrorKind, RowSerializationContext, SerializeRow,
 };
+use scylla::serialize::writers::RowWriter;
 use scylla::{
-    cluster::metadata::{ColumnType, NativeType},
+    cluster::metadata::ColumnType,
     errors::SerializationError,
-    serialize::value::{BuiltinSerializationError, BuiltinSerializationErrorKind, SerializeValue},
+    serialize::value::{BuiltinSerializationError, BuiltinSerializationErrorKind},
 };
+use scylla_cql_core::frame::types::{RawValue, read_short};
 use scylla_cql_core::serialize::row::SerializedValues;
 
 use crate::errors::make_js_error;
 
-enum MaybeUnsetNullableValue<T> {
-    Value(T),
-    Null,
-    Unset,
-}
-
-pub struct EncodedValuesWrapper {
-    inner: MaybeUnsetNullableValue<Vec<u8>>,
-}
-
 /// Owns the complete CQL value list before execution leaves the JS thread.
-/// Buffer contents are read only while converting the N-API argument, so JS
-/// can safely reuse or mutate the source buffers after the call returns.
+///
+/// JS passes one buffer in the request frame layout:
+/// `[u16 count]` followed by `count` values, each `[i32 length][bytes]`.
+/// A length of -1 is null, and -2 is unset.
+/// The bytes are copied while converting the N-API argument, so JS
+/// can safely reuse or mutate the source buffer after the call returns.
+///
+/// This copy is required. The buffer is a view of the client's `FrameWriter` buffer,
+/// and the next request overwrites it.
+/// Thus, do not keep a reference to the JS buffer here, for example to avoid the copy.
 pub struct SerializedValuesWrapper {
     pub(crate) inner: SerializedValues,
 }
@@ -33,87 +33,106 @@ impl FromNapiValue for SerializedValuesWrapper {
     ///
     /// `env` and `napi_val` must be valid for this synchronous N-API call.
     unsafe fn from_napi_value(env: sys::napi_env, napi_val: sys::napi_value) -> napi::Result<Self> {
-        let mut is_array = false;
-        check_status!(
-            unsafe { sys::napi_is_array(env, napi_val, &mut is_array) },
-            "Failed to inspect encoded values",
-        )?;
-        if !is_array {
-            return Err(make_js_error(
-                "Expected an array of encoded values".to_owned(),
-            ));
+        let frame: &[u8] = unsafe { <&[u8]>::from_napi_value(env, napi_val) }
+            .map_err(|_| make_js_error("Expected encoded values in a Buffer".to_owned()))?;
+        let mut rest = frame;
+        let inner = SerializedValues::new_from_frame(&mut rest)
+            .map_err(|err| make_js_error(format!("Malformed encoded values: {err}")))?;
+        if !rest.is_empty() {
+            return Err(make_js_error(format!(
+                "Malformed encoded values: {} unexpected trailing bytes",
+                rest.len()
+            )));
         }
-        let mut count = 0;
-        check_status!(
-            unsafe { sys::napi_get_array_length(env, napi_val, &mut count) },
-            "Expected an array of encoded values",
-        )?;
-
-        let mut inner = SerializedValues::new();
-        for index in 0..count {
-            let mut element = std::ptr::null_mut();
-            check_status!(
-                unsafe { sys::napi_get_element(env, napi_val, index, &mut element) },
-                "Failed to read encoded value",
-            )?;
-
-            let mut value_type = 0;
-            check_status!(
-                unsafe { sys::napi_typeof(env, element, &mut value_type) },
-                "Failed to inspect encoded value",
-            )?;
-
-            let value = match value_type {
-                sys::ValueType::napi_undefined => MaybeUnsetNullableValue::Unset,
-                sys::ValueType::napi_null => MaybeUnsetNullableValue::Null,
-                sys::ValueType::napi_object => {
-                    let bytes: &[u8] = unsafe { <&[u8]>::from_napi_value(env, element) }
-                        .map_err(|_| make_js_error("Expected a Buffer or Uint8Array".to_owned()))?;
-                    MaybeUnsetNullableValue::Value(bytes)
-                }
-                _ => {
-                    return Err(make_js_error(
-                        "Expected a Buffer, null or undefined".to_owned(),
-                    ));
-                }
-            };
-            inner
-                .add_value(
-                    &EncodedValueRef(value),
-                    &ColumnType::Native(NativeType::Blob),
-                )
-                .map_err(|err| make_js_error(err.to_string()))?;
-        }
-
         Ok(Self { inner })
     }
 }
 
-struct EncodedValueRef<'a>(MaybeUnsetNullableValue<&'a [u8]>);
+/// The values of all statements of a batch, from one JS buffer:
+/// `[u16 statement count]`, then one [`SerializedValuesWrapper`] frame per statement.
+/// The bytes are copied while converting the N-API argument.
+/// This copy is required for the same reason as in [`SerializedValuesWrapper`].
+pub struct BatchValuesWrapper {
+    pub(crate) rows: Vec<SerializedValuesWrapper>,
+}
 
-impl SerializeValue for EncodedValueRef<'_> {
-    fn serialize<'b>(
+impl FromNapiValue for BatchValuesWrapper {
+    /// # Safety
+    ///
+    /// `env` and `napi_val` must be valid for this synchronous N-API call.
+    unsafe fn from_napi_value(env: sys::napi_env, napi_val: sys::napi_value) -> napi::Result<Self> {
+        let frame: &[u8] = unsafe { <&[u8]>::from_napi_value(env, napi_val) }
+            .map_err(|_| make_js_error("Expected encoded batch values in a Buffer".to_owned()))?;
+        let mut rest = frame;
+        let malformed = |err: &dyn std::fmt::Display| {
+            make_js_error(format!("Malformed encoded batch values: {err}"))
+        };
+        let count = read_short(&mut rest).map_err(|err| malformed(&err))?;
+        let rows = (0..count)
+            .map(|_| {
+                SerializedValues::new_from_frame(&mut rest)
+                    .map(|inner| SerializedValuesWrapper { inner })
+                    .map_err(|err| malformed(&err))
+            })
+            .collect::<napi::Result<Vec<_>>>()?;
+        if !rest.is_empty() {
+            return Err(malformed(&format_args!(
+                "{} unexpected trailing bytes",
+                rest.len()
+            )));
+        }
+        Ok(Self { rows })
+    }
+}
+
+/// Writes the pre-encoded values as they are.
+/// Unprepared statements need this: the driver prepares them internally,
+/// and then serializes the values against the column specs it received.
+/// The values are not type checked here. The JS encoder already did that.
+impl SerializeRow for SerializedValuesWrapper {
+    fn serialize(
         &self,
-        typ: &ColumnType,
-        writer: scylla::serialize::writers::CellWriter<'b>,
-    ) -> Result<scylla::serialize::writers::WrittenCellProof<'b>, SerializationError> {
-        serialize_preencoded::<Self>(&self.0, typ, writer)
+        ctx: &RowSerializationContext<'_>,
+        writer: &mut RowWriter,
+    ) -> Result<(), SerializationError> {
+        let actual = usize::from(self.inner.element_count());
+        let expected = ctx.columns().len();
+        if actual != expected {
+            return Err(SerializationError::new(BuiltinTypeCheckError {
+                rust_name: std::any::type_name::<Self>(),
+                kind: BuiltinTypeCheckErrorKind::WrongColumnCount {
+                    rust_cols: actual,
+                    cql_cols: expected,
+                },
+            }));
+        }
+        for (value, column) in self.inner.iter().zip(ctx.columns()) {
+            let cell = writer.make_cell_writer();
+            match value {
+                RawValue::Value(bytes) => {
+                    cell.set_value(bytes).map_err(|_| {
+                        mk_ser_err::<Self>(
+                            column.typ(),
+                            BuiltinSerializationErrorKind::SizeOverflow,
+                        )
+                    })?;
+                }
+                RawValue::Null => {
+                    cell.set_null();
+                }
+                RawValue::Unset => {
+                    cell.set_unset();
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn is_empty(&self) -> bool {
+        self.inner.element_count() == 0
     }
 }
 
-fn serialize_preencoded<'b, T>(
-    value: &MaybeUnsetNullableValue<&[u8]>,
-    typ: &ColumnType,
-    writer: scylla::serialize::writers::CellWriter<'b>,
-) -> Result<scylla::serialize::writers::WrittenCellProof<'b>, SerializationError> {
-    match value {
-        MaybeUnsetNullableValue::Value(bytes) => writer
-            .set_value(bytes)
-            .map_err(|_| mk_ser_err::<T>(typ, BuiltinSerializationErrorKind::SizeOverflow)),
-        MaybeUnsetNullableValue::Null => Ok(writer.set_null()),
-        MaybeUnsetNullableValue::Unset => Ok(writer.set_unset()),
-    }
-}
 fn mk_ser_err<T: ?Sized>(
     got: &ColumnType,
     kind: impl Into<BuiltinSerializationErrorKind>,
@@ -131,64 +150,4 @@ fn mk_ser_err_named(
         got: got.clone().into_owned(),
         kind: kind.into(),
     })
-}
-
-impl SerializeValue for EncodedValuesWrapper {
-    fn serialize<'b>(
-        &self,
-        typ: &scylla::cluster::metadata::ColumnType,
-        writer: scylla::serialize::writers::CellWriter<'b>,
-    ) -> Result<scylla::serialize::writers::WrittenCellProof<'b>, scylla::errors::SerializationError>
-    {
-        let value = match &self.inner {
-            MaybeUnsetNullableValue::Value(inner) => {
-                MaybeUnsetNullableValue::Value(inner.as_slice())
-            }
-            MaybeUnsetNullableValue::Null => MaybeUnsetNullableValue::Null,
-            MaybeUnsetNullableValue::Unset => MaybeUnsetNullableValue::Unset,
-        };
-        serialize_preencoded::<Self>(&value, typ, writer)
-    }
-}
-
-impl FromNapiValue for EncodedValuesWrapper {
-    /// # Safety
-    ///
-    /// Valid pointer to napi env must be provided
-    unsafe fn from_napi_value(
-        env: napi::sys::napi_env,
-        napi_val: napi::sys::napi_value,
-    ) -> napi::Result<Self> {
-        let mut val_type: i32 = 0;
-        // While this macro is doc(hidden), it implements a simple checks that convert c errors into Rust Results
-        // Implementation: https://github.com/napi-rs/napi-rs/blob/f2178312d0e3e07beecc19836b91716a229107d3/crates/napi/src/error.rs#L357
-        check_status!(
-            // Caller of this function ensures a valid pointer to napi env is provided
-            unsafe { sys::napi_typeof(env, napi_val, &mut val_type) },
-            "Failed to convert napi value into rust type `EncodedValuesWrapper`",
-        )?;
-
-        // JS `undefined` is mapped to Unset
-        // JS `null` is mapped to Null
-        // Any other value will be encoded by the JS encoder
-        match val_type {
-            sys::ValueType::napi_undefined => Ok(EncodedValuesWrapper {
-                inner: MaybeUnsetNullableValue::Unset,
-            }),
-            sys::ValueType::napi_null => Ok(EncodedValuesWrapper {
-                inner: MaybeUnsetNullableValue::Null,
-            }),
-            sys::ValueType::napi_object => {
-                // Caller of this function ensures a valid pointer to napi env is provided
-                let v = unsafe { Uint8Array::from_napi_value(env, napi_val)? };
-                let z: &[u8] = &v;
-                Ok(EncodedValuesWrapper {
-                    inner: MaybeUnsetNullableValue::Value(z.to_vec()),
-                })
-            },
-            _ => Err(make_js_error(
-                "Expected value to be either `Buffer`, `null` or `undefined` when converting to `EncodedValuesWrapper`".to_owned(),
-            )),
-        }
-    }
 }

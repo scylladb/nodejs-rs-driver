@@ -22,7 +22,7 @@ use crate::requests::request::PreparedStatementWrapper;
 use crate::requests::request::QueryOptionsObj;
 use crate::result::{NextPage, QueryResultWrapper, ResultMetadataTracker};
 use crate::session::config::configure_session_builder;
-use crate::types::encoded_data::{EncodedValuesWrapper, SerializedValuesWrapper};
+use crate::types::encoded_data::{BatchValuesWrapper, SerializedValuesWrapper};
 use crate::types::type_wrappers::ComplexType;
 use crate::utils::bigint_to_i64;
 use crate::utils::js_thread_only::JsThreadOnly;
@@ -56,7 +56,7 @@ pub struct QueryExecutor {
 
 enum QueryValues {
     Unprepared {
-        params: Vec<EncodedValuesWrapper>,
+        params: SerializedValuesWrapper,
         statement: Statement,
     },
     Prepared {
@@ -84,7 +84,7 @@ fn validate_value_count(
     let actual = usize::from(params.inner.element_count());
     if actual != expected {
         let error = scylla::errors::SerializationError::new(BuiltinTypeCheckError {
-            rust_name: std::any::type_name::<Vec<EncodedValuesWrapper>>(),
+            rust_name: std::any::type_name::<SerializedValuesWrapper>(),
             kind: BuiltinTypeCheckErrorKind::WrongColumnCount {
                 rust_cols: actual,
                 cql_cols: expected,
@@ -263,15 +263,14 @@ impl SessionWrapper {
     ///
     /// Returns a wrapper of the result provided by the rust driver
     ///
-    /// All parameters must be in a type recognizable by ParameterWrapper
-    /// -- each value must be tuple of its ComplexType and the value itself.
-    /// If the provided types will not be correct, this query will fail.
+    /// The values must be encoded by JS into one buffer (see [`SerializedValuesWrapper`]).
+    /// If the values do not match the column types, this query will fail.
     #[allow(clippy::too_many_arguments)]
     pub fn query_unpaged(
         &self,
         env: Env,
         query: String,
-        params: Vec<EncodedValuesWrapper>,
+        params: SerializedValuesWrapper,
         consistency: Option<u16>,
         fetch_size: Option<i32>,
         is_idempotent: Option<bool>,
@@ -371,7 +370,7 @@ impl SessionWrapper {
         &self,
         env: Env,
         statements: Vec<String>,
-        params: Vec<Vec<EncodedValuesWrapper>>,
+        params: BatchValuesWrapper,
         consistency: Option<u16>,
         fetch_size: Option<i32>,
         is_idempotent: Option<bool>,
@@ -408,7 +407,7 @@ impl SessionWrapper {
         &self,
         env: Env,
         statements: Vec<ExternalRef<PreparedStatementWrapper>>,
-        params: Vec<Vec<EncodedValuesWrapper>>,
+        params: BatchValuesWrapper,
         consistency: Option<u16>,
         fetch_size: Option<i32>,
         is_idempotent: Option<bool>,
@@ -440,7 +439,7 @@ impl SessionWrapper {
     fn execute_batch(
         &self,
         env: Env,
-        params: Vec<Vec<EncodedValuesWrapper>>,
+        params: BatchValuesWrapper,
         options: &QueryOptionsObj,
         statements: impl Iterator<Item = BatchStatement>,
     ) -> JsAsyncResult<QueryResultWrapper> {
@@ -450,7 +449,7 @@ impl SessionWrapper {
             let batch = self.apply_batch_options(batch, options)?;
             let inner = Arc::clone(&self.inner);
             Ok(async move {
-                let res = inner.batch(&batch, params).await?;
+                let res = inner.batch(&batch, params.rows).await?;
                 QueryResultWrapper::from_unprepared_or_batch(res, None)
             })
         })
@@ -466,7 +465,7 @@ impl SessionWrapper {
         &self,
         env: Env,
         query: String,
-        params: Vec<EncodedValuesWrapper>,
+        params: SerializedValuesWrapper,
         consistency: Option<u16>,
         fetch_size: Option<i32>,
         is_idempotent: Option<bool>,
@@ -584,7 +583,7 @@ pub fn session_query_unpaged(
     session: &External<SessionWrapper>,
     env: Env,
     query: String,
-    params: Vec<EncodedValuesWrapper>,
+    params: SerializedValuesWrapper,
     consistency: Option<u16>,
     fetch_size: Option<i32>,
     is_idempotent: Option<bool>,
@@ -656,7 +655,7 @@ pub fn session_batch(
     session: &External<SessionWrapper>,
     env: Env,
     statements: Vec<String>,
-    params: Vec<Vec<EncodedValuesWrapper>>,
+    params: BatchValuesWrapper,
     consistency: Option<u16>,
     fetch_size: Option<i32>,
     is_idempotent: Option<bool>,
@@ -688,7 +687,7 @@ pub fn session_batch_prepared(
     #[napi(ts_arg_type = "Array<ExternalObject<PreparedStatementWrapper>>")] statements: Vec<
         ExternalRef<PreparedStatementWrapper>,
     >,
-    params: Vec<Vec<EncodedValuesWrapper>>,
+    params: BatchValuesWrapper,
     consistency: Option<u16>,
     fetch_size: Option<i32>,
     is_idempotent: Option<bool>,
@@ -718,7 +717,7 @@ pub fn session_query_single_page(
     session: &External<SessionWrapper>,
     env: Env,
     query: String,
-    params: Vec<EncodedValuesWrapper>,
+    params: SerializedValuesWrapper,
     consistency: Option<u16>,
     fetch_size: Option<i32>,
     is_idempotent: Option<bool>,

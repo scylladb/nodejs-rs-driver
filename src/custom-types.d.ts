@@ -19,13 +19,16 @@ export type ComplexType =
   | { baseType: CqlType.Tuple; subtypes: ComplexType[] }
 
 /**
- * A pre-encoded CQL value passed to query parameters.
- * Null represents no value, and undefined represents unset value.
+ * Values encoded for one CQL statement, in the request frame layout:
+ * `[u16 count]`, then for each value `[i32 length][bytes]` (-1 null, -2 unset).
  */
-export type EncodedValuesWrapper = Uint8Array | null | undefined
+export type SerializedValuesWrapper = Uint8Array
 
-/** Values encoded for one CQL statement, including null and unset markers. */
-export type SerializedValuesWrapper = Array<EncodedValuesWrapper>
+/**
+ * Values of all statements of a batch:
+ * `[u16 statement count]`, then one `SerializedValuesWrapper` frame per statement.
+ */
+export type BatchValuesWrapper = Uint8Array
 
 /** Opaque native prepared statement stored by the client. */
 export interface PreparedStatementWrapper {}

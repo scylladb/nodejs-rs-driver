@@ -23,11 +23,7 @@ import { RustSession } from "./rust-session";
 import promiseUtils = require("./promise-utils");
 import rust = require("../index");
 import ResultSet = require("./types/result-set");
-import {
-    encodeParams,
-    convertComplexType,
-    ColumnInfo,
-} from "./types/cql-utils";
+import { convertComplexType, ColumnInfo } from "./types/cql-utils";
 import Encoder = require("./encoder");
 import { HostMap } from "./host";
 import type { Replica } from "./host";
@@ -391,7 +387,10 @@ class Client extends events.EventEmitter {
                 );
             }
 
-            this.rustClient = await RustSession.create(this.rustOptions);
+            this.rustClient = await RustSession.create(
+                this.rustOptions,
+                this.#encoder,
+            );
             this.metadata = new metadataModule.Metadata(this.rustClient);
         } catch (err) {
             if (err instanceof Error && err.name === "InvalidLocalDatacenter") {
@@ -615,17 +614,12 @@ class Client extends events.EventEmitter {
             unifiedParams = utils.adaptNamedParamsPrepared(params, prepared);
         }
 
-        const encoded = encodeParams(
-            prepared.types,
-            unifiedParams,
-            this.#encoder,
-        );
-
         if (paged) {
             return new RustResult(
                 await this.rustClient!.executePreparedSinglePage(
                     prepared.handle,
-                    encoded,
+                    prepared.types,
+                    unifiedParams,
                     rustOptions,
                     pageState,
                 ),
@@ -634,7 +628,8 @@ class Client extends events.EventEmitter {
         return new RustResult(
             await this.rustClient!.executePreparedUnpaged(
                 prepared.handle,
-                encoded,
+                prepared.types,
+                unifiedParams,
                 rustOptions,
             ),
         );
@@ -661,21 +656,25 @@ class Client extends events.EventEmitter {
             | ColumnInfo[]
             | undefined;
 
-        // Parse parameters according to provided hints, with type guessing
-        let encoded = encodeParams(hints2 || [], params, this.#encoder);
-
+        // Parameters are encoded according to provided hints, with type guessing.
         if (paged) {
             return new RustResult(
                 await this.rustClient!.querySinglePage(
                     query,
-                    encoded,
+                    hints2 || [],
+                    params,
                     rustOptions,
                     pageState,
                 ),
             );
         }
         return new RustResult(
-            await this.rustClient!.queryUnpaged(query, encoded, rustOptions),
+            await this.rustClient!.queryUnpaged(
+                query,
+                hints2 || [],
+                params,
+                rustOptions,
+            ),
         );
     }
 
@@ -942,7 +941,8 @@ class Client extends events.EventEmitter {
         let shouldBePrepared = execOptions.isPrepared();
         let allQueries: string[] = [];
         let allPrepared: PreparedInfo[] = [];
-        let parametersRows: Array<any> = [];
+        let allTypes: Array<Array<ColumnInfo | null>> = [];
+        let allParams: Array<Array<any>> = [];
         let hints = execOptions.getHints() || [];
 
         for (let i = 0; i < queries.length; i++) {
@@ -985,11 +985,9 @@ class Client extends events.EventEmitter {
                 types = hints[i] || [];
             }
 
-            if (cleanParams) {
-                cleanParams = encodeParams(types, cleanParams, this.#encoder);
-            }
             allQueries.push(statement);
-            parametersRows.push(cleanParams);
+            allTypes.push(types);
+            allParams.push(cleanParams || []);
         }
 
         let rustOptions = execOptions.getRustOptions();
@@ -997,12 +995,14 @@ class Client extends events.EventEmitter {
             shouldBePrepared
                 ? await this.rustClient!.batchPrepared(
                       allPrepared.map((prepared) => prepared.handle),
-                      parametersRows,
+                      allTypes,
+                      allParams,
                       rustOptions,
                   )
                 : await this.rustClient!.batch(
                       allQueries,
-                      parametersRows,
+                      allTypes,
+                      allParams,
                       rustOptions,
                   ),
         );

@@ -27,5 +27,7 @@ cache.js
 cache.d.ts
 encoder.js
 encoder.d.ts
+frame-writer.js
+frame-writer.d.ts
 rust-session.js
 rust-session.d.ts
