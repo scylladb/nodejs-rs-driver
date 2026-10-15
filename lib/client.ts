@@ -24,7 +24,6 @@ import promiseUtils = require("./promise-utils");
 import rust = require("../index");
 import ResultSet = require("./types/result-set");
 import { convertComplexType, ColumnInfo } from "./types/cql-utils";
-import { FrameWriter } from "./frame-writer";
 import Encoder = require("./encoder");
 import { HostMap } from "./host";
 import type { Replica } from "./host";
@@ -97,8 +96,6 @@ class Client extends events.EventEmitter {
      */
     rustClient: RustSession | undefined;
     #encoder: Encoder;
-    /** Encodes the values frames of this client's requests. */
-    #frameWriter = new FrameWriter();
     #loggingId: number | undefined;
     // Map insertion order determines which prepared handle is evicted first.
     #preparedCache = new Map<string, PreparedInfo>();
@@ -390,11 +387,11 @@ class Client extends events.EventEmitter {
                 );
             }
 
-            this.rustClient = await RustSession.create(this.rustOptions);
-            this.metadata = new metadataModule.Metadata(
-                this.rustClient,
-                this.#frameWriter,
+            this.rustClient = await RustSession.create(
+                this.rustOptions,
+                this.#encoder,
             );
+            this.metadata = new metadataModule.Metadata(this.rustClient);
         } catch (err) {
             if (err instanceof Error && err.name === "InvalidLocalDatacenter") {
                 err = new errors.ArgumentError(err.message);
@@ -617,17 +614,12 @@ class Client extends events.EventEmitter {
             unifiedParams = utils.adaptNamedParamsPrepared(params, prepared);
         }
 
-        const encoded = this.#frameWriter.params(
-            prepared.types,
-            unifiedParams,
-            this.#encoder,
-        );
-
         if (paged) {
             return new RustResult(
                 await this.rustClient!.executePreparedSinglePage(
                     prepared.handle,
-                    encoded,
+                    prepared.types,
+                    unifiedParams,
                     rustOptions,
                     pageState,
                 ),
@@ -636,7 +628,8 @@ class Client extends events.EventEmitter {
         return new RustResult(
             await this.rustClient!.executePreparedUnpaged(
                 prepared.handle,
-                encoded,
+                prepared.types,
+                unifiedParams,
                 rustOptions,
             ),
         );
@@ -663,25 +656,25 @@ class Client extends events.EventEmitter {
             | ColumnInfo[]
             | undefined;
 
-        // Parse parameters according to provided hints, with type guessing
-        const encoded = this.#frameWriter.params(
-            hints2 || [],
-            params,
-            this.#encoder,
-        );
-
+        // Parameters are encoded according to provided hints, with type guessing.
         if (paged) {
             return new RustResult(
                 await this.rustClient!.querySinglePage(
                     query,
-                    encoded,
+                    hints2 || [],
+                    params,
                     rustOptions,
                     pageState,
                 ),
             );
         }
         return new RustResult(
-            await this.rustClient!.queryUnpaged(query, encoded, rustOptions),
+            await this.rustClient!.queryUnpaged(
+                query,
+                hints2 || [],
+                params,
+                rustOptions,
+            ),
         );
     }
 
@@ -997,26 +990,19 @@ class Client extends events.EventEmitter {
             allParams.push(cleanParams || []);
         }
 
-        // Encode only after the loop: the loop awaits prepares, and the encoded
-        // values are a view of the client's FrameWriter buffer, which another
-        // request could reuse.
-        const encoded = this.#frameWriter.batch(
-            allTypes,
-            allParams,
-            this.#encoder,
-        );
-
         let rustOptions = execOptions.getRustOptions();
         let wrappedResult = new RustResult(
             shouldBePrepared
                 ? await this.rustClient!.batchPrepared(
                       allPrepared.map((prepared) => prepared.handle),
-                      encoded,
+                      allTypes,
+                      allParams,
                       rustOptions,
                   )
                 : await this.rustClient!.batch(
                       allQueries,
-                      encoded,
+                      allTypes,
+                      allParams,
                       rustOptions,
                   ),
         );

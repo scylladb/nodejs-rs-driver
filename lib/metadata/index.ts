@@ -11,7 +11,6 @@ import { Token, TokenRange, minTokenRange } from "../token";
 import { Host, Replica } from "../host";
 import types = require("../types");
 import { ColumnInfo } from "../types/cql-utils";
-import type { FrameWriter } from "../frame-writer";
 
 import { Udt } from "./user-defined-type";
 import { TableMetadata } from "./table-metadata";
@@ -47,17 +46,14 @@ export { ClientState };
  */
 class Metadata {
     #rustClient: RustClient;
-    /** The client's writer, which encodes the partition keys of tokens. */
-    #frameWriter: FrameWriter;
 
     /**
      * Creates a new instance of {@link Metadata}.
      * @internal
      * @ignore
      */
-    constructor(rustClient: RustClient, frameWriter: FrameWriter) {
+    constructor(rustClient: RustClient) {
         this.#rustClient = rustClient;
-        this.#frameWriter = frameWriter;
     }
 
     /**
@@ -161,9 +157,7 @@ class Metadata {
         tableName: string,
     ): Token {
         return this.#rustClient.computeToken(
-            this.#frameWriter.buffers(
-                Array.isArray(components) ? components : [components],
-            ),
+            Array.isArray(components) ? components : [components],
             keyspaceName,
             tableName,
         );

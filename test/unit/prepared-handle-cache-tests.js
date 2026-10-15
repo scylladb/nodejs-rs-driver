@@ -1,7 +1,5 @@
 "use strict";
 
-const rust = require("../../index");
-
 const assert = require("assert");
 const proxyquire = require("proxyquire").noCallThru();
 
@@ -34,9 +32,8 @@ function makeClient(maxPrepared = 512) {
             const types = query.includes("?") ? [[{ baseType: 9 }, "v"]] : [];
             return [handle, types];
         },
-        batchPrepared: async (handles, rows) => {
-            // Copy the rows: they are a view of the client's FrameWriter buffer, which the next request reuses.
-            batches.push({ handles, rows: Buffer.from(rows) });
+        batchPrepared: async (handles, types, params) => {
+            batches.push({ handles, params });
             return { rows: [] };
         },
         executePreparedUnpaged: async (handle) => {
@@ -147,7 +144,7 @@ describe("prepared statement handle cache", function () {
             assert.strictEqual(batches.length, 1);
             assert.deepStrictEqual(batches[0].handles, [a, b, a]);
             assert.deepStrictEqual(
-                rust.testsBatchValues(batches[0].rows).map((row) => row.length),
+                batches[0].params.map((row) => row.length),
                 [1, 0, 1],
             );
         });
