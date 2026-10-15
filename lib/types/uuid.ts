@@ -1,6 +1,6 @@
 import utils = require("../utils");
-import rust = require("../../index");
 import { ValueCallback } from "../..";
+import { fillRandomBytes } from "./entropy-cache";
 
 /** @module types */
 
@@ -60,13 +60,13 @@ class Uuid {
     /**
      * Creates a new random (version 4) Uuid.
      * @param callback Optional callback to be invoked with the error as
-     * first parameter and the created Uuid as second parameter.
+     * first parameter and the created Uuid as second parameter. The callback
+     * runs on the next tick, including when generation fails. Generation uses
+     * cached random bytes synchronously; a refill may block while obtaining them.
      */
     static random(callback: ValueCallback<Uuid>): void;
     static random(): Uuid;
     static random(callback?: ValueCallback<Uuid>): Uuid | void {
-        // While in theory nothing should throw here, there may be some edge cases,
-        // where napi layer will thrown an error, which we need to catch and pass to the callback.
         if (callback) {
             // The callback is actually invoked either with an error and no
             // value, or with no error and the new instance, which the stricter
@@ -75,13 +75,15 @@ class Uuid {
                 err: Error | null,
                 uuid?: Uuid,
             ) => void;
+            let uuid: Uuid;
             try {
-                return done(null, new Uuid(rust.getRandomUuidV4()));
+                uuid = new Uuid(randomUuidBuffer());
             } catch (err) {
-                return done(err as Error);
+                return process.nextTick(done, err as Error);
             }
+            return process.nextTick(done, null, uuid);
         }
-        return new Uuid(rust.getRandomUuidV4());
+        return new Uuid(randomUuidBuffer());
     }
 
     /**
@@ -144,6 +146,17 @@ class Uuid {
     getInternal(): Buffer {
         return this.#raw;
     }
+}
+
+/** @private */
+function randomUuidBuffer(): Buffer {
+    // Preserve the standalone backing buffer returned by the native v4 generator.
+    // TimeUUID retains its existing pooled allocation; neither aliases the cache.
+    const buffer = Buffer.allocUnsafeSlow(16);
+    fillRandomBytes(buffer, 0, 16);
+    buffer[6] = (buffer[6] & 0x0f) | 0x40; // Version 4 in the high nibble.
+    buffer[8] = (buffer[8] & 0x3f) | 0x80; // IETF variant: top bits 10.
+    return buffer;
 }
 
 export = Uuid;
