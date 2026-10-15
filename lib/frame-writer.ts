@@ -25,6 +25,16 @@ const MAX_RETAINED_FRAME_SIZE = 16 * INITIAL_FRAME_SIZE;
  * Thus, pass a frame to Rust immediately.
  * This is safe, because Rust copies the frame before the native call returns.
  *
+ * Callers must obey these rules. Otherwise, concurrent requests can send
+ * each other's values, with no error:
+ * - Do not `await` between writing a frame and passing it to Rust.
+ *   Another request can write its own frame during the `await`.
+ * - Do not keep a frame after the native call returns.
+ *   Copy it if you need it later, for example in a test.
+ *
+ * In the driver, only `RustSession` uses a writer.
+ * Its structure enforces these rules. See its documentation.
+ *
  * A writer writes one frame at a time.
  * A nested frame on the same writer throws, because it would overwrite the frame in progress.
  */

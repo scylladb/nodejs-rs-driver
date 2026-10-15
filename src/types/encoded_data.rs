@@ -20,6 +20,10 @@ use crate::errors::make_js_error;
 /// A length of -1 is null, and -2 is unset.
 /// The bytes are copied while converting the N-API argument, so JS
 /// can safely reuse or mutate the source buffer after the call returns.
+///
+/// This copy is required. The buffer is a view of the client's `FrameWriter` buffer,
+/// and the next request overwrites it.
+/// Thus, do not keep a reference to the JS buffer here, for example to avoid the copy.
 pub struct SerializedValuesWrapper {
     pub(crate) inner: SerializedValues,
 }
@@ -47,6 +51,7 @@ impl FromNapiValue for SerializedValuesWrapper {
 /// The values of all statements of a batch, from one JS buffer:
 /// `[u16 statement count]`, then one [`SerializedValuesWrapper`] frame per statement.
 /// The bytes are copied while converting the N-API argument.
+/// This copy is required for the same reason as in [`SerializedValuesWrapper`].
 pub struct BatchValuesWrapper {
     pub(crate) rows: Vec<SerializedValuesWrapper>,
 }
