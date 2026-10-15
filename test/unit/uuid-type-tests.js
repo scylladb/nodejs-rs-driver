@@ -1109,7 +1109,9 @@ describe("TimeUuid", function () {
                             returned = true;
                             const result = await completed;
                             assert.strictEqual(result.returned, true);
-                            if (change === "grow") {
+                            // Node 20 keeps a fixed-length Buffer view when
+                            // the backing ArrayBuffer grows.
+                            if (id.length === length) {
                                 assert.ifError(result.err);
                                 assert.ok(result.value instanceof TimeUuid);
                                 const expected = Buffer.from(id);
