@@ -26,6 +26,23 @@ pub fn tests_serialized_values_async(
 
 #[napi]
 pub fn tests_batch_values(params: BatchValuesWrapper) -> Vec<Vec<String>> {
+    describe_batch(&params)
+}
+
+#[napi(ts_return_type = "Promise<Array<Array<string>>>")]
+pub fn tests_batch_values_async(
+    env: Env,
+    params: BatchValuesWrapper,
+) -> JsAsyncResult<Vec<Vec<String>>> {
+    BridgedPromise::spawn(&env, || {
+        Ok(async move {
+            tokio::task::yield_now().await;
+            ConvertedResult::Ok(describe_batch(&params))
+        })
+    })
+}
+
+fn describe_batch(params: &BatchValuesWrapper) -> Vec<Vec<String>> {
     params.rows.iter().map(describe_values).collect()
 }
 

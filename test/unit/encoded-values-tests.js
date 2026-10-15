@@ -138,6 +138,13 @@ describe("batch values", function () {
         return Buffer.concat([count, ...rows.map(frame)]);
     }
 
+    it("copies the bytes before the native call returns", async function () {
+        const source = batchFrame([[[1, 2]], [null, [3]]]);
+        const result = rust.testsBatchValuesAsync(source);
+        source.fill(9);
+        assert.deepEqual(await result, [["0102"], ["null", "03"]]);
+    });
+
     it("reads one row per statement", function () {
         assert.deepEqual(
             rust.testsBatchValues(batchFrame([[[1]], [], [null, undefined]])),
