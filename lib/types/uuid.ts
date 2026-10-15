@@ -150,7 +150,9 @@ class Uuid {
 
 /** @private */
 function randomUuidBuffer(): Buffer {
-    const buffer = Buffer.allocUnsafeSlow(16); // Give each UUID its own ArrayBuffer.
+    // Preserve the standalone backing buffer returned by the native v4 generator.
+    // TimeUUID retains its existing pooled allocation; neither aliases the cache.
+    const buffer = Buffer.allocUnsafeSlow(16);
     fillRandomBytes(buffer, 0, 16);
     buffer[6] = (buffer[6] & 0x0f) | 0x40; // Version 4 in the high nibble.
     buffer[8] = (buffer[8] & 0x3f) | 0x80; // IETF variant: top bits 10.

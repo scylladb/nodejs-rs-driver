@@ -10,6 +10,8 @@ export function registerEntropyCacheSnapshotReset(
     cache: Buffer,
     resetOffset: () => void,
 ): void {
+    // A module first loaded after restore starts with a fresh, exhausted cache,
+    // so its first request obtains new entropy without snapshot callbacks.
     if (!v8.startupSnapshot.isBuildingSnapshot()) return;
 
     const clearEntropy = () => {

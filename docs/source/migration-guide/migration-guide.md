@@ -6,22 +6,23 @@ to help you migrate existing applications.
 
 ## UUID v4 callback timing
 
-`Uuid.random(callback)` invokes the callback on `process.nextTick`, including
-when UUID generation fails. Earlier versions of this driver invoked the callback
-synchronously. Use the result inside the callback; use `Uuid.random()` without a
-callback when you need an immediate return value.
+The Apache `cassandra-driver` generates UUID v4 bytes asynchronously with
+`crypto.randomBytes()` when a callback is supplied. This driver also delivers
+`Uuid.random(callback)` asynchronously, using `process.nextTick` for success and
+generation errors. Use the result inside the callback; use `Uuid.random()` without
+a callback when you need an immediate return value.
 
-UUID generation still uses cached random bytes synchronously. A cache refill
+This driver generates UUIDs from cached random bytes synchronously. A cache refill
 calls `crypto.randomFillSync()` and can block the calling thread even when a
 callback is supplied.
 
 ## TimeUUID callback timing
 
-`TimeUuid.now(callback)` and `TimeUuid.fromDate(..., callback)` always invoke
-the callback asynchronously, including when both IDs are supplied or validation
-fails. Earlier versions could invoke the callback synchronously when both IDs
-were supplied. Paths that do not require asynchronous randomness deliver their
-result or error on `process.nextTick`.
+The Apache `cassandra-driver` can invoke TimeUUID callbacks synchronously when
+both IDs are supplied, including when validation fails. This driver's
+`TimeUuid.now(callback)` and `TimeUuid.fromDate(..., callback)` always invoke the
+callback asynchronously. Paths that do not require asynchronous randomness
+deliver their result or error on `process.nextTick`.
 
 Missing IDs still use asynchronous `crypto.randomFill()`. With both IDs supplied,
 the UUID is generated before the method returns; only callback delivery is deferred.

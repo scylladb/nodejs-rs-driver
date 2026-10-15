@@ -368,6 +368,9 @@ function fromDateInternal(
     const randomOffset = hasClockId ? 10 : 8;
     const randomLength = hasClockId ? 6 : hasNodeId ? 2 : 8;
     try {
+        // A Buffer date ignores these bytes. Retain the asynchronous crypto step
+        // and its errors for upstream compatibility; nextTick alone would change
+        // when completion can run and remove those errors.
         crypto.randomFill(buffer, randomOffset, randomLength, finish);
     } catch (e) {
         process.nextTick(done, e as Error);
