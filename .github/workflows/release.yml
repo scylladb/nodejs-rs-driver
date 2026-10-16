@@ -471,7 +471,9 @@ jobs:
 
             (cd "$package_dir" && npm publish --provenance --access public --ignore-scripts)
 
-            for attempt in 1 2 3 4 5; do
+            # npm can accept a package several minutes before registry reads see it.
+            local verification_deadline=$((SECONDS + 600))
+            while true; do
               published_integrity=
               if published_integrity=$(get_published_integrity "$package_spec"); then
                 :
@@ -488,11 +490,14 @@ jobs:
                 echo "::error::$package_spec was published with unexpected package integrity."
                 exit 1
               fi
-              if [[ "$attempt" -lt 5 ]]; then
-                sleep 15
+              local remaining=$((verification_deadline - SECONDS))
+              if [[ "$remaining" -le 0 ]]; then
+                break
               fi
+              echo "Waiting for $package_spec to become available ($remaining seconds remaining)."
+              sleep "$((remaining < 15 ? remaining : 15))"
             done
-            echo "::error::Could not verify $package_spec after publication."
+            echo "::error::Could not verify $package_spec within 10 minutes after publication."
             exit 1
           }
 
