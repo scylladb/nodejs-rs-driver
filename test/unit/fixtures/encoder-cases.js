@@ -23,6 +23,7 @@ function makeEncoders() {
         default: new Encoder(4, {}),
         bigint: new Encoder(4, { encoding: { useBigIntAsLong: true } }),
         v2: new Encoder(2, {}),
+        setMap: new Encoder(4, { encoding: { set: Set, map: Map } }),
     };
 }
 
@@ -239,6 +240,73 @@ const cases = [
         () => Object.assign(Object.create(null), { a: 1 }),
     ],
     ["map v2", "v2", t(dataTypes.map, [text, int]), () => ({ a: 1 })],
+
+    // More collection edge cases
+    ["list no subtype", "default", t(dataTypes.list), () => [1, "x"]],
+    ["list sparse", "default", t(dataTypes.list, int), () => [1, , 3]],
+    [
+        "list of empty list",
+        "default",
+        t(dataTypes.list, t(dataTypes.list, int)),
+        () => [[]],
+    ],
+    [
+        "set of empty set",
+        "default",
+        t(dataTypes.set, t(dataTypes.set, int)),
+        () => [[]],
+    ],
+    ["list no subtype of empty list", "default", t(dataTypes.list), () => [[]]],
+    ["list v2 text", "v2", t(dataTypes.list, text), () => ["ab"]],
+    [
+        "list v2 too many items",
+        "v2",
+        t(dataTypes.list, int),
+        () => new Array(70000).fill(1),
+    ],
+    [
+        "set Set object with option",
+        "setMap",
+        t(dataTypes.set, int),
+        () => new Set([5, 6]),
+    ],
+    [
+        "set Set object null item",
+        "setMap",
+        t(dataTypes.set, int),
+        () => new Set([null]),
+    ],
+    ["map no subtypes", "default", t(dataTypes.map), () => ({ a: 1 })],
+    [
+        "map value empty list",
+        "default",
+        t(dataTypes.map, [text, t(dataTypes.list, int)]),
+        () => ({ a: [] }),
+    ],
+    [
+        "map key empty list",
+        "setMap",
+        t(dataTypes.map, [t(dataTypes.list, int), int]),
+        () => new Map([[[], 1]]),
+    ],
+    [
+        "map Map object with option",
+        "setMap",
+        t(dataTypes.map, [text, int]),
+        () => new Map([["k", 5]]),
+    ],
+    [
+        "map Map object null key",
+        "setMap",
+        t(dataTypes.map, [text, int]),
+        () => new Map([[null, 5]]),
+    ],
+    [
+        "map Map object unset value",
+        "setMap",
+        t(dataTypes.map, [text, int]),
+        () => new Map([["k", types.unset]]),
+    ],
 ];
 
 /**
