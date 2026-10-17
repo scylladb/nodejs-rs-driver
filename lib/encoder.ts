@@ -120,6 +120,97 @@ const customEncoders: { [typeName: string]: (value: any) => Buffer } = {
 };
 
 /**
+ * Gets the type from type information given as a hint:
+ * a type, a type name such as "int", or a type code.
+ * @throws {TypeError} When the type information is not valid
+ */
+function typeFromHint(typeInfo: any): any {
+    let type: any = null;
+    if (typeof typeInfo === "number") {
+        if (!Number.isInteger(typeInfo)) {
+            throw new TypeError(
+                "Type information not valid, only String and Number values are valid hints",
+            );
+        }
+        type = {
+            code: typeInfo,
+        };
+    } else if (typeof typeInfo === "string") {
+        type = dataTypes.getByName(typeInfo);
+    } else if (
+        typeInfo !== null &&
+        typeof typeInfo === "object" &&
+        typeof typeInfo.code === "number"
+    ) {
+        type = typeInfo;
+    }
+    if (type == null || typeof type.code !== "number") {
+        throw new TypeError(
+            "Type information not valid, only String and Number values are valid hints",
+        );
+    }
+    return type;
+}
+
+/**
+ * Checks that a UDT type has its fields, and that each field has a type.
+ * @throws {TypeError} When the type information is not valid
+ */
+function checkUdtInfo(udtInfo: UdtInfo | undefined): void {
+    if (!udtInfo || !Array.isArray(udtInfo.fields)) {
+        throw new TypeError(
+            "Type information not valid, a UDT type needs its fields",
+        );
+    }
+    // An index loop, not for...of or some: they skip the holes of a sparse array.
+    for (let i = 0; i < udtInfo.fields.length; i++) {
+        const field = udtInfo.fields[i];
+        if (!field || field.type === null || field.type === undefined) {
+            throw new TypeError(
+                "Type information not valid, a UDT type needs the type of each field",
+            );
+        }
+    }
+}
+
+/**
+ * Checks that a tuple type has at least one item, and a type for each item.
+ * @throws {TypeError} When the type information is not valid
+ */
+function checkTupleInfo(tupleInfo: Array<ColumnInfo> | undefined): void {
+    const message =
+        "Type information not valid, a tuple type needs the types of its items";
+    if (!Array.isArray(tupleInfo) || tupleInfo.length === 0) {
+        throw new TypeError(message);
+    }
+    // An index loop, not for...of or some: they skip the holes of a sparse array.
+    for (let i = 0; i < tupleInfo.length; i++) {
+        if (tupleInfo[i] === null || tupleInfo[i] === undefined) {
+            throw new TypeError(message);
+        }
+    }
+}
+
+/**
+ * Checks that a vector type has its element type and a positive integer dimension.
+ * @throws {TypeError} When the type information is not valid
+ */
+function checkVectorInfo(info: any): void {
+    if (
+        !Array.isArray(info) ||
+        info.length !== 2 ||
+        info[0] === null ||
+        info[0] === undefined ||
+        !Number.isInteger(info[1]) ||
+        info[1] <= 0
+    ) {
+        throw new TypeError(
+            "Type information not valid, a vector type needs its element type and a positive dimension",
+        );
+    }
+}
+
+/**
  * Declares the privileged instance members.
  * Due to historical reasons, it was always separate from Encoder.
  * It's likely because previously Encoder was exposed in the API (it no longer is)
@@ -1052,6 +1143,12 @@ class EncoderMembers {
                 );
             }
             const bytes = this.encode(val, subtype) as Buffer;
+            // An empty collection is encoded as null, which a collection can't contain either.
+            if (bytes === null) {
+                throw new TypeError(
+                    "A collection can't contain null or unset values",
+                );
+            }
             // include item byte length
             parts.push(this.getLengthBuffer(bytes));
             // include item
@@ -1105,6 +1202,10 @@ class EncoderMembers {
                 throw new TypeError("A map can't contain null or unset values");
             }
             const keyBuffer = this.encode(key, keySubtype) as Buffer;
+            // An empty collection is encoded as null, which a map can't contain as a key either.
+            if (keyBuffer === null) {
+                throw new TypeError("A map can't contain null or unset keys");
+            }
             // include item byte length
             parts.push(this.getLengthBuffer(keyBuffer));
             // include item
@@ -1142,6 +1243,7 @@ class EncoderMembers {
 
     encodeUdt(value: any, columnInfo: ColumnInfo): Buffer | null {
         const udtInfo = columnInfo.info as UdtInfo;
+        checkUdtInfo(udtInfo);
         const parts: Array<Buffer> = [];
         let totalLength = 0;
         for (let i = 0; i < udtInfo.fields.length; i++) {
@@ -1171,6 +1273,13 @@ class EncoderMembers {
      */
     encodeTuple(value: any, columnInfo: ColumnInfo): Buffer | null {
         const tupleInfo = columnInfo.info as Array<ColumnInfo>;
+        checkTupleInfo(tupleInfo);
+        if (!(value instanceof types.Tuple)) {
+            throw new TypeError(
+                "Not a valid tuple, expected Tuple obtained " +
+                    util.inspect(value),
+            );
+        }
         const parts: Array<Buffer> = [];
         let totalLength = 0;
         const length = Math.min(tupleInfo.length, value.length);
@@ -1248,8 +1357,17 @@ class EncoderMembers {
         return new Vector(rv, typeInfo);
     }
 
+    /**
+     * Gets the size of each value of a type, when all its values have the same size.
+     * @param cqlType The type. It can also be a hint: a type name or a type code.
+     * @returns The size in bytes, or -1 for a type with values of different sizes.
+     * @throws {TypeError} When the type information is not valid
+     */
     serializationSizeIfFixed(cqlType: any): number {
-        switch (cqlType.code) {
+        // Resolve a hint first: the switch needs the type code.
+        // This also covers the element types of nested vectors.
+        const type = typeFromHint(cqlType);
+        switch (type.code) {
             case dataTypes.bigint:
                 return 8;
             case dataTypes.boolean:
@@ -1268,16 +1386,17 @@ class EncoderMembers {
                 return 16;
             case dataTypes.custom:
                 if (
-                    "customTypeName" in cqlType &&
-                    cqlType.customTypeName === "vector"
+                    "customTypeName" in type &&
+                    type.customTypeName === "vector"
                 ) {
+                    checkVectorInfo(type.info);
                     const subtypeSerialSize = this.serializationSizeIfFixed(
-                        cqlType.info[0],
+                        type.info[0],
                     );
                     if (subtypeSerialSize === -1) {
                         return -1;
                     }
-                    return subtypeSerialSize * cqlType.info[1];
+                    return subtypeSerialSize * type.info[1];
                 }
                 return -1;
             default:
@@ -1286,6 +1405,7 @@ class EncoderMembers {
     }
 
     encodeVector(value: any, params: any): Buffer {
+        checkVectorInfo(params.info);
         if (!(value instanceof Vector)) {
             throw new TypeError(
                 "Driver only supports Vector type when encoding a vector",
@@ -1306,7 +1426,18 @@ class EncoderMembers {
         const serializationSize = this.serializationSizeIfFixed(params.info[0]);
         const encoded: Array<Buffer> = [];
         for (const elem of value) {
+            if (elem === null || elem === undefined || elem === types.unset) {
+                throw new TypeError(
+                    "A vector can't contain null or unset values",
+                );
+            }
             const elemBuffer = this.encode(elem, params.info[0]) as Buffer;
+            // An empty collection is encoded as null, which a vector can't contain either.
+            if (elemBuffer === null) {
+                throw new TypeError(
+                    "A vector can't contain null or unset values",
+                );
+            }
             if (serializationSize === -1) {
                 encoded.push(utils.VIntCoding.uvintPack(elemBuffer.length));
             }
@@ -2217,21 +2348,10 @@ class Encoder extends EncoderMembers {
 
         let type: any = null;
 
-        if (typeInfo) {
-            if (typeof typeInfo === "number") {
-                type = {
-                    code: typeInfo,
-                };
-            } else if (typeof typeInfo === "string") {
-                type = dataTypes.getByName(typeInfo);
-            } else if (typeof typeInfo.code === "number") {
-                type = typeInfo;
-            }
-            if (type == null || typeof type.code !== "number") {
-                throw new TypeError(
-                    "Type information not valid, only String and Number values are valid hints",
-                );
-            }
+        // Only null and undefined mean "no hint". Other falsy values, such as
+        // false, 0 or "", are hints too: 0 is the code of custom, and the others are not valid.
+        if (typeInfo !== null && typeInfo !== undefined) {
+            type = typeFromHint(typeInfo);
         } else {
             // Lets guess
             type = Encoder.guessDataType(value);
