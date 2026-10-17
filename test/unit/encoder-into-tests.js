@@ -116,3 +116,48 @@ describe("Encoder.encodeInto", function () {
         );
     });
 });
+
+describe("Encoder encodings of the types written into the frame", function () {
+    const {
+        cases,
+        makeEncoders,
+        encodeCase,
+    } = require("./fixtures/encoder-cases");
+    const frozen = require("./fixtures/encoder-bytes.json");
+    const encoders = makeEncoders();
+
+    it("has frozen bytes for each case", function () {
+        assert.sameMembers(
+            Object.keys(frozen),
+            cases.map((c) => c[0]),
+        );
+    });
+
+    it("encode gives the frozen bytes and errors", function () {
+        for (const c of cases) {
+            assert.deepEqual(encodeCase(encoders, c), frozen[c[0]], c[0]);
+        }
+    });
+
+    it("encodeInto gives the frozen bytes and errors", function () {
+        for (const [label, encoderName, type, value] of cases) {
+            let actual;
+            try {
+                const cell = cellFromEncodeInto(
+                    encoders[encoderName],
+                    value(),
+                    type,
+                    8,
+                );
+                const length = cell.readInt32BE(0);
+                actual = { hex: length < 0 ? null : cell.toString("hex", 4) };
+                if (length >= 0) {
+                    assert.strictEqual(length, cell.length - 4, label);
+                }
+            } catch (err) {
+                actual = { error: [err.constructor.name, err.message] };
+            }
+            assert.deepEqual(actual, frozen[label], label);
+        }
+    });
+});
