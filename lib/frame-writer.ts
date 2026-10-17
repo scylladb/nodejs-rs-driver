@@ -7,8 +7,6 @@ import { GrowableBuffer } from "./growable-buffer";
 
 /** Largest value count that the `[short]` count of a frame can hold. */
 const MAX_FRAME_VALUES = 0xffff;
-const NULL_LENGTH = -1;
-const UNSET_LENGTH = -2;
 /** The buffer size of a new {@link FrameWriter}. */
 const INITIAL_FRAME_SIZE = 4096;
 /**
@@ -120,7 +118,7 @@ export class FrameWriter {
                             typeof value,
                     );
                 }
-                offset = this.#writeEncodedCell(value, offset);
+                offset = Encoder.writeCell(this.#out, offset, value);
             }
             return offset;
         });
@@ -167,39 +165,6 @@ export class FrameWriter {
     }
 
     /**
-     * Writes one value that is already encoded, as `[i32 length][bytes]`.
-     * `null` is written as length -1, and `undefined` (unset) as length -2.
-     * @returns The offset after the value.
-     */
-    #writeEncodedCell(
-        value: Uint8Array | null | undefined,
-        offset: number,
-    ): number {
-        switch (value) {
-            case null:
-                return this.#writeLength(NULL_LENGTH, offset);
-            case undefined:
-                return this.#writeLength(UNSET_LENGTH, offset);
-            default:
-                // Fails to compile if the parameter type gets a member that is not a Uint8Array.
-                value satisfies Uint8Array;
-                offset = this.#writeLength(value.length, offset, value.length);
-                this.#out.buffer.set(value, offset);
-                return offset + value.length;
-        }
-    }
-
-    /**
-     * Writes `[i32 length]` at `offset`, with room for `bytes` more bytes after it.
-     * @returns The offset after the length.
-     */
-    #writeLength(length: number, offset: number, bytes: number = 0): number {
-        this.#out.ensure(offset, 4 + bytes);
-        this.#out.buffer.writeInt32BE(length, offset);
-        return offset + 4;
-    }
-
-    /**
      * Writes one row of params at `offset`: `[u16 count]`,
      * then for each value `[i32 length][bytes]`.
      * @returns The offset after the row.
@@ -214,9 +179,10 @@ export class FrameWriter {
         const count = params ? params.length : 0;
         offset = this.#writeRowHeader(count, offset);
         for (let i = 0; i < count; i++) {
-            offset = this.#writeEncodedCell(
-                encoder.encode(params[i], expectedTypes[i]),
+            offset = Encoder.writeCell(
+                this.#out,
                 offset,
+                encoder.encode(params[i], expectedTypes[i]),
             );
         }
         return offset;
