@@ -19,6 +19,7 @@ import { throwNotSupported } from "./new-utils";
 import { FrameReader } from "./reader";
 import { ColumnInfo, UdtInfo } from "./types/cql-utils";
 import type { ExecutionOptions } from "./execution-options";
+import type { GrowableBuffer } from "./growable-buffer";
 
 const uuidRegex =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -30,6 +31,11 @@ const buffers = {
     int8One: utils.allocBufferFromArray([1]),
     int8MaxValue: utils.allocBufferFromArray([0xff]),
 };
+
+/** The length of a null cell in a request frame. */
+const NULL_CELL_LENGTH = -1;
+/** The length of an unset cell in a request frame. */
+const UNSET_CELL_LENGTH = -2;
 
 const bigInt32BitsOn = BigInt(0xffffffff);
 const bigInt8BitsOn = BigInt(0xff);
@@ -2378,6 +2384,36 @@ class Encoder extends EncoderMembers {
         }
 
         return encoder.call(this, value, type);
+    }
+
+    /**
+     * Writes a value that is already encoded as one cell of a request frame,
+     * `[i32 length][bytes]`, at `offset` in `out`.
+     * `null` is written as length -1, and `undefined` (unset) as length -2.
+     * @returns The offset after the cell.
+     */
+    static writeCell(
+        out: GrowableBuffer,
+        offset: number,
+        bytes: Uint8Array | null | undefined,
+    ): number {
+        switch (bytes) {
+            case null:
+                out.ensure(offset, 4);
+                out.buffer.writeInt32BE(NULL_CELL_LENGTH, offset);
+                return offset + 4;
+            case undefined:
+                out.ensure(offset, 4);
+                out.buffer.writeInt32BE(UNSET_CELL_LENGTH, offset);
+                return offset + 4;
+            default:
+                // Fails to compile if the parameter type gets a member that is not a Uint8Array.
+                bytes satisfies Uint8Array;
+                out.ensure(offset, 4 + bytes.length);
+                out.buffer.writeInt32BE(bytes.length, offset);
+                out.buffer.set(bytes, offset + 4);
+                return offset + 4 + bytes.length;
+        }
     }
 }
 
