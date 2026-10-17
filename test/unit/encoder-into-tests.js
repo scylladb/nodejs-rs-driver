@@ -76,6 +76,58 @@ describe("Encoder.encodeInto", function () {
         );
     });
 
+    it("grows the buffer by the exact byte length of a long string", function () {
+        const encoder = new Encoder(4, {});
+        for (const code of [dataTypes.ascii, dataTypes.text]) {
+            const out = new GrowableBuffer(4096);
+            const end = encoder.encodeInto(out, 0, "a".repeat(30000), t(code));
+            assert.strictEqual(end, 30004);
+            // For text, 3 bytes for each character would grow the buffer to 128 KiB.
+            assert.strictEqual(out.buffer.length, 32768, String(code));
+        }
+    });
+
+    it("grows the buffer by the exact byte length when the upper bound is more than 16 KiB", function () {
+        const encoder = new Encoder(4, {});
+        // The example in the doc comment of MAX_STRING_GROWTH_BY_UPPER_BOUND.
+        const out = new GrowableBuffer(4096);
+        const end = encoder.encodeInto(
+            out,
+            0,
+            "a".repeat(10000),
+            t(dataTypes.text),
+        );
+        assert.strictEqual(end, 10004);
+        // The upper bound, 30,000 bytes, would grow the buffer to 32 KiB.
+        assert.strictEqual(out.buffer.length, 16384);
+    });
+
+    it("grows the buffer by the exact byte length when the upper bound ends after 64 KiB", function () {
+        const encoder = new Encoder(4, {});
+        // The cell of the 12th of 13 texts of 5,000 characters in one frame.
+        const out = new GrowableBuffer(65536);
+        const end = encoder.encodeInto(
+            out,
+            55046,
+            "a".repeat(5000),
+            t(dataTypes.text),
+        );
+        assert.strictEqual(end, 60050);
+        // The upper bound, 15,000 bytes, would grow the buffer to 128 KiB.
+        assert.strictEqual(out.buffer.length, 65536);
+    });
+
+    it("grows the buffer past 64 KiB when the bytes of a string need it", function () {
+        const encoder = new Encoder(4, {});
+        const out = new GrowableBuffer(65536);
+        const value = "a".repeat(5000);
+        const end = encoder.encodeInto(out, 62000, value, t(dataTypes.text));
+        assert.strictEqual(end, 67004);
+        assert.strictEqual(out.buffer.length, 131072);
+        assert.strictEqual(out.buffer.readInt32BE(62000), 5000);
+        assert.strictEqual(out.buffer.toString("utf8", 62004, end), value);
+    });
+
     it("throws the errors of encode", function () {
         const encoder = new Encoder(4, {});
         const bad = [

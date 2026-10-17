@@ -19,7 +19,7 @@ import { throwNotSupported } from "./new-utils";
 import { FrameReader } from "./reader";
 import { ColumnInfo, UdtInfo } from "./types/cql-utils";
 import type { ExecutionOptions } from "./execution-options";
-import { GrowableBuffer } from "./growable-buffer";
+import { GrowableBuffer, MAX_RETAINED_FRAME_SIZE } from "./growable-buffer";
 
 const uuidRegex =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -37,6 +37,30 @@ const buffers = {
 const NULL_CELL_LENGTH = -1;
 /** The length of an unset cell in a request frame. */
 const UNSET_CELL_LENGTH = -2;
+/**
+ * The largest upper bound of the byte length of a string that a string encoder makes room for.
+ * Measuring the exact byte length costs one more pass over the string.
+ * Thus, when the buffer has no room for the upper bound, a string encoder makes room
+ * for the upper bound, when both of these are true:
+ * - The upper bound is at most this size. This limits the room that the string does not use.
+ *   `encode` returns a view of its buffer, so that room stays allocated with the view.
+ * - The upper bound ends at most at {@link MAX_RETAINED_FRAME_SIZE}.
+ *   Else, the buffer could grow past that size for bytes that the encoder does not write.
+ *   Then FrameWriter would allocate a new buffer for each such request.
+ * Else, the encoder measures the string, and makes room for the exact byte length.
+ *
+ * Examples, in UTF-8, where the upper bound is 3 bytes for each UTF-16 code unit:
+ * - "hello": the upper bound is 15 bytes. The encoder makes room for 15 bytes,
+ *   and it does not measure the string.
+ * - 10,000 ASCII characters at the start of a buffer of 4 KiB: the upper bound is
+ *   30,000 bytes, more than this size. The encoder measures the string: 10,000 bytes.
+ *   The buffer grows to 16 KiB, not to 32 KiB.
+ * - 13 texts of 5,000 ASCII characters in one frame of 65,054 bytes: the 12th text starts
+ *   at byte 55,050. Its upper bound, 15,000 bytes, ends at byte 70,050, after 64 KiB.
+ *   The encoder measures the string: 5,000 bytes. The buffer stays at 64 KiB.
+ *   With the upper bound, it would grow to 128 KiB, and FrameWriter would not keep it.
+ */
+const MAX_STRING_GROWTH_BY_UPPER_BOUND = 16 * 1024;
 /**
  * The size of the new buffer that {@link Encoder.encode} gives to an encoder.
  * It has room for each value of a fixed-size scalar type: at most 16 bytes, for a uuid.
@@ -1058,7 +1082,18 @@ class EncoderMembers {
                     util.inspect(value),
             );
         }
-        out.ensure(start, Buffer.byteLength(value, encoding));
+        // The upper bound of the byte length: 3 bytes for each UTF-16 code unit in UTF-8,
+        // and 1 byte in ASCII. See MAX_STRING_GROWTH_BY_UPPER_BOUND.
+        const maxBytes = encoding === "ascii" ? value.length : value.length * 3;
+        if (start + maxBytes > out.buffer.length) {
+            const byUpperBound =
+                maxBytes <= MAX_STRING_GROWTH_BY_UPPER_BOUND &&
+                start + maxBytes <= MAX_RETAINED_FRAME_SIZE;
+            out.ensure(
+                start,
+                byUpperBound ? maxBytes : Buffer.byteLength(value, encoding),
+            );
+        }
         return start + out.buffer.write(value, start, encoding);
     }
 
