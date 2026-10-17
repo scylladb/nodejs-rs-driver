@@ -366,7 +366,6 @@ class EncoderMembers {
             [dataTypes.blob]: this.encodeBlob,
             [dataTypes.decimal]: this.encodeDecimal,
             [dataTypes.float]: this.encodeFloat,
-            [dataTypes.timestamp]: this.encodeTimestamp,
             [dataTypes.uuid]: this.encodeUuid,
             [dataTypes.varint]: this.encodeVarint,
             [dataTypes.timeuuid]: this.encodeUuid,
@@ -392,6 +391,7 @@ class EncoderMembers {
             [dataTypes.boolean]: this.writeBoolean,
             [dataTypes.double]: this.writeDouble,
             [dataTypes.int]: this.writeInt,
+            [dataTypes.timestamp]: this.writeTimestamp,
         };
     }
 
@@ -810,7 +810,12 @@ class EncoderMembers {
     /**
      * @private
      */
-    encodeTimestamp(value: any, columnInfo: ColumnInfo): Buffer {
+    writeTimestamp(
+        out: GrowableBuffer,
+        start: number,
+        value: any,
+        columnInfo: ColumnInfo,
+    ): number {
         const originalValue = value;
         if (typeof value === "string") {
             value = new Date(value);
@@ -825,7 +830,7 @@ class EncoderMembers {
         if (this.encodingOptions.useBigIntAsLong) {
             value = BigInt(value);
         }
-        return writeToNewBuffer(this, this.writeLong, value, columnInfo);
+        return this.writeLong(out, start, value, columnInfo);
     }
 
     /**
