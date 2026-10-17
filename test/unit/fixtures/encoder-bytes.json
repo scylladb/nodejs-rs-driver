@@ -439,5 +439,128 @@
     },
     "map Map object unset value": {
         "error": ["TypeError", "A map can't contain null or unset values"]
+    },
+    "udt fields": {
+        "hex": "00000004000000010000000178"
+    },
+    "udt missing field": {
+        "hex": "0000000400000001ffffffff"
+    },
+    "udt extra field": {
+        "hex": "00000004000000010000000178"
+    },
+    "udt null field": {
+        "hex": "ffffffff0000000178"
+    },
+    "udt unset field": {
+        "hex": "ffffffff0000000178"
+    },
+    "udt undefined field as unset": {
+        "hex": "ffffffff0000000178"
+    },
+    "udt unset field v3": {
+        "error": [
+            "TypeError",
+            "Unset value can not be used for this version of Cassandra, protocol version: 3"
+        ]
+    },
+    "udt Buffer field": {
+        "hex": "000000040000000700000000"
+    },
+    "udt empty list field": {
+        "hex": "ffffffff"
+    },
+    "udt nested": {
+        "hex": "0000000d00000004000000020000000179"
+    },
+    "udt bad field": {
+        "error": ["TypeError", "Expected Number, obtained 'x'"]
+    },
+    "udt not an object": {
+        "hex": "ffffffffffffffff"
+    },
+    "udt v2": {
+        "hex": "00000004000000010000000178"
+    },
+    "tuple values": {
+        "hex": "00000004000000010000000178"
+    },
+    "tuple shorter value": {
+        "hex": "0000000400000001"
+    },
+    "tuple longer value": {
+        "hex": "00000004000000010000000178"
+    },
+    "tuple null item": {
+        "hex": "ffffffff0000000178"
+    },
+    "tuple unset item": {
+        "hex": "ffffffff0000000178"
+    },
+    "tuple bad item": {
+        "error": ["TypeError", "Expected Number, obtained 'x'"]
+    },
+    "tuple in list": {
+        "hex": "000000010000000d00000004000000010000000161"
+    },
+    "tuple from array": {
+        "error": [
+            "TypeError",
+            "Not a valid tuple, expected Tuple obtained [ 1, 'x' ]"
+        ]
+    },
+    "tuple from number": {
+        "error": ["TypeError", "Not a valid tuple, expected Tuple obtained 5"]
+    },
+    "tuple without item types": {
+        "error": [
+            "TypeError",
+            "Type information not valid, a tuple type needs the types of its items"
+        ]
+    },
+    "udt without fields": {
+        "error": [
+            "TypeError",
+            "Type information not valid, a UDT type needs its fields"
+        ]
+    },
+    "udt field without type": {
+        "error": [
+            "TypeError",
+            "Type information not valid, a UDT type needs the type of each field"
+        ]
+    },
+    "udt field hole": {
+        "error": [
+            "TypeError",
+            "Type information not valid, a UDT type needs the type of each field"
+        ]
+    },
+    "udt field null": {
+        "error": [
+            "TypeError",
+            "Type information not valid, a UDT type needs the type of each field"
+        ]
+    },
+    "tuple sparse item types": {
+        "error": [
+            "TypeError",
+            "Type information not valid, a tuple type needs the types of its items"
+        ]
+    },
+    "udt field type by name": {
+        "hex": "0000000400000001"
+    },
+    "tuple with no item types": {
+        "error": [
+            "TypeError",
+            "Type information not valid, a tuple type needs the types of its items"
+        ]
+    },
+    "tuple item without type": {
+        "error": [
+            "TypeError",
+            "Type information not valid, a tuple type needs the types of its items"
+        ]
     }
 }
