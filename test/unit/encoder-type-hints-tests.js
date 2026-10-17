@@ -53,3 +53,21 @@ describe("Encoder with a vector element type given as a hint", function () {
         );
     });
 });
+
+describe("Encoder with missing type hints", function () {
+    const encoder = new Encoder(4, {});
+    const listOf = (subtype) => ({ code: dataTypes.list, info: subtype });
+
+    it("still guesses the type for null and undefined hints", function () {
+        for (const hint of [null, undefined]) {
+            assert.strictEqual(
+                encoder.encode(1, hint).toString("hex"),
+                "3ff0000000000000",
+            );
+            assert.strictEqual(
+                encoder.encode([1], listOf(hint)).toString("hex"),
+                "00000001" + "00000008" + "3ff0000000000000",
+            );
+        }
+    });
+});

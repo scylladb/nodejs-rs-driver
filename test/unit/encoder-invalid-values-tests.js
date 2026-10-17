@@ -196,3 +196,46 @@ describe("Encoder with values that it cannot encode", function () {
         });
     });
 });
+
+describe("Encoder with type hints that are falsy or not integer codes", function () {
+    const encoder = new Encoder(4, {});
+    // Before, any falsy hint counted as no hint, and the Encoder guessed the type:
+    // the number 1 became a double.
+    const falsyHints = [
+        ["false", false],
+        ["an empty string", ""],
+        ["NaN", NaN],
+        ["0, the code of custom", 0],
+    ];
+    const udtWith = (type) =>
+        t(dataTypes.udt, { name: "u", fields: [{ name: "a", type }] });
+
+    for (const [name, hint] of falsyHints) {
+        it(`rejects ${name}, at the top level and inside types`, function () {
+            for (const [value, type] of [
+                [1, hint],
+                [{ a: 1 }, udtWith(hint)],
+                [new types.Tuple(1), t(dataTypes.tuple, [hint])],
+                [[1], t(dataTypes.list, hint)],
+            ]) {
+                assert.throws(
+                    () => encoder.encode(value, type),
+                    TypeError,
+                    undefined,
+                    JSON.stringify(type),
+                );
+            }
+        });
+    }
+
+    it("rejects a type object whose code is not an integer", function () {
+        for (const code of [NaN, 1.5]) {
+            assert.throws(
+                () => encoder.encode(1, { code }),
+                TypeError,
+                "Type information not valid",
+                String(code),
+            );
+        }
+    });
+});
