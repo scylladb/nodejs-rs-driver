@@ -3,17 +3,16 @@ import type { CqlValue } from "../main";
 import Encoder = require("./encoder");
 import errors = require("./errors");
 import type { ColumnInfo } from "./types/cql-utils";
-import { GrowableBuffer } from "./growable-buffer";
+import { GrowableBuffer, MAX_RETAINED_FRAME_SIZE } from "./growable-buffer";
 
 /** Largest value count that the `[short]` count of a frame can hold. */
 const MAX_FRAME_VALUES = 0xffff;
-/** The buffer size of a new {@link FrameWriter}. */
-const INITIAL_FRAME_SIZE = 4096;
 /**
- * A {@link FrameWriter} keeps its buffer between frames up to this size.
- * After a larger frame, it starts again with a small buffer.
+ * The buffer size of a new {@link FrameWriter}.
+ * It must not be 0, because {@link GrowableBuffer.ensure} doubles the size.
+ * {@link MAX_RETAINED_FRAME_SIZE} must be this size times a power of 2. See its comment.
  */
-const MAX_RETAINED_FRAME_SIZE = 16 * INITIAL_FRAME_SIZE;
+const INITIAL_FRAME_SIZE = 4096;
 
 /**
  * Encodes values into values frames, in the request frame layout:

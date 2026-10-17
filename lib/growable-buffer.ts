@@ -1,4 +1,18 @@
 /**
+ * A FrameWriter keeps its buffer between frames up to this size.
+ * After a larger frame, it starts again with a small buffer.
+ * Thus, a writer must not make a buffer grow past this size for bytes that it does not write.
+ *
+ * This size must be `INITIAL_FRAME_SIZE` of `frame-writer.ts` times a power of 2.
+ * Then one of the doubled sizes of a FrameWriter buffer is exactly this size.
+ * The string encoders need this. They make room for an upper bound of the byte length
+ * only when it ends at most at this size. Thus, the buffer grows to at most this size.
+ * @internal
+ * @ignore
+ */
+export const MAX_RETAINED_FRAME_SIZE = 64 * 1024;
+
+/**
  * A buffer that grows when a write needs more room.
  *
  * Writers call {@link ensure} before each write, and then write into {@link buffer}.
