@@ -55,6 +55,21 @@ type ValueWriter = (
     columnInfo: ColumnInfo,
 ) => number;
 
+/**
+ * Calls a writer with a new small buffer.
+ * @returns A view of the bytes that the writer wrote.
+ */
+function writeToNewBuffer(
+    encoder: EncoderMembers,
+    writer: ValueWriter,
+    value: any,
+    columnInfo: ColumnInfo,
+): Buffer {
+    const out = new GrowableBuffer(WRITER_BUFFER_SIZE);
+    const end = writer.call(encoder, out, 0, value, columnInfo);
+    return out.buffer.subarray(0, end);
+}
+
 const bigInt32BitsOn = BigInt(0xffffffff);
 const bigInt8BitsOn = BigInt(0xff);
 const bigIntZero = BigInt(0);
@@ -252,7 +267,7 @@ class EncoderMembers {
     /** Selected from the encoding options, once, in the constructor. */
     decodeLong: (bytes: Buffer) => types.Long | bigint;
     decodeVarint: (bytes: Buffer) => types.Integer | bigint;
-    encodeLong: (value: any) => Buffer;
+    writeLong: ValueWriter;
     encodeVarint: (value: any) => Buffer;
 
     decoders: {
@@ -298,9 +313,9 @@ class EncoderMembers {
             ? this.#decodeVarintAsBigInt
             : this.#decodeVarintAsInteger;
 
-        this.encodeLong = encodingOptions.useBigIntAsLong
-            ? this.#encodeBigIntFromBigInt
-            : this.#encodeBigIntFromLong;
+        this.writeLong = encodingOptions.useBigIntAsLong
+            ? this.#writeBigIntFromBigInt
+            : this.#writeBigIntFromLong;
 
         this.encodeVarint = encodingOptions.useBigIntAsVarint
             ? this.#encodeVarintFromBigInt
@@ -338,9 +353,7 @@ class EncoderMembers {
 
         this.encoders = {
             [dataTypes.custom]: this.encodeCustom,
-            [dataTypes.bigint]: this.encodeLong,
             [dataTypes.blob]: this.encodeBlob,
-            [dataTypes.counter]: this.encodeLong,
             [dataTypes.decimal]: this.encodeDecimal,
             [dataTypes.float]: this.encodeFloat,
             [dataTypes.timestamp]: this.encodeTimestamp,
@@ -362,6 +375,8 @@ class EncoderMembers {
 
         this.writers = {
             [dataTypes.ascii]: this.writeAsciiString,
+            [dataTypes.bigint]: this.writeLong,
+            [dataTypes.counter]: this.writeLong,
             [dataTypes.text]: this.writeUtf8String,
             [dataTypes.varchar]: this.writeUtf8String,
             [dataTypes.boolean]: this.writeBoolean,
@@ -785,7 +800,7 @@ class EncoderMembers {
     /**
      * @private
      */
-    encodeTimestamp(value: any): Buffer {
+    encodeTimestamp(value: any, columnInfo: ColumnInfo): Buffer {
         const originalValue = value;
         if (typeof value === "string") {
             value = new Date(value);
@@ -800,7 +815,7 @@ class EncoderMembers {
         if (this.encodingOptions.useBigIntAsLong) {
             value = BigInt(value);
         }
-        return this.encodeLong(value);
+        return writeToNewBuffer(this, this.writeLong, value, columnInfo);
     }
 
     /**
@@ -894,33 +909,38 @@ class EncoderMembers {
     /**
      * @private
      */
-    #encodeBigIntFromLong(value: any): Buffer {
+    #writeBigIntFromLong(
+        out: GrowableBuffer,
+        start: number,
+        value: any,
+    ): number {
         if (typeof value === "number") {
             value = Long.fromNumber(value);
         } else if (typeof value === "string") {
             value = Long.fromString(value);
         }
 
-        let buf = null;
-
-        if (value instanceof Long) {
-            buf = (Long as any).toBuffer(value);
-        }
-
-        if (buf === null) {
+        if (!(value instanceof Long)) {
             throw new TypeError(
                 "Not a valid bigint, expected Long/Number/String/Buffer, obtained " +
                     util.inspect(value),
             );
         }
 
-        return buf;
+        out.ensure(start, 8);
+        out.buffer.writeUInt32BE(value.getHighBitsUnsigned(), start);
+        out.buffer.writeUInt32BE(value.getLowBitsUnsigned(), start + 4);
+        return start + 8;
     }
 
     /**
      * @private
      */
-    #encodeBigIntFromBigInt(value: any): Buffer {
+    #writeBigIntFromBigInt(
+        out: GrowableBuffer,
+        start: number,
+        value: any,
+    ): number {
         if (typeof value === "string") {
             // All numeric types are supported as strings for historical reasons
             value = BigInt(value);
@@ -933,10 +953,10 @@ class EncoderMembers {
             );
         }
 
-        const buffer = utils.allocBufferUnsafe(8);
-        buffer.writeUInt32BE(Number(value >> bigIntThirtyTwo) >>> 0, 0);
-        buffer.writeUInt32BE(Number(value & bigInt32BitsOn), 4);
-        return buffer;
+        out.ensure(start, 8);
+        out.buffer.writeUInt32BE(Number(value >> bigIntThirtyTwo) >>> 0, start);
+        out.buffer.writeUInt32BE(Number(value & bigInt32BitsOn), start + 4);
+        return start + 8;
     }
 
     /**
@@ -2379,9 +2399,7 @@ class Encoder extends EncoderMembers {
         const type = this.#resolveType(value, typeInfo);
         const writer = this.writers[type.code];
         if (writer) {
-            const out = new GrowableBuffer(WRITER_BUFFER_SIZE);
-            const end = writer.call(this, out, 0, value, type);
-            return out.buffer.subarray(0, end);
+            return writeToNewBuffer(this, writer, value, type);
         }
         return this.#encoderFor(type).call(this, value, type);
     }
