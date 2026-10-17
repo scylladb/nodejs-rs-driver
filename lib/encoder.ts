@@ -370,7 +370,6 @@ class EncoderMembers {
             [dataTypes.smallint]: this.encodeSmallint,
             [dataTypes.tinyint]: this.encodeTinyint,
             [dataTypes.duration]: encodeDuration,
-            [dataTypes.map]: this.encodeMap,
             [dataTypes.udt]: this.encodeUdt,
             [dataTypes.tuple]: this.encodeTuple,
         };
@@ -1200,76 +1199,6 @@ class EncoderMembers {
     /**
      * @private
      */
-    /**
-     * Serializes a map into a Buffer
-     * @param value
-     * @private
-     */
-    encodeMap(value: any, columnInfo: ColumnInfo): Buffer | null {
-        const subtypes = columnInfo.info as [ColumnInfo, ColumnInfo];
-        const parts: Array<Buffer> = [];
-        let propCounter = 0;
-        let keySubtype: ColumnInfo | null = null;
-        let valueSubtype: ColumnInfo | null = null;
-        if (subtypes) {
-            keySubtype = subtypes[0];
-            valueSubtype = subtypes[1];
-        }
-        const addItem = (val: any, key: any) => {
-            if (
-                key === null ||
-                typeof key === "undefined" ||
-                key === types.unset
-            ) {
-                throw new TypeError("A map can't contain null or unset keys");
-            }
-            if (
-                val === null ||
-                typeof val === "undefined" ||
-                val === types.unset
-            ) {
-                throw new TypeError("A map can't contain null or unset values");
-            }
-            const keyBuffer = this.encode(key, keySubtype) as Buffer;
-            // An empty collection is encoded as null, which a map can't contain as a key either.
-            if (keyBuffer === null) {
-                throw new TypeError("A map can't contain null or unset keys");
-            }
-            // include item byte length
-            parts.push(this.getLengthBuffer(keyBuffer));
-            // include item
-            parts.push(keyBuffer);
-            // value
-            const valueBuffer = this.encode(val, valueSubtype) as Buffer;
-            // include item byte length
-            parts.push(this.getLengthBuffer(valueBuffer));
-            // include item
-            if (valueBuffer !== null) {
-                parts.push(valueBuffer);
-            }
-            propCounter++;
-        };
-        if (
-            this.encodingOptions.map &&
-            value instanceof this.encodingOptions.map
-        ) {
-            // Use Map#forEach() method to iterate
-            value.forEach(addItem);
-        } else {
-            // Use object
-            for (const key in value) {
-                if (!Object.prototype.hasOwnProperty.call(value, key)) {
-                    continue;
-                }
-                const val = value[key];
-                addItem(val, key);
-            }
-        }
-
-        parts.unshift(this.getLengthBuffer(propCounter));
-        return Buffer.concat(parts);
-    }
-
     encodeUdt(value: any, columnInfo: ColumnInfo): Buffer | null {
         const udtInfo = columnInfo.info as UdtInfo;
         checkUdtInfo(udtInfo);
@@ -2189,6 +2118,7 @@ class Encoder extends EncoderMembers {
         // Collections need the private steps of Encoder to write their items.
         this.writers[dataTypes.list] = this.#writeList;
         this.writers[dataTypes.set] = this.#writeSet;
+        this.writers[dataTypes.map] = this.#writeMap;
         if (this.encodingOptions.copyBuffer) {
             this.handleBuffer = handleBufferCopy;
         } else {
@@ -2488,6 +2418,73 @@ class Encoder extends EncoderMembers {
             value = arr;
         }
         return this.#writeList(out, start, value, columnInfo);
+    }
+
+    /**
+     * Writes a map: the number of entries, then the key and the value of each entry,
+     * each with its length. The map is a plain object, or an instance of the
+     * `map` encoding option. Of a plain object, it writes only the own properties.
+     * @returns The offset after the map.
+     */
+    #writeMap(
+        out: GrowableBuffer,
+        start: number,
+        value: any,
+        columnInfo: ColumnInfo,
+    ): number {
+        const subtypes = columnInfo.info as [ColumnInfo, ColumnInfo];
+        let keySubtype: ColumnInfo | null = null;
+        let valueSubtype: ColumnInfo | null = null;
+        if (subtypes) {
+            keySubtype = subtypes[0];
+            valueSubtype = subtypes[1];
+        }
+        // The count comes first, but it is known only after the entries.
+        out.ensure(start, this.collectionLengthSize);
+        let end = start + this.collectionLengthSize;
+        let count = 0;
+        const addEntry = (val: any, key: any) => {
+            if (
+                key === null ||
+                typeof key === "undefined" ||
+                key === types.unset
+            ) {
+                throw new TypeError("A map can't contain null or unset keys");
+            }
+            if (
+                val === null ||
+                typeof val === "undefined" ||
+                val === types.unset
+            ) {
+                throw new TypeError("A map can't contain null or unset values");
+            }
+            const keyEnd = this.#writeItem(out, end, key, keySubtype);
+            if (keyEnd === null) {
+                throw new TypeError("A map can't contain null or unset keys");
+            }
+            // A value that is encoded as null, for example an empty list, gets length 0.
+            end =
+                this.#writeItem(out, keyEnd, val, valueSubtype) ??
+                this.#writeCollectionLength(out, keyEnd, 0);
+            count++;
+        };
+        if (
+            this.encodingOptions.map &&
+            value instanceof this.encodingOptions.map
+        ) {
+            // Use Map#forEach() method to iterate
+            value.forEach(addEntry);
+        } else {
+            // Use object
+            for (const key in value) {
+                if (!Object.prototype.hasOwnProperty.call(value, key)) {
+                    continue;
+                }
+                addEntry(value[key], key);
+            }
+        }
+        this.#writeCollectionLength(out, start, count);
+        return end;
     }
 
     /**
