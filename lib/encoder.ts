@@ -356,12 +356,9 @@ class EncoderMembers {
 
         this.legacyEncoders = {
             [dataTypes.custom]: this.encodeCustom,
-            [dataTypes.ascii]: this.encodeAsciiString,
             [dataTypes.blob]: this.encodeBlob,
             [dataTypes.decimal]: this.encodeDecimal,
-            [dataTypes.text]: this.encodeUtf8String,
             [dataTypes.uuid]: this.encodeUuid,
-            [dataTypes.varchar]: this.encodeUtf8String,
             [dataTypes.varint]: this.encodeVarint,
             [dataTypes.timeuuid]: this.encodeUuid,
             [dataTypes.inet]: this.encodeInet,
@@ -376,8 +373,11 @@ class EncoderMembers {
         };
 
         this.encoders = {
+            [dataTypes.ascii]: this.encodeAsciiString,
             [dataTypes.bigint]: this.encodeBigInt,
             [dataTypes.counter]: this.encodeBigInt,
+            [dataTypes.text]: this.encodeUtf8String,
+            [dataTypes.varchar]: this.encodeUtf8String,
             [dataTypes.boolean]: this.encodeBoolean,
             [dataTypes.double]: this.encodeDouble,
             [dataTypes.float]: this.encodeFloat,
@@ -1062,30 +1062,37 @@ class EncoderMembers {
     }
 
     /**
+     * Writes a string in the given encoding.
      * @private
      */
-    encodeString(value: any, encoding?: BufferEncoding): Buffer {
+    encodeString(
+        out: GrowableBuffer,
+        start: number,
+        value: any,
+        encoding: "utf8" | "ascii",
+    ): number {
         if (typeof value !== "string") {
             throw new TypeError(
                 "Not a valid text value, expected String obtained " +
                     util.inspect(value),
             );
         }
-        return utils.allocBufferFromString(value, encoding);
+        out.ensure(start, Buffer.byteLength(value, encoding));
+        return start + out.buffer.write(value, start, encoding);
     }
 
     /**
      * @private
      */
-    encodeUtf8String(value: any): Buffer {
-        return this.encodeString(value, "utf8");
+    encodeUtf8String(out: GrowableBuffer, start: number, value: any): number {
+        return this.encodeString(out, start, value, "utf8");
     }
 
     /**
      * @private
      */
-    encodeAsciiString(value: any): Buffer {
-        return this.encodeString(value, "ascii");
+    encodeAsciiString(out: GrowableBuffer, start: number, value: any): number {
+        return this.encodeString(out, start, value, "ascii");
     }
 
     /**
