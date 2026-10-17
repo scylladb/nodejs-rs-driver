@@ -94,4 +94,31 @@ describe("Encoder with values that it cannot encode", function () {
             );
         });
     });
+
+    describe("tuple values that are not tuples", function () {
+        const encoder = new Encoder(4, {});
+        const tuple = t(dataTypes.tuple, [int, text]);
+
+        for (const [name, value] of [
+            ["an array", [1, "x"]],
+            ["a number", 5],
+            ["a plain object", { get: 1, length: 2 }],
+        ]) {
+            it(`rejects ${name}`, function () {
+                assertRejects(
+                    encoder,
+                    value,
+                    tuple,
+                    "Not a valid tuple, expected Tuple obtained",
+                );
+            });
+        }
+
+        it("still writes a Tuple", function () {
+            assert.strictEqual(
+                encoder.encode(new types.Tuple(1, "x"), tuple).toString("hex"),
+                "00000004" + "00000001" + "00000001" + "78",
+            );
+        });
+    });
 });

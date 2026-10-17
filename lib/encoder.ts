@@ -1181,6 +1181,12 @@ class EncoderMembers {
      */
     encodeTuple(value: any, columnInfo: ColumnInfo): Buffer | null {
         const tupleInfo = columnInfo.info as Array<ColumnInfo>;
+        if (!(value instanceof types.Tuple)) {
+            throw new TypeError(
+                "Not a valid tuple, expected Tuple obtained " +
+                    util.inspect(value),
+            );
+        }
         const parts: Array<Buffer> = [];
         let totalLength = 0;
         const length = Math.min(tupleInfo.length, value.length);
