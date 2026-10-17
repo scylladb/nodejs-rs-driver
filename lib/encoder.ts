@@ -355,13 +355,9 @@ class EncoderMembers {
         this.encoders = {
             [dataTypes.blob]: this.encodeBlob,
             [dataTypes.decimal]: this.encodeDecimal,
-            [dataTypes.float]: this.encodeFloat,
             [dataTypes.varint]: this.encodeVarint,
-            [dataTypes.inet]: this.encodeInet,
             [dataTypes.date]: this.encodeDate,
             [dataTypes.time]: this.encodeTime,
-            [dataTypes.smallint]: this.encodeSmallint,
-            [dataTypes.tinyint]: this.encodeTinyint,
             [dataTypes.duration]: encodeDuration,
         };
 
@@ -373,6 +369,10 @@ class EncoderMembers {
             [dataTypes.varchar]: this.writeUtf8String,
             [dataTypes.boolean]: this.writeBoolean,
             [dataTypes.double]: this.writeDouble,
+            [dataTypes.float]: this.writeFloat,
+            [dataTypes.inet]: this.writeInet,
+            [dataTypes.smallint]: this.writeSmallint,
+            [dataTypes.tinyint]: this.writeTinyint,
             [dataTypes.int]: this.writeInt,
             [dataTypes.timestamp]: this.writeTimestamp,
             [dataTypes.timeuuid]: this.writeUuid,
@@ -742,7 +742,7 @@ class EncoderMembers {
     /**
      * @private
      */
-    encodeFloat(value: any): Buffer {
+    writeFloat(out: GrowableBuffer, start: number, value: any): number {
         if (typeof value === "string") {
             // All numeric types are supported as strings for historical reasons
             value = parseFloat(value);
@@ -760,9 +760,8 @@ class EncoderMembers {
             );
         }
 
-        const buf = utils.allocBufferUnsafe(4);
-        buf.writeFloatBE(value, 0);
-        return buf;
+        out.ensure(start, 4);
+        return out.buffer.writeFloatBE(value, start);
     }
 
     /**
@@ -889,7 +888,7 @@ class EncoderMembers {
     /**
      * @private
      */
-    encodeInet(value: any): Buffer {
+    writeInet(out: GrowableBuffer, start: number, value: any): number {
         if (typeof value === "string") {
             value = types.InetAddress.fromString(value);
         }
@@ -902,7 +901,8 @@ class EncoderMembers {
                     util.inspect(value),
             );
         }
-        return value;
+        out.ensure(start, value.length);
+        return start + value.copy(out.buffer, start);
     }
 
     /**
@@ -1137,29 +1137,27 @@ class EncoderMembers {
     /**
      * @private
      */
-    encodeSmallint(value: any): Buffer {
+    writeSmallint(out: GrowableBuffer, start: number, value: any): number {
         if (isNaN(value)) {
             throw new TypeError(
                 "Expected Number, obtained " + util.inspect(value),
             );
         }
-        const buf = utils.allocBufferUnsafe(2);
-        buf.writeInt16BE(value, 0);
-        return buf;
+        out.ensure(start, 2);
+        return out.buffer.writeInt16BE(value, start);
     }
 
     /**
      * @private
      */
-    encodeTinyint(value: any): Buffer {
+    writeTinyint(out: GrowableBuffer, start: number, value: any): number {
         if (isNaN(value)) {
             throw new TypeError(
                 "Expected Number, obtained " + util.inspect(value),
             );
         }
-        const buf = utils.allocBufferUnsafe(1);
-        buf.writeInt8(value, 0);
-        return buf;
+        out.ensure(start, 1);
+        return out.buffer.writeInt8(value, start);
     }
 
     /**
