@@ -132,9 +132,6 @@ const customTypeNames = Object.freeze({
     vector: "org.apache.cassandra.db.marshal.VectorType",
 });
 
-const nullValueBuffer = utils.allocBufferFromArray([255, 255, 255, 255]);
-const unsetValueBuffer = utils.allocBufferFromArray([255, 255, 255, 254]);
-
 /**
  * For backwards compatibility, empty buffers as text/blob/custom values are supported.
  * In the case of other types, they are going to be decoded as a `null` value.
@@ -375,8 +372,6 @@ class EncoderMembers {
             [dataTypes.smallint]: this.encodeSmallint,
             [dataTypes.tinyint]: this.encodeTinyint,
             [dataTypes.duration]: encodeDuration,
-            [dataTypes.udt]: this.encodeUdt,
-            [dataTypes.tuple]: this.encodeTuple,
         };
 
         this.writers = {
@@ -1197,78 +1192,6 @@ class EncoderMembers {
         const buf = utils.allocBufferUnsafe(1);
         buf.writeInt8(value, 0);
         return buf;
-    }
-
-    /**
-     * @private
-     */
-    encodeUdt(value: any, columnInfo: ColumnInfo): Buffer | null {
-        const udtInfo = columnInfo.info as UdtInfo;
-        checkUdtInfo(udtInfo);
-        const parts: Array<Buffer> = [];
-        let totalLength = 0;
-        for (let i = 0; i < udtInfo.fields.length; i++) {
-            const field = udtInfo.fields[i];
-            const item: any = this.encode(value[field.name], field.type);
-            if (!item) {
-                parts.push(nullValueBuffer);
-                totalLength += 4;
-                continue;
-            }
-            if (item === types.unset) {
-                parts.push(unsetValueBuffer);
-                totalLength += 4;
-                continue;
-            }
-            const lengthBuffer = utils.allocBufferUnsafe(4);
-            lengthBuffer.writeInt32BE(item.length, 0);
-            parts.push(lengthBuffer);
-            parts.push(item);
-            totalLength += item.length + 4;
-        }
-        return Buffer.concat(parts, totalLength);
-    }
-
-    /**
-     * @private
-     */
-    encodeTuple(value: any, columnInfo: ColumnInfo): Buffer | null {
-        const tupleInfo = columnInfo.info as Array<ColumnInfo>;
-        checkTupleInfo(tupleInfo);
-        if (!(value instanceof types.Tuple)) {
-            throw new TypeError(
-                "Not a valid tuple, expected Tuple obtained " +
-                    util.inspect(value),
-            );
-        }
-        const parts: Array<Buffer> = [];
-        let totalLength = 0;
-        const length = Math.min(tupleInfo.length, value.length);
-
-        for (let i = 0; i < length; i++) {
-            const type = tupleInfo[i];
-            const item: any = this.encode(value.get(i), type);
-
-            if (!item) {
-                parts.push(nullValueBuffer);
-                totalLength += 4;
-                continue;
-            }
-
-            if (item === types.unset) {
-                parts.push(unsetValueBuffer);
-                totalLength += 4;
-                continue;
-            }
-
-            const lengthBuffer = utils.allocBufferUnsafe(4);
-            lengthBuffer.writeInt32BE(item.length, 0);
-            parts.push(lengthBuffer);
-            parts.push(item);
-            totalLength += item.length + 4;
-        }
-
-        return Buffer.concat(parts, totalLength);
     }
 
     /**
@@ -2116,6 +2039,8 @@ class Encoder extends EncoderMembers {
         this.writers[dataTypes.list] = this.#writeList;
         this.writers[dataTypes.set] = this.#writeSet;
         this.writers[dataTypes.map] = this.#writeMap;
+        this.writers[dataTypes.udt] = this.#writeUdt;
+        this.writers[dataTypes.tuple] = this.#writeTuple;
         if (this.encodingOptions.copyBuffer) {
             this.handleBuffer = handleBufferCopy;
         } else {
@@ -2307,19 +2232,105 @@ class Encoder extends EncoderMembers {
         value: any,
         typeInfo?: any,
     ): number {
+        return this.#writeValueCell(
+            out,
+            offset,
+            value,
+            typeInfo,
+            UNSET_CELL_LENGTH,
+        );
+    }
+
+    /**
+     * Encodes a value as one cell, `[i32 length][bytes]`, at `offset` in `out`.
+     * A null value is written as length -1.
+     * @param unsetLength The length for an unset value.
+     * UDT and tuple fields use the null length for it.
+     * @returns The offset after the cell.
+     */
+    #writeValueCell(
+        out: GrowableBuffer,
+        offset: number,
+        value: any,
+        typeInfo: any,
+        unsetLength: number,
+    ): number {
         value = this.#normalizeValue(value);
-        if (value === types.unset) {
-            return Encoder.writeCell(out, offset, undefined);
-        }
-        if (value === null) {
-            return Encoder.writeCell(out, offset, null);
-        }
         // Make room for the length first: writing the bytes can grow the buffer,
         // and then it keeps only the bytes before their start.
         out.ensure(offset, 4);
         const start = offset + 4;
+        if (value === types.unset) {
+            out.buffer.writeInt32BE(unsetLength, offset);
+            return start;
+        }
+        if (value === null) {
+            out.buffer.writeInt32BE(NULL_CELL_LENGTH, offset);
+            return start;
+        }
         const end = this.#writeBytes(out, start, value, typeInfo);
         out.buffer.writeInt32BE(end - start, offset);
+        return end;
+    }
+
+    /**
+     * Writes a UDT: each field of the type as a cell, in the order of the type.
+     * A missing, null or unset field is written as null.
+     * @returns The offset after the UDT.
+     */
+    #writeUdt(
+        out: GrowableBuffer,
+        start: number,
+        value: any,
+        columnInfo: ColumnInfo,
+    ): number {
+        const udtInfo = columnInfo.info as UdtInfo;
+        checkUdtInfo(udtInfo);
+        const fields = udtInfo.fields;
+        let end = start;
+        for (let i = 0; i < fields.length; i++) {
+            const field = fields[i];
+            end = this.#writeValueCell(
+                out,
+                end,
+                value[field.name],
+                field.type,
+                NULL_CELL_LENGTH,
+            );
+        }
+        return end;
+    }
+
+    /**
+     * Writes a tuple: its items as cells, up to the shorter of the type and the value.
+     * A null or unset item is written as null.
+     * @returns The offset after the tuple.
+     */
+    #writeTuple(
+        out: GrowableBuffer,
+        start: number,
+        value: any,
+        columnInfo: ColumnInfo,
+    ): number {
+        const tupleInfo = columnInfo.info as Array<ColumnInfo>;
+        checkTupleInfo(tupleInfo);
+        if (!(value instanceof types.Tuple)) {
+            throw new TypeError(
+                "Not a valid tuple, expected Tuple obtained " +
+                    util.inspect(value),
+            );
+        }
+        const length = Math.min(tupleInfo.length, value.length);
+        let end = start;
+        for (let i = 0; i < length; i++) {
+            end = this.#writeValueCell(
+                out,
+                end,
+                value.get(i),
+                tupleInfo[i],
+                NULL_CELL_LENGTH,
+            );
+        }
         return end;
     }
 
