@@ -2352,7 +2352,73 @@ class Encoder extends EncoderMembers {
         value: any,
         typeInfo?: any,
     ): number {
-        return Encoder.writeCell(out, offset, this.encode(value, typeInfo));
+        value = this.#normalizeValue(value);
+        if (value === types.unset) {
+            return Encoder.writeCell(out, offset, undefined);
+        }
+        return this.#writeValueCell(out, offset, value, typeInfo);
+    }
+
+    /**
+     * Writes a value as one cell, `[i32 length][bytes]`, at `offset` in `out`.
+     * A null value is written as length -1.
+     * The caller must normalize the value, and write an unset value itself.
+     * @returns The offset after the cell.
+     */
+    #writeValueCell(
+        out: GrowableBuffer,
+        offset: number,
+        value: any,
+        typeInfo: any,
+    ): number {
+        if (value === null) {
+            return Encoder.writeCell(out, offset, null);
+        }
+        // We need to ensure room for both the length and the bytes.
+        //
+        // Naive approach: first ensure room for the length, then for the bytes.
+        // Problem: the buffer may grow twice. For example, a buffer of 16 bytes,
+        // and a value of 40 bytes with its cell at offset 14:
+        // the length (14-17) grows the buffer to 32, then the bytes writer (18-57) to 64.
+        //
+        // Clever approach: make the writer of the bytes ensure room for both the hole of the length and the bytes.
+        // For that, the bytes writer may start past the end of the buffer.
+        // It's OK, because GrowableBuffer.ensure allows it. Then in our example:
+        // the bytes writer grows the buffer to 64, and the length has room.
+        const start = offset + 4;
+        const end = this.#writeBytes(out, start, value, typeInfo);
+        // An encoder can skip `ensure` altogether in the zero bytes case. Then this call makes the buffer include the hole.
+        out.ensure(offset, 4);
+        out.buffer.writeInt32BE(end - start, offset);
+        return end;
+    }
+
+    /**
+     * Writes the bytes of a value that is not null or unset, at `start` in `out`.
+     * A Buffer is written as it is.
+     * Another value is encoded by the encoding function of its type and copied.
+     * @returns The offset after the bytes.
+     */
+    #writeBytes(
+        out: GrowableBuffer,
+        start: number,
+        value: any,
+        typeInfo: any,
+    ): number {
+        if (value instanceof Buffer) {
+            out.ensure(start, value.length);
+            out.buffer.set(value, start);
+            return start + value.length;
+        }
+        const type = this.#resolveType(value, typeInfo);
+        const bytes = this.#legacyEncoderFor(type).call(
+            this,
+            value,
+            type,
+        ) as Buffer;
+        out.ensure(start, bytes.length);
+        out.buffer.set(bytes, start);
+        return start + bytes.length;
     }
 
     /**

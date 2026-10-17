@@ -18,6 +18,10 @@ export class GrowableBuffer {
     /**
      * Makes room for `needed` more bytes after the first `used` bytes.
      * When the buffer grows, it copies only the `used` bytes.
+     * `used` can be past the end of the buffer. Then it copies the whole buffer.
+     * For example, the Encoder leaves a hole for the length of a cell, and writes the bytes
+     * of the cell after it. The hole can end past the buffer. Then the bytes start
+     * past the end of the buffer.
      */
     ensure(used: number, needed: number): void {
         if (used + needed <= this.buffer.length) return;
