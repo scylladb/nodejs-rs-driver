@@ -1167,6 +1167,19 @@ class EncoderMembers {
 
     encodeUdt(value: any, columnInfo: ColumnInfo): Buffer | null {
         const udtInfo = columnInfo.info as UdtInfo;
+        // The fields are read by name. Thus, a primitive, an array or a Map
+        // would give a UDT with every field null.
+        if (
+            value === null ||
+            typeof value !== "object" ||
+            Array.isArray(value) ||
+            value instanceof Map
+        ) {
+            throw new TypeError(
+                "Not a valid udt value, expected Object obtained " +
+                    util.inspect(value),
+            );
+        }
         const parts: Array<Buffer> = [];
         let totalLength = 0;
         for (let i = 0; i < udtInfo.fields.length; i++) {
@@ -1196,6 +1209,19 @@ class EncoderMembers {
      */
     encodeTuple(value: any, columnInfo: ColumnInfo): Buffer | null {
         const tupleInfo = columnInfo.info as Array<ColumnInfo>;
+        // Accept any object with get() and length, not only a Tuple of this
+        // copy of the driver.
+        if (
+            value === null ||
+            typeof value !== "object" ||
+            typeof value.get !== "function" ||
+            typeof value.length !== "number"
+        ) {
+            throw new TypeError(
+                "Not a valid tuple, expected Tuple obtained " +
+                    util.inspect(value),
+            );
+        }
         const parts: Array<Buffer> = [];
         let totalLength = 0;
         const length = Math.min(tupleInfo.length, value.length);
