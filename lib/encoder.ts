@@ -2344,6 +2344,24 @@ class Encoder extends EncoderMembers {
     }
 
     /**
+     * Encodes a value as one cell of a request frame, `[i32 length][bytes]`,
+     * and writes the cell at `offset` in `out`.
+     * It takes the same values and type information as {@link encode},
+     * and throws the same errors.
+     * A null value is written as length -1, and an unset value as length -2.
+     * @returns The offset after the cell.
+     * @throws {TypeError} When there is an encoding error
+     */
+    encodeInto(
+        out: GrowableBuffer,
+        offset: number,
+        value: any,
+        typeInfo?: any,
+    ): number {
+        return Encoder.writeCell(out, offset, this.encode(value, typeInfo));
+    }
+
+    /**
      * Parses the user provided value. This can be:
      * - null, which represents a CQL null value,
      * - types.unset, which represents an unset value,

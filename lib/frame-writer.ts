@@ -179,10 +179,11 @@ export class FrameWriter {
         const count = params ? params.length : 0;
         offset = this.#writeRowHeader(count, offset);
         for (let i = 0; i < count; i++) {
-            offset = Encoder.writeCell(
+            offset = encoder.encodeInto(
                 this.#out,
                 offset,
-                encoder.encode(params[i], expectedTypes[i]),
+                params[i],
+                expectedTypes[i],
             );
         }
         return offset;
