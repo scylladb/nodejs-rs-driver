@@ -76,6 +76,17 @@ describe("Encoder.encodeInto", function () {
         );
     });
 
+    it("grows the buffer by the exact byte length of a long string", function () {
+        const encoder = new Encoder(4, {});
+        for (const code of [dataTypes.ascii, dataTypes.text]) {
+            const out = new GrowableBuffer(4096);
+            const end = encoder.encodeInto(out, 0, "a".repeat(30000), t(code));
+            assert.strictEqual(end, 30004);
+            // 3 bytes for each character would grow the buffer to 128 KiB.
+            assert.strictEqual(out.buffer.length, 32768, String(code));
+        }
+    });
+
     it("throws the errors of encode", function () {
         const encoder = new Encoder(4, {});
         const bad = [
