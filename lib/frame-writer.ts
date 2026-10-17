@@ -3,6 +3,7 @@ import type { CqlValue } from "../main";
 import Encoder = require("./encoder");
 import errors = require("./errors");
 import type { ColumnInfo } from "./types/cql-utils";
+import { GrowableBuffer } from "./growable-buffer";
 
 /** Largest value count that the `[short]` count of a frame can hold. */
 const MAX_FRAME_VALUES = 0xffff;
@@ -40,7 +41,7 @@ const MAX_RETAINED_FRAME_SIZE = 16 * INITIAL_FRAME_SIZE;
  * A nested frame on the same writer throws, because it would overwrite the frame in progress.
  */
 export class FrameWriter {
-    #buffer = Buffer.allocUnsafe(INITIAL_FRAME_SIZE);
+    #out = new GrowableBuffer(INITIAL_FRAME_SIZE);
     #busy = false;
 
     /**
@@ -82,8 +83,8 @@ export class FrameWriter {
             );
         }
         return this.#frame(() => {
-            this.#ensure(0, 2);
-            this.#buffer.writeUInt16BE(params.length, 0);
+            this.#out.ensure(0, 2);
+            this.#out.buffer.writeUInt16BE(params.length, 0);
             let offset = 2;
             for (let i = 0; i < params.length; i++) {
                 offset = this.#writeParamsRow(
@@ -137,29 +138,16 @@ export class FrameWriter {
         }
         this.#busy = true;
         try {
-            // Call write first: it can replace this.#buffer when the frame grows.
+            // Call write first: it can replace this.#out.buffer when the frame grows.
             const end = write();
-            return this.#buffer.subarray(0, end);
+            return this.#out.buffer.subarray(0, end);
         } finally {
             this.#busy = false;
             // The returned frame keeps a large buffer alive until Rust has copied it.
-            if (this.#buffer.length > MAX_RETAINED_FRAME_SIZE) {
-                this.#buffer = Buffer.allocUnsafe(INITIAL_FRAME_SIZE);
+            if (this.#out.buffer.length > MAX_RETAINED_FRAME_SIZE) {
+                this.#out = new GrowableBuffer(INITIAL_FRAME_SIZE);
             }
         }
-    }
-
-    /**
-     * Makes room for `needed` more bytes after the first `used` bytes.
-     * When the buffer grows, it copies only the `used` bytes.
-     */
-    #ensure(used: number, needed: number): void {
-        if (used + needed <= this.#buffer.length) return;
-        let size = this.#buffer.length * 2;
-        while (size < used + needed) size *= 2;
-        const grown = Buffer.allocUnsafe(size);
-        this.#buffer.copy(grown, 0, 0, used);
-        this.#buffer = grown;
     }
 
     /**
@@ -173,8 +161,8 @@ export class FrameWriter {
                 `Too many values: ${count}, the maximum is ${MAX_FRAME_VALUES}`,
             );
         }
-        this.#ensure(offset, 2);
-        this.#buffer.writeUInt16BE(count, offset);
+        this.#out.ensure(offset, 2);
+        this.#out.buffer.writeUInt16BE(count, offset);
         return offset + 2;
     }
 
@@ -196,7 +184,7 @@ export class FrameWriter {
                 // Fails to compile if the parameter type gets a member that is not a Uint8Array.
                 value satisfies Uint8Array;
                 offset = this.#writeLength(value.length, offset, value.length);
-                this.#buffer.set(value, offset);
+                this.#out.buffer.set(value, offset);
                 return offset + value.length;
         }
     }
@@ -206,8 +194,8 @@ export class FrameWriter {
      * @returns The offset after the length.
      */
     #writeLength(length: number, offset: number, bytes: number = 0): number {
-        this.#ensure(offset, 4 + bytes);
-        this.#buffer.writeInt32BE(length, offset);
+        this.#out.ensure(offset, 4 + bytes);
+        this.#out.buffer.writeInt32BE(length, offset);
         return offset + 4;
     }
 
