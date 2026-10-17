@@ -2313,11 +2313,29 @@ class Encoder extends EncoderMembers {
      * @throws {TypeError} When there is an encoding error
      */
     encode(value: any, typeInfo?: any): Buffer | null | undefined {
-        // Here, we parse the user provided value. This can be:
-        // - null which represents a CQL null value.
-        // - types.unset which represents an unset value
-        // - undefined which depending on the options, we change into one of the above values
-        // - a regular value
+        value = this.#normalizeValue(value);
+        // For the internal representation, types.unset becomes undefined.
+        // This is only an internal convention. It does not change the meaning of the value provided by the user.
+        if (value === types.unset) {
+            return undefined;
+        }
+        if (value === null || value instanceof Buffer) {
+            return value;
+        }
+        const type = this.#resolveType(value, typeInfo);
+        return this.#encoderFor(type).call(this, value, type);
+    }
+
+    /**
+     * Parses the user provided value. This can be:
+     * - null, which represents a CQL null value,
+     * - types.unset, which represents an unset value,
+     * - undefined, which becomes one of the above values, by the options,
+     * - a regular value.
+     * @returns The value, with undefined replaced.
+     * @throws {TypeError} When the value is unset, and the protocol version does not support unset values
+     */
+    #normalizeValue(value: any): any {
         if (value === undefined) {
             value =
                 this.encodingOptions.useUndefinedAsUnset &&
@@ -2325,24 +2343,24 @@ class Encoder extends EncoderMembers {
                     ? types.unset
                     : null;
         }
-
-        // And here, for the the internal representation, we change the types.unset into undefined
-        // This is only internal convention and it does not interfere with the meaning of the value provided by the user
-        if (value === types.unset) {
-            if (!types.protocolVersion.supportsUnset(this.protocolVersion)) {
-                throw new TypeError(
-                    "Unset value can not be used for this version of Cassandra, protocol version: " +
-                        this.protocolVersion,
-                );
-            }
-
-            return undefined;
+        if (
+            value === types.unset &&
+            !types.protocolVersion.supportsUnset(this.protocolVersion)
+        ) {
+            throw new TypeError(
+                "Unset value can not be used for this version of Cassandra, protocol version: " +
+                    this.protocolVersion,
+            );
         }
+        return value;
+    }
 
-        if (value === null || value instanceof Buffer) {
-            return value;
-        }
-
+    /**
+     * Gets the type to encode a regular value with, from the type information,
+     * or guessed from the value when there is no type information.
+     * @throws {TypeError} When the type information is not valid, or the type cannot be guessed
+     */
+    #resolveType(value: any, typeInfo: any): any {
         let type: any = null;
 
         // Only null and undefined mean "no hint". Other falsy values, such as
@@ -2359,14 +2377,18 @@ class Encoder extends EncoderMembers {
                 );
             }
         }
+        return type;
+    }
 
+    /**
+     * @throws {Error} When the type is not supported
+     */
+    #encoderFor(type: any): (value: any, type: any) => any {
         const encoder = this.encoders[type.code];
-
         if (!encoder) {
             throw new Error("Type not supported " + type.code);
         }
-
-        return encoder.call(this, value, type);
+        return encoder;
     }
 
     /**
