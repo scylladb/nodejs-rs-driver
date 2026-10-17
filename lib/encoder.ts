@@ -127,6 +127,11 @@ const customEncoders: { [typeName: string]: (value: any) => Buffer } = {
 function typeFromHint(typeInfo: any): any {
     let type: any = null;
     if (typeof typeInfo === "number") {
+        if (!Number.isInteger(typeInfo)) {
+            throw new TypeError(
+                "Type information not valid, only String and Number values are valid hints",
+            );
+        }
         type = {
             code: typeInfo,
         };
@@ -2343,7 +2348,9 @@ class Encoder extends EncoderMembers {
 
         let type: any = null;
 
-        if (typeInfo) {
+        // Only null and undefined mean "no hint". Other falsy values, such as
+        // false, 0 or "", are hints too: 0 is the code of custom, and the others are not valid.
+        if (typeInfo !== null && typeInfo !== undefined) {
             type = typeFromHint(typeInfo);
         } else {
             // Lets guess
