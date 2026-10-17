@@ -1,9 +1,11 @@
 "use strict";
 
 const { assert } = require("chai");
+const sinon = require("sinon");
 const Encoder = require("../../lib/encoder");
 const types = require("../../lib/types");
 const { GrowableBuffer } = require("../../lib/growable-buffer");
+const { VIntCoding } = require("../../lib/utils");
 
 const { dataTypes } = types;
 const t = (code, info) => ({ code, info });
@@ -155,10 +157,23 @@ describe("Encoder.encodeInto", function () {
             [tupleType, empty, "00000000"],
             // A list of one tuple: the length of the list, the count, and the length of the tuple.
             [t(dataTypes.list, tupleType), [empty], "000000080000000100000000"],
+            // A vector of one tuple: the length of the vector, and the vint of the tuple.
+            // In a buffer of 12 bytes, the vint starts at the end of the buffer.
+            [
+                {
+                    code: dataTypes.custom,
+                    customTypeName: "vector",
+                    info: [tupleType, 1],
+                },
+                new types.Vector([empty], "tuple<int>"),
+                "0000000100",
+                12,
+            ],
         ];
-        for (const [type, value, hex] of cases) {
-            const out = new GrowableBuffer(8);
+        for (const [type, value, hex, size = 8] of cases) {
+            const out = new GrowableBuffer(size);
             const end = encoder.encodeInto(out, 8, value, type);
+            assert.isAtLeast(out.buffer.length, end, hex);
             assert.strictEqual(out.buffer.toString("hex", 8, end), hex);
         }
     });
@@ -207,6 +222,16 @@ describe("Encoder.encodeInto", function () {
                 { ["a".repeat(30)]: 1 },
                 10,
             ],
+            // The length at 12-15, the element with its vint at 16-56.
+            [
+                {
+                    code: dataTypes.custom,
+                    customTypeName: "vector",
+                    info: [t(dataTypes.blob), 1],
+                },
+                new types.Vector([bytes], "blob"),
+                12,
+            ],
         ];
         for (const [type, value, offset] of cases) {
             const out = new RecordingBuffer(16);
@@ -219,6 +244,115 @@ describe("Encoder.encodeInto", function () {
                     .equals(expectedCell(encoder, value, type)),
                 at,
             );
+        }
+    });
+});
+
+describe("Encoder.encodeInto with a vector of a type with a variable size", function () {
+    const vectorType = (code, dimension) => ({
+        code: dataTypes.custom,
+        customTypeName: "vector",
+        info: [{ code }, dimension],
+    });
+
+    it("writes the length of each element as an unsigned vint, before the bytes", function () {
+        const encoder = new Encoder(4, {});
+        // Byte lengths at the edges of the vint sizes: 1, 2, 3 and 4 bytes.
+        const elements = [
+            "",
+            "zażółć",
+            "a".repeat(127),
+            "ł".repeat(64),
+            "a".repeat(16383),
+            "a".repeat(16384),
+            "a".repeat(2097151),
+            "a".repeat(2097152),
+        ];
+        const parts = [];
+        for (const element of elements) {
+            const bytes = Buffer.from(element, "utf8");
+            parts.push(VIntCoding.uvintPack(bytes.length), bytes);
+        }
+        const expected = Buffer.concat(parts);
+        const cell = cellFromEncodeInto(
+            encoder,
+            new types.Vector(elements, "text"),
+            vectorType(dataTypes.text, elements.length),
+        );
+        assert.strictEqual(cell.readInt32BE(0), expected.length);
+        assert.isTrue(cell.subarray(4).equals(expected));
+    });
+
+    it("grows the buffer only for bytes that it writes", function () {
+        const encoder = new Encoder(4, {});
+        // The cell has 4 bytes of length, a vint of 2 bytes, and 1,000 bytes.
+        // The vint needs more than 1 byte. Thus, the bytes move by 1 byte.
+        const element = Buffer.alloc(1000, 7);
+        const cases = [
+            // The cell ends at 64 KiB. The buffer does not grow.
+            [64530, 65536],
+            // The cell ends 1 byte after 64 KiB. The move grows the buffer,
+            // and the bytes and the vint go into the new buffer.
+            [64531, 131072],
+        ];
+        for (const [offset, size] of cases) {
+            const out = new GrowableBuffer(65536);
+            const end = encoder.encodeInto(
+                out,
+                offset,
+                new types.Vector([element], "blob"),
+                vectorType(dataTypes.blob, 1),
+            );
+            const at = `offset ${offset}`;
+            assert.strictEqual(end, offset + 1006, at);
+            assert.strictEqual(out.buffer.length, size, at);
+            assert.strictEqual(out.buffer.readInt32BE(offset), 1002, at);
+            assert.strictEqual(
+                out.buffer.toString("hex", offset + 4, offset + 6),
+                VIntCoding.uvintPack(1000).toString("hex"),
+                at,
+            );
+            assert.isTrue(
+                out.buffer.subarray(offset + 6, end).equals(element),
+                at,
+            );
+        }
+    });
+
+    it("does not allocate a Buffer for an element", function () {
+        const cases = [
+            [
+                new Encoder(4, {}),
+                "text",
+                dataTypes.text,
+                Array.from({ length: 128 }, () => "a".repeat(1000)),
+            ],
+            [
+                new Encoder(4, { encoding: { useBigIntAsVarint: true } }),
+                "varint",
+                dataTypes.varint,
+                Array.from({ length: 8192 }, () => 0n),
+            ],
+        ];
+        for (const [encoder, subtype, code, elements] of cases) {
+            const vector = new types.Vector(elements, subtype);
+            const type = vectorType(code, elements.length);
+            // The buffer has room for the whole vector. Thus, it does not grow.
+            const out = new GrowableBuffer(1 << 20);
+            const spies = [
+                "allocUnsafe",
+                "allocUnsafeSlow",
+                "alloc",
+                "from",
+            ].map((name) => sinon.spy(Buffer, name));
+            try {
+                encoder.encodeInto(out, 0, vector, type);
+            } finally {
+                spies.forEach((spy) => spy.restore());
+            }
+            for (const spy of spies) {
+                assert.strictEqual(spy.callCount, 0, `${subtype}: ${spy}`);
+            }
         }
     });
 });

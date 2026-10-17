@@ -1974,7 +1974,7 @@ class Encoder extends EncoderMembers {
         this.encoders[dataTypes.map] = this.#encodeMap;
         this.encoders[dataTypes.udt] = this.#encodeUdt;
         this.encoders[dataTypes.tuple] = this.#encodeTuple;
-        this.legacyEncoders[dataTypes.custom] = this.#encodeCustom;
+        this.encoders[dataTypes.custom] = this.#encodeCustom;
         if (this.encodingOptions.copyBuffer) {
             this.handleBuffer = handleBufferCopy;
         } else {
@@ -2463,12 +2463,21 @@ class Encoder extends EncoderMembers {
         return end;
     }
 
-    #encodeCustom(value: any, columnInfo: ColumnInfo): Buffer {
+    /**
+     * Writes a value of a custom type: a vector, or a type in `customEncoders`.
+     * @returns The offset after the value.
+     */
+    #encodeCustom(
+        out: GrowableBuffer,
+        start: number,
+        value: any,
+        columnInfo: ColumnInfo,
+    ): number {
         if (
             "customTypeName" in columnInfo &&
             columnInfo.customTypeName === "vector"
         ) {
-            return this.#encodeVector(value, columnInfo);
+            return this.#encodeVector(out, start, value, columnInfo);
         }
 
         if (
@@ -2476,19 +2485,32 @@ class Encoder extends EncoderMembers {
             columnInfo.info.startsWith(customTypeNames.vector)
         ) {
             const vectorColumnInfo = this.parseFqTypeName(columnInfo.info);
-            return this.#encodeVector(value, vectorColumnInfo);
+            return this.#encodeVector(out, start, value, vectorColumnInfo);
         }
 
         const handler = customEncoders[columnInfo.info as string];
         if (handler) {
-            return handler.call(this, value);
+            const bytes = handler.call(this, value);
+            out.ensure(start, bytes.length);
+            out.buffer.set(bytes, start);
+            return start + bytes.length;
         }
         throw new TypeError(
             "No encoding handler found for type " + util.inspect(columnInfo),
         );
     }
 
-    #encodeVector(value: any, params: any): Buffer {
+    /**
+     * Writes a vector: its elements one after another.
+     * An element of a type with a variable size has its length before it, as an unsigned vint.
+     * @returns The offset after the vector.
+     */
+    #encodeVector(
+        out: GrowableBuffer,
+        start: number,
+        value: any,
+        params: any,
+    ): number {
         checkVectorInfo(params.info);
         if (!(value instanceof Vector)) {
             throw new TypeError(
@@ -2503,21 +2525,79 @@ class Encoder extends EncoderMembers {
             );
         }
 
-        const serializationSize = this.serializationSizeIfFixed(params.info[0]);
-        const encoded: Array<Buffer> = [];
+        const subtype = params.info[0];
+        const serializationSize = this.serializationSizeIfFixed(subtype);
+        let end = start;
         for (const elem of value) {
             if (elem === null || elem === undefined || elem === types.unset) {
                 throw new TypeError(
                     "A vector can't contain null or unset values",
                 );
             }
-            const elemBuffer = this.encode(elem, params.info[0]) as Buffer;
-            if (serializationSize === -1) {
-                encoded.push(utils.VIntCoding.uvintPack(elemBuffer.length));
+            if (serializationSize !== -1) {
+                end = this.#writeBytes(out, end, elem, subtype);
+                continue;
             }
-            encoded.push(elemBuffer);
+            end = this.#writeVectorElement(out, end, elem, subtype);
         }
-        return Buffer.concat(encoded);
+        return end;
+    }
+
+    /**
+     * Writes an element of a vector, of a type with a variable size, at `offset`:
+     * its length as an unsigned vint, and then its bytes.
+     * The size of the vint depends on the length. Thus, the bytes are written first,
+     * 1 byte after `offset`, because each vint has at least 1 byte.
+     * When the vint needs more bytes, the bytes move to make room for it.
+     * @returns The offset after the element.
+     */
+    #writeVectorElement(
+        out: GrowableBuffer,
+        offset: number,
+        value: any,
+        typeInfo: any,
+    ): number {
+        // We need room for both the vint and the bytes, as in #writeValueCell.
+        // The size of the vint depends on the length of the bytes.
+        // Thus, we know the size only after we write the bytes.
+        // Each vint has at least 1 byte. Thus, leave a hole of 1 byte for the vint,
+        // and write the bytes after it.
+        //
+        // Naive approach: first ensure room for the hole, then for the bytes.
+        // Problem: the buffer may grow twice. For example, a buffer of 16 bytes,
+        // and an element of 40 bytes at offset 16:
+        // `ensure` for the hole (16) grows the buffer to 32, then the bytes writer (17-56) to 64.
+        //
+        // Clever approach: as in #writeValueCell, do not ensure room for the hole first.
+        // The hole is before the bytes. Thus, the `ensure` call of the bytes writer covers it too.
+        // Then in our example: the bytes writer grows the buffer to 64,
+        // and the buffer includes the hole.
+        const start = offset + 1;
+        let end = this.#writeBytes(out, start, value, typeInfo);
+        const length = end - start;
+        const lengthSize = utils.VIntCoding.uvintSize(length);
+        if (lengthSize > 1) {
+            // The vint needs more than 1 byte, but the hole has 1 byte.
+            // Thus, the bytes move to make the hole larger.
+            // For example, an element of 200 bytes at offset 16 needs a vint of 2 bytes:
+            // - the bytes writer writes the bytes at 17-216, after the hole at 16,
+            // - this code moves the bytes to 18-217, and writes the vint into the hole at 16-17.
+            // This call ensures room for the bytes that move past `end`.
+            // The hole is before `end`. Thus, the buffer already includes it.
+            // copyWithin is correct when the source and the target overlap.
+            out.ensure(end, lengthSize - 1);
+            out.buffer.copyWithin(offset + lengthSize, start, end);
+            end += lengthSize - 1;
+        } else {
+            // The vint has 1 byte. It fits in the hole, and the bytes do not move.
+            // When the bytes writer writes 1 byte or more, the buffer already includes the hole.
+            // An encoder can skip `ensure` altogether in the zero bytes case.
+            // Then this call makes the buffer include the hole. For example, an empty tuple
+            // with its hole at the end of the buffer.
+            out.ensure(offset, 1);
+        }
+        utils.VIntCoding.uvintWrite(length, out.buffer, offset);
+        return end;
     }
 
     /**

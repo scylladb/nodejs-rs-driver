@@ -1152,11 +1152,53 @@ const VIntCoding = (function () {
         return Buffer.from(rv);
     }
 
+    /**
+     * Gets the number of bytes of `value` as an unsigned vint.
+     * @param value An integer from 0 to 2^32 - 1.
+     */
+    function uvintSize(value: number): number {
+        if (value < 0x80) {
+            return 1;
+        }
+        if (value < 0x4000) {
+            return 2;
+        }
+        if (value < 0x200000) {
+            return 3;
+        }
+        if (value < 0x10000000) {
+            return 4;
+        }
+        return 5;
+    }
+
+    /**
+     * Writes `value` as an unsigned vint at `offset` in `buffer`, in the format that
+     * {@link uvintUnpack} reads.
+     * It does not make room: `buffer` must have room for {@link uvintSize} bytes after `offset`.
+     * @param value An integer from 0 to 2^32 - 1.
+     * @returns The number of bytes of the vint.
+     */
+    function uvintWrite(value: number, buffer: Buffer, offset: number): number {
+        const size = uvintSize(value);
+        let v = value;
+        for (let i = size - 1; i > 0; i--) {
+            buffer[offset + i] = v & 0xff;
+            v >>>= 8;
+        }
+        // The first byte has a 1 bit for each byte after it, then a 0 bit,
+        // and then the high bits of the value.
+        buffer[offset] = ((0xff00 >> (size - 1)) & 0xff) | v;
+        return size;
+    }
+
     return {
         readVInt: readVInt,
         writeVInt: writeVInt,
         uvintPack: uvintPack,
         uvintUnpack: uvintUnpack,
+        uvintSize: uvintSize,
+        uvintWrite: uvintWrite,
     };
 })();
 
