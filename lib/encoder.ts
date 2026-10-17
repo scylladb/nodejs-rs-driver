@@ -35,6 +35,11 @@ const buffers = {
 const NULL_CELL_LENGTH = -1;
 /** The length of an unset cell in a request frame. */
 const UNSET_CELL_LENGTH = -2;
+/**
+ * A string writer grows the buffer by the upper bound of the byte length of the string
+ * only up to this size. For a longer string, it grows the buffer by the exact byte length.
+ */
+const MAX_STRING_GROWTH_BY_UPPER_BOUND = 16 * 1024;
 /** The size of the buffer that {@link Encoder.encode} gives to a writer. */
 const WRITER_BUFFER_SIZE = 16;
 
@@ -343,16 +348,13 @@ class EncoderMembers {
 
         this.encoders = {
             [dataTypes.custom]: this.encodeCustom,
-            [dataTypes.ascii]: this.encodeAsciiString,
             [dataTypes.bigint]: this.encodeLong,
             [dataTypes.blob]: this.encodeBlob,
             [dataTypes.counter]: this.encodeLong,
             [dataTypes.decimal]: this.encodeDecimal,
             [dataTypes.float]: this.encodeFloat,
-            [dataTypes.text]: this.encodeUtf8String,
             [dataTypes.timestamp]: this.encodeTimestamp,
             [dataTypes.uuid]: this.encodeUuid,
-            [dataTypes.varchar]: this.encodeUtf8String,
             [dataTypes.varint]: this.encodeVarint,
             [dataTypes.timeuuid]: this.encodeUuid,
             [dataTypes.inet]: this.encodeInet,
@@ -369,6 +371,9 @@ class EncoderMembers {
         };
 
         this.writers = {
+            [dataTypes.ascii]: this.writeAsciiString,
+            [dataTypes.text]: this.writeUtf8String,
+            [dataTypes.varchar]: this.writeUtf8String,
             [dataTypes.boolean]: this.writeBoolean,
             [dataTypes.double]: this.writeDouble,
             [dataTypes.int]: this.writeInt,
@@ -1040,30 +1045,50 @@ class EncoderMembers {
     }
 
     /**
+     * Writes a string in the given encoding.
      * @private
      */
-    encodeString(value: any, encoding?: BufferEncoding): Buffer {
+    writeString(
+        out: GrowableBuffer,
+        start: number,
+        value: any,
+        encoding: "utf8" | "ascii",
+    ): number {
         if (typeof value !== "string") {
             throw new TypeError(
                 "Not a valid text value, expected String obtained " +
                     util.inspect(value),
             );
         }
-        return utils.allocBufferFromString(value, encoding);
+        // UTF-8 needs at most 3 bytes for each UTF-16 code unit, and ASCII needs 1.
+        // Measuring the exact byte length costs one more pass over the string.
+        // Thus, grow by the upper bound while it is small.
+        // For a long string, the upper bound could make the buffer much larger than necessary.
+        // Thus, grow by the exact byte length.
+        const maxBytes = encoding === "ascii" ? value.length : value.length * 3;
+        if (start + maxBytes > out.buffer.length) {
+            out.ensure(
+                start,
+                maxBytes <= MAX_STRING_GROWTH_BY_UPPER_BOUND
+                    ? maxBytes
+                    : Buffer.byteLength(value, encoding),
+            );
+        }
+        return start + out.buffer.write(value, start, encoding);
     }
 
     /**
      * @private
      */
-    encodeUtf8String(value: any): Buffer {
-        return this.encodeString(value, "utf8");
+    writeUtf8String(out: GrowableBuffer, start: number, value: any): number {
+        return this.writeString(out, start, value, "utf8");
     }
 
     /**
      * @private
      */
-    encodeAsciiString(value: any): Buffer {
-        return this.encodeString(value, "ascii");
+    writeAsciiString(out: GrowableBuffer, start: number, value: any): number {
+        return this.writeString(out, start, value, "ascii");
     }
 
     /**
