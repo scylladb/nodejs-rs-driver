@@ -1052,6 +1052,12 @@ class EncoderMembers {
                 );
             }
             const bytes = this.encode(val, subtype) as Buffer;
+            // An empty collection is encoded as null, which a collection can't contain either.
+            if (bytes === null) {
+                throw new TypeError(
+                    "A collection can't contain null or unset values",
+                );
+            }
             // include item byte length
             parts.push(this.getLengthBuffer(bytes));
             // include item
@@ -1105,6 +1111,10 @@ class EncoderMembers {
                 throw new TypeError("A map can't contain null or unset values");
             }
             const keyBuffer = this.encode(key, keySubtype) as Buffer;
+            // An empty collection is encoded as null, which a map can't contain as a key either.
+            if (keyBuffer === null) {
+                throw new TypeError("A map can't contain null or unset keys");
+            }
             // include item byte length
             parts.push(this.getLengthBuffer(keyBuffer));
             // include item
@@ -1306,7 +1316,18 @@ class EncoderMembers {
         const serializationSize = this.serializationSizeIfFixed(params.info[0]);
         const encoded: Array<Buffer> = [];
         for (const elem of value) {
+            if (elem === null || elem === undefined || elem === types.unset) {
+                throw new TypeError(
+                    "A vector can't contain null or unset values",
+                );
+            }
             const elemBuffer = this.encode(elem, params.info[0]) as Buffer;
+            // An empty collection is encoded as null, which a vector can't contain either.
+            if (elemBuffer === null) {
+                throw new TypeError(
+                    "A vector can't contain null or unset values",
+                );
+            }
             if (serializationSize === -1) {
                 encoded.push(utils.VIntCoding.uvintPack(elemBuffer.length));
             }
