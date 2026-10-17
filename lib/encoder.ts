@@ -373,7 +373,6 @@ class EncoderMembers {
 
         this.legacyEncoders = {
             [dataTypes.custom]: this.encodeCustom,
-            [dataTypes.blob]: this.encodeBlob,
             [dataTypes.decimal]: this.encodeDecimal,
             [dataTypes.uuid]: this.encodeUuid,
             [dataTypes.varint]: this.encodeVarint,
@@ -395,6 +394,7 @@ class EncoderMembers {
             [dataTypes.counter]: this.encodeBigInt,
             [dataTypes.text]: this.encodeUtf8String,
             [dataTypes.varchar]: this.encodeUtf8String,
+            [dataTypes.blob]: this.encodeBlob,
             [dataTypes.boolean]: this.encodeBoolean,
             [dataTypes.double]: this.encodeDouble,
             [dataTypes.float]: this.encodeFloat,
@@ -1121,18 +1121,19 @@ class EncoderMembers {
     encodeAsciiString(out: GrowableBuffer, start: number, value: any): number {
         return this.encodeString(out, start, value, "ascii");
     }
-
     /**
      * @private
      */
-    encodeBlob(value: any): Buffer {
+    encodeBlob(out: GrowableBuffer, start: number, value: any): number {
         if (!(value instanceof Buffer)) {
             throw new TypeError(
                 "Not a valid blob, expected Buffer obtained " +
                     util.inspect(value),
             );
         }
-        return value;
+        out.ensure(start, value.length);
+        out.buffer.set(value, start);
+        return start + value.length;
     }
 
     encodeCustom(value: any, columnInfo: ColumnInfo): Buffer {
