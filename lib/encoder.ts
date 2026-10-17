@@ -363,7 +363,6 @@ class EncoderMembers {
             [dataTypes.custom]: this.encodeCustom,
             [dataTypes.decimal]: this.encodeDecimal,
             [dataTypes.varint]: this.encodeVarint,
-            [dataTypes.inet]: this.encodeInet,
             [dataTypes.date]: this.encodeDate,
             [dataTypes.time]: this.encodeTime,
             [dataTypes.duration]: encodeDuration,
@@ -384,6 +383,7 @@ class EncoderMembers {
             [dataTypes.boolean]: this.encodeBoolean,
             [dataTypes.double]: this.encodeDouble,
             [dataTypes.float]: this.encodeFloat,
+            [dataTypes.inet]: this.encodeInet,
             [dataTypes.smallint]: this.encodeSmallint,
             [dataTypes.tinyint]: this.encodeTinyint,
             [dataTypes.int]: this.encodeInt,
@@ -896,7 +896,7 @@ class EncoderMembers {
     /**
      * @private
      */
-    encodeInet(value: any): Buffer {
+    encodeInet(out: GrowableBuffer, start: number, value: any): number {
         if (typeof value === "string") {
             value = types.InetAddress.fromString(value);
         }
@@ -909,7 +909,8 @@ class EncoderMembers {
                     util.inspect(value),
             );
         }
-        return value;
+        out.ensure(start, value.length);
+        return start + value.copy(out.buffer, start);
     }
 
     /**
