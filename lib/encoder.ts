@@ -362,9 +362,7 @@ class EncoderMembers {
         this.legacyEncoders = {
             [dataTypes.custom]: this.encodeCustom,
             [dataTypes.decimal]: this.encodeDecimal,
-            [dataTypes.uuid]: this.encodeUuid,
             [dataTypes.varint]: this.encodeVarint,
-            [dataTypes.timeuuid]: this.encodeUuid,
             [dataTypes.inet]: this.encodeInet,
             [dataTypes.date]: this.encodeDate,
             [dataTypes.time]: this.encodeTime,
@@ -390,6 +388,8 @@ class EncoderMembers {
             [dataTypes.tinyint]: this.encodeTinyint,
             [dataTypes.int]: this.encodeInt,
             [dataTypes.timestamp]: this.encodeTimestamp,
+            [dataTypes.timeuuid]: this.encodeUuid,
+            [dataTypes.uuid]: this.encodeUuid,
         };
     }
 
@@ -873,7 +873,7 @@ class EncoderMembers {
     /**
      * @private
      */
-    encodeUuid(value: any): Buffer {
+    encodeUuid(out: GrowableBuffer, start: number, value: any): number {
         if (typeof value === "string") {
             try {
                 value = types.Uuid.fromString(value).getBuffer();
@@ -889,7 +889,8 @@ class EncoderMembers {
             );
         }
 
-        return value;
+        out.ensure(start, value.length);
+        return start + value.copy(out.buffer, start);
     }
 
     /**
