@@ -139,7 +139,8 @@ function typeFromHint(typeInfo: any): any {
     ) {
         type = typeInfo;
     }
-    if (type == null || typeof type.code !== "number") {
+    // A type code is an integer, also in a type object.
+    if (type == null || !Number.isInteger(type.code)) {
         throw new TypeError(
             "Type information not valid, only String and Number values are valid hints",
         );
@@ -1065,7 +1066,9 @@ class EncoderMembers {
         if (handler) {
             return handler.call(this, value);
         }
-        throw new TypeError("No encoding handler found for type " + columnInfo);
+        throw new TypeError(
+            "No encoding handler found for type " + util.inspect(columnInfo),
+        );
     }
 
     /**
@@ -1175,7 +1178,13 @@ class EncoderMembers {
         let propCounter = 0;
         let keySubtype: ColumnInfo | null = null;
         let valueSubtype: ColumnInfo | null = null;
-        if (subtypes) {
+        // Only null and undefined mean "no subtypes": the Encoder then guesses them.
+        if (subtypes !== null && subtypes !== undefined) {
+            if (!Array.isArray(subtypes)) {
+                throw new TypeError(
+                    "Type information not valid, a map type needs the types of its keys and values",
+                );
+            }
             keySubtype = subtypes[0];
             valueSubtype = subtypes[1];
         }
@@ -2347,7 +2356,9 @@ class Encoder extends EncoderMembers {
 
         let type: any = null;
 
-        if (typeInfo) {
+        // Only null and undefined mean "no hint". Other falsy values, such as
+        // false, 0 or "", are hints too: 0 is the code of custom, and the others are not valid.
+        if (typeInfo !== null && typeInfo !== undefined) {
             type = typeFromHint(typeInfo);
         } else {
             // Lets guess
