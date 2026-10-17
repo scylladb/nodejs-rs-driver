@@ -36,6 +36,23 @@ const NULL_CELL_LENGTH = -1;
 /** The length of an unset cell in a request frame. */
 const UNSET_CELL_LENGTH = -2;
 /**
+ * The largest upper bound of the byte length of a string that a string encoder makes room for.
+ * Measuring the exact byte length costs one more pass over the string.
+ * Thus, when the buffer has no room for the upper bound, a string encoder makes room:
+ * - for the upper bound, when it is at most this size,
+ * - else for the exact byte length.
+ *
+ * Examples, in UTF-8, where the upper bound is 3 bytes for each UTF-16 code unit:
+ * - "hello": the upper bound is 15 bytes. The encoder makes room for 15 bytes,
+ *   and it does not measure the string.
+ * - 30,000 ASCII characters: the upper bound is 90,000 bytes, more than this size.
+ *   The encoder measures the string: 30,000 bytes. A buffer of 4 KiB grows to 32 KiB.
+ *   With the upper bound, it would grow to 128 KiB. That is more than the 64 KiB that
+ *   FrameWriter keeps between frames. Then FrameWriter would allocate a new buffer
+ *   for each such request.
+ */
+const MAX_STRING_GROWTH_BY_UPPER_BOUND = 16 * 1024;
+/**
  * The size of the new buffer that {@link Encoder.encode} gives to an encoder.
  * It has room for the largest value of a fixed-size type: a uuid or an IPv6 address, 16 bytes.
  * Thus, encode does not grow the buffer for a value of a fixed-size type.
@@ -1077,7 +1094,17 @@ class EncoderMembers {
                     util.inspect(value),
             );
         }
-        out.ensure(start, Buffer.byteLength(value, encoding));
+        // The upper bound of the byte length: 3 bytes for each UTF-16 code unit in UTF-8,
+        // and 1 byte in ASCII. See MAX_STRING_GROWTH_BY_UPPER_BOUND.
+        const maxBytes = encoding === "ascii" ? value.length : value.length * 3;
+        if (start + maxBytes > out.buffer.length) {
+            out.ensure(
+                start,
+                maxBytes <= MAX_STRING_GROWTH_BY_UPPER_BOUND
+                    ? maxBytes
+                    : Buffer.byteLength(value, encoding),
+            );
+        }
         return start + out.buffer.write(value, start, encoding);
     }
 
