@@ -25,8 +25,6 @@ const uuidRegex =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const buffers = {
-    int16Zero: utils.allocBufferFromArray([0, 0]),
-    int32Zero: utils.allocBufferFromArray([0, 0, 0, 0]),
     int8Zero: utils.allocBufferFromArray([0]),
     int8MaxValue: utils.allocBufferFromArray([0xff]),
 };
@@ -291,7 +289,6 @@ class EncoderMembers {
 
     /** Selected from the protocol version by {@link setProtocolVersion}. */
     decodeCollectionLength!: (bytes: Buffer, offset: number) => number;
-    getLengthBuffer!: (value: any) => Buffer;
     collectionLengthSize!: number;
 
     /** Selected from the encoding options by the {@link Encoder} constructor. */
@@ -398,7 +395,6 @@ class EncoderMembers {
         this.protocolVersion = value;
         // Set the collection serialization based on the protocol version
         this.decodeCollectionLength = decodeCollectionLengthV3;
-        this.getLengthBuffer = getLengthBufferV3;
         this.collectionLengthSize = 4;
         if (
             !types.protocolVersion.uses4BytesCollectionLength(
@@ -406,7 +402,6 @@ class EncoderMembers {
             )
         ) {
             this.decodeCollectionLength = decodeCollectionLengthV2;
-            this.getLengthBuffer = getLengthBufferV2;
             this.collectionLengthSize = 2;
         }
     }
@@ -2627,40 +2622,6 @@ class Encoder extends EncoderMembers {
                 return offset + 4 + bytes.length;
         }
     }
-}
-
-/**
- * Gets a buffer containing with the bytes (BE) representing the collection length for protocol v2 and below
- * @private
- */
-function getLengthBufferV2(value: any): Buffer {
-    if (!value) {
-        return buffers.int16Zero;
-    }
-    const lengthBuffer = utils.allocBufferUnsafe(2);
-    if (typeof value === "number") {
-        lengthBuffer.writeUInt16BE(value, 0);
-    } else {
-        lengthBuffer.writeUInt16BE(value.length, 0);
-    }
-    return lengthBuffer;
-}
-
-/**
- * Gets a buffer containing with the bytes (BE) representing the collection length for protocol v3 and above
- * @private
- */
-function getLengthBufferV3(value: any): Buffer {
-    if (!value) {
-        return buffers.int32Zero;
-    }
-    const lengthBuffer = utils.allocBufferUnsafe(4);
-    if (typeof value === "number") {
-        lengthBuffer.writeInt32BE(value, 0);
-    } else {
-        lengthBuffer.writeInt32BE(value.length, 0);
-    }
-    return lengthBuffer;
 }
 
 /**
