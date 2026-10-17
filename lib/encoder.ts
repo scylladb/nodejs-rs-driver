@@ -372,17 +372,11 @@ class EncoderMembers {
         };
 
         this.legacyEncoders = {
-            [dataTypes.custom]: this.encodeCustom,
             [dataTypes.decimal]: this.encodeDecimal,
             [dataTypes.varint]: this.encodeVarint,
             [dataTypes.date]: this.encodeDate,
             [dataTypes.time]: this.encodeTime,
             [dataTypes.duration]: encodeDuration,
-            [dataTypes.list]: this.encodeList,
-            [dataTypes.map]: this.encodeMap,
-            [dataTypes.set]: this.encodeSet,
-            [dataTypes.udt]: this.encodeUdt,
-            [dataTypes.tuple]: this.encodeTuple,
         };
 
         this.encoders = {
@@ -1138,31 +1132,6 @@ class EncoderMembers {
         return start + value.length;
     }
 
-    encodeCustom(value: any, columnInfo: ColumnInfo): Buffer {
-        if (
-            "customTypeName" in columnInfo &&
-            columnInfo.customTypeName === "vector"
-        ) {
-            return this.encodeVector(value, columnInfo);
-        }
-
-        if (
-            typeof columnInfo.info === "string" &&
-            columnInfo.info.startsWith(customTypeNames.vector)
-        ) {
-            const vectorColumnInfo = this.parseFqTypeName(columnInfo.info);
-            return this.encodeVector(value, vectorColumnInfo);
-        }
-
-        const handler = customEncoders[columnInfo.info as string];
-        if (handler) {
-            return handler.call(this, value);
-        }
-        throw new TypeError(
-            "No encoding handler found for type " + util.inspect(columnInfo),
-        );
-    }
-
     /**
      * @private
      */
@@ -1208,214 +1177,6 @@ class EncoderMembers {
         }
         out.ensure(start, 1);
         return out.buffer.writeInt8(value, start);
-    }
-
-    /**
-     * @private
-     */
-    encodeList(value: any, columnInfo: ColumnInfo): Buffer | null {
-        const subtype = columnInfo.info as ColumnInfo;
-        if (!Array.isArray(value)) {
-            throw new TypeError(
-                "Not a valid list value, expected Array obtained " +
-                    util.inspect(value),
-            );
-        }
-        const parts: Array<Buffer> = [];
-        parts.push(this.getLengthBuffer(value));
-        for (let i = 0; i < value.length; i++) {
-            const val = value[i];
-            if (
-                val === null ||
-                typeof val === "undefined" ||
-                val === types.unset
-            ) {
-                throw new TypeError(
-                    "A collection can't contain null or unset values",
-                );
-            }
-            const bytes = this.encode(val, subtype) as Buffer;
-            // include item byte length
-            parts.push(this.getLengthBuffer(bytes));
-            // include item
-            parts.push(bytes);
-        }
-        return Buffer.concat(parts);
-    }
-
-    encodeSet(value: any, columnInfo: ColumnInfo): Buffer | null {
-        if (
-            this.encodingOptions.set &&
-            value instanceof this.encodingOptions.set
-        ) {
-            const arr: Array<any> = [];
-            value.forEach(function (x: any) {
-                arr.push(x);
-            });
-            return this.encodeList(arr, columnInfo);
-        }
-        return this.encodeList(value, columnInfo);
-    }
-
-    /**
-     * Serializes a map into a Buffer
-     * @param value
-     * @private
-     */
-    encodeMap(value: any, columnInfo: ColumnInfo): Buffer | null {
-        const subtypes = columnInfo.info as [ColumnInfo, ColumnInfo];
-        const parts: Array<Buffer> = [];
-        let propCounter = 0;
-        let keySubtype: ColumnInfo | null = null;
-        let valueSubtype: ColumnInfo | null = null;
-        // Only null and undefined mean "no subtypes": the Encoder then guesses them.
-        if (subtypes !== null && subtypes !== undefined) {
-            if (!Array.isArray(subtypes)) {
-                throw new TypeError(
-                    "Type information not valid, a map type needs the types of its keys and values",
-                );
-            }
-            keySubtype = subtypes[0];
-            valueSubtype = subtypes[1];
-        }
-        const addItem = (val: any, key: any) => {
-            if (
-                key === null ||
-                typeof key === "undefined" ||
-                key === types.unset
-            ) {
-                throw new TypeError("A map can't contain null or unset keys");
-            }
-            if (
-                val === null ||
-                typeof val === "undefined" ||
-                val === types.unset
-            ) {
-                throw new TypeError("A map can't contain null or unset values");
-            }
-            const keyBuffer = this.encode(key, keySubtype) as Buffer;
-            // include item byte length
-            parts.push(this.getLengthBuffer(keyBuffer));
-            // include item
-            parts.push(keyBuffer);
-            // value
-            const valueBuffer = this.encode(val, valueSubtype) as Buffer;
-            // include item byte length
-            parts.push(this.getLengthBuffer(valueBuffer));
-            // include item
-            if (valueBuffer !== null) {
-                parts.push(valueBuffer);
-            }
-            propCounter++;
-        };
-        if (
-            this.encodingOptions.map &&
-            value instanceof this.encodingOptions.map
-        ) {
-            // Use Map#forEach() method to iterate
-            value.forEach(addItem);
-        } else {
-            // Use object
-            for (const key in value) {
-                if (!Object.prototype.hasOwnProperty.call(value, key)) {
-                    continue;
-                }
-                const val = value[key];
-                addItem(val, key);
-            }
-        }
-
-        parts.unshift(this.getLengthBuffer(propCounter));
-        return Buffer.concat(parts);
-    }
-
-    encodeUdt(value: any, columnInfo: ColumnInfo): Buffer | null {
-        const udtInfo = columnInfo.info as UdtInfo;
-        checkUdtInfo(udtInfo);
-        // The fields are read by name. Thus, a primitive, an array or a Map
-        // would give a UDT with every field null.
-        if (
-            value === null ||
-            typeof value !== "object" ||
-            Array.isArray(value) ||
-            value instanceof Map
-        ) {
-            throw new TypeError(
-                "Not a valid udt value, expected Object obtained " +
-                    util.inspect(value),
-            );
-        }
-        const parts: Array<Buffer> = [];
-        let totalLength = 0;
-        for (let i = 0; i < udtInfo.fields.length; i++) {
-            const field = udtInfo.fields[i];
-            const item: any = this.encode(value[field.name], field.type);
-            if (!item) {
-                parts.push(nullValueBuffer);
-                totalLength += 4;
-                continue;
-            }
-            if (item === types.unset) {
-                parts.push(unsetValueBuffer);
-                totalLength += 4;
-                continue;
-            }
-            const lengthBuffer = utils.allocBufferUnsafe(4);
-            lengthBuffer.writeInt32BE(item.length, 0);
-            parts.push(lengthBuffer);
-            parts.push(item);
-            totalLength += item.length + 4;
-        }
-        return Buffer.concat(parts, totalLength);
-    }
-
-    /**
-     * @private
-     */
-    encodeTuple(value: any, columnInfo: ColumnInfo): Buffer | null {
-        const tupleInfo = columnInfo.info as Array<ColumnInfo>;
-        checkTupleInfo(tupleInfo);
-        // Accept any object with get() and length, not only a Tuple of this
-        // copy of the driver.
-        if (
-            value === null ||
-            typeof value !== "object" ||
-            typeof value.get !== "function" ||
-            typeof value.length !== "number"
-        ) {
-            throw new TypeError(
-                "Not a valid tuple, expected Tuple obtained " +
-                    util.inspect(value),
-            );
-        }
-        const parts: Array<Buffer> = [];
-        let totalLength = 0;
-        const length = Math.min(tupleInfo.length, value.length);
-
-        for (let i = 0; i < length; i++) {
-            const type = tupleInfo[i];
-            const item: any = this.encode(value.get(i), type);
-
-            if (!item) {
-                parts.push(nullValueBuffer);
-                totalLength += 4;
-                continue;
-            }
-
-            if (item === types.unset) {
-                parts.push(unsetValueBuffer);
-                totalLength += 4;
-                continue;
-            }
-
-            const lengthBuffer = utils.allocBufferUnsafe(4);
-            lengthBuffer.writeInt32BE(item.length, 0);
-            parts.push(lengthBuffer);
-            parts.push(item);
-            totalLength += item.length + 4;
-        }
-
-        return Buffer.concat(parts, totalLength);
     }
 
     /**
@@ -1510,38 +1271,6 @@ class EncoderMembers {
             default:
                 return -1;
         }
-    }
-
-    encodeVector(value: any, params: any): Buffer {
-        checkVectorInfo(params.info);
-        if (!(value instanceof Vector)) {
-            throw new TypeError(
-                "Driver only supports Vector type when encoding a vector",
-            );
-        }
-
-        const dimension = params.info[1];
-        if (value.length !== dimension) {
-            throw new TypeError(
-                `Expected vector with ${dimension} dimensions, observed size of ${value.length}`,
-            );
-        }
-
-        const serializationSize = this.serializationSizeIfFixed(params.info[0]);
-        const encoded: Array<Buffer> = [];
-        for (const elem of value) {
-            if (elem === null || elem === undefined || elem === types.unset) {
-                throw new TypeError(
-                    "A vector can't contain null or unset values",
-                );
-            }
-            const elemBuffer = this.encode(elem, params.info[0]) as Buffer;
-            if (serializationSize === -1) {
-                encoded.push(utils.VIntCoding.uvintPack(elemBuffer.length));
-            }
-            encoded.push(elemBuffer);
-        }
-        return Buffer.concat(encoded);
     }
 
     /**
@@ -2255,6 +1984,14 @@ class Encoder extends EncoderMembers {
     constructor(protocolVersion: number, options: any) {
         super(options.encoding || utils.emptyObject);
         this.setProtocolVersion(protocolVersion);
+        // The encoding functions of composite types are private members of Encoder.
+        // Thus, Encoder adds them.
+        this.legacyEncoders[dataTypes.list] = this.#encodeList;
+        this.legacyEncoders[dataTypes.set] = this.#encodeSet;
+        this.legacyEncoders[dataTypes.map] = this.#encodeMap;
+        this.legacyEncoders[dataTypes.udt] = this.#encodeUdt;
+        this.legacyEncoders[dataTypes.tuple] = this.#encodeTuple;
+        this.legacyEncoders[dataTypes.custom] = this.#encodeCustom;
         if (this.encodingOptions.copyBuffer) {
             this.handleBuffer = handleBufferCopy;
         } else {
@@ -2508,6 +2245,271 @@ class Encoder extends EncoderMembers {
         out.ensure(start, bytes.length);
         out.buffer.set(bytes, start);
         return start + bytes.length;
+    }
+
+    #encodeUdt(value: any, columnInfo: ColumnInfo): Buffer | null {
+        const udtInfo = columnInfo.info as UdtInfo;
+        checkUdtInfo(udtInfo);
+        // The fields are read by name. Thus, a primitive, an array or a Map
+        // would give a UDT with every field null.
+        if (
+            value === null ||
+            typeof value !== "object" ||
+            Array.isArray(value) ||
+            value instanceof Map
+        ) {
+            throw new TypeError(
+                "Not a valid udt value, expected Object obtained " +
+                    util.inspect(value),
+            );
+        }
+        const parts: Array<Buffer> = [];
+        let totalLength = 0;
+        for (let i = 0; i < udtInfo.fields.length; i++) {
+            const field = udtInfo.fields[i];
+            const item: any = this.encode(value[field.name], field.type);
+            if (!item) {
+                parts.push(nullValueBuffer);
+                totalLength += 4;
+                continue;
+            }
+            if (item === types.unset) {
+                parts.push(unsetValueBuffer);
+                totalLength += 4;
+                continue;
+            }
+            const lengthBuffer = utils.allocBufferUnsafe(4);
+            lengthBuffer.writeInt32BE(item.length, 0);
+            parts.push(lengthBuffer);
+            parts.push(item);
+            totalLength += item.length + 4;
+        }
+        return Buffer.concat(parts, totalLength);
+    }
+
+    /**
+     * @private
+     */
+    #encodeTuple(value: any, columnInfo: ColumnInfo): Buffer | null {
+        const tupleInfo = columnInfo.info as Array<ColumnInfo>;
+        checkTupleInfo(tupleInfo);
+        // Accept any object with get() and length, not only a Tuple of this
+        // copy of the driver.
+        if (
+            value === null ||
+            typeof value !== "object" ||
+            typeof value.get !== "function" ||
+            typeof value.length !== "number"
+        ) {
+            throw new TypeError(
+                "Not a valid tuple, expected Tuple obtained " +
+                    util.inspect(value),
+            );
+        }
+        const parts: Array<Buffer> = [];
+        let totalLength = 0;
+        const length = Math.min(tupleInfo.length, value.length);
+
+        for (let i = 0; i < length; i++) {
+            const type = tupleInfo[i];
+            const item: any = this.encode(value.get(i), type);
+
+            if (!item) {
+                parts.push(nullValueBuffer);
+                totalLength += 4;
+                continue;
+            }
+
+            if (item === types.unset) {
+                parts.push(unsetValueBuffer);
+                totalLength += 4;
+                continue;
+            }
+
+            const lengthBuffer = utils.allocBufferUnsafe(4);
+            lengthBuffer.writeInt32BE(item.length, 0);
+            parts.push(lengthBuffer);
+            parts.push(item);
+            totalLength += item.length + 4;
+        }
+
+        return Buffer.concat(parts, totalLength);
+    }
+
+    /**
+     * @private
+     */
+    #encodeList(value: any, columnInfo: ColumnInfo): Buffer | null {
+        const subtype = columnInfo.info as ColumnInfo;
+        if (!Array.isArray(value)) {
+            throw new TypeError(
+                "Not a valid list value, expected Array obtained " +
+                    util.inspect(value),
+            );
+        }
+        const parts: Array<Buffer> = [];
+        parts.push(this.getLengthBuffer(value));
+        for (let i = 0; i < value.length; i++) {
+            const val = value[i];
+            if (
+                val === null ||
+                typeof val === "undefined" ||
+                val === types.unset
+            ) {
+                throw new TypeError(
+                    "A collection can't contain null or unset values",
+                );
+            }
+            const bytes = this.encode(val, subtype) as Buffer;
+            // include item byte length
+            parts.push(this.getLengthBuffer(bytes));
+            // include item
+            parts.push(bytes);
+        }
+        return Buffer.concat(parts);
+    }
+
+    #encodeSet(value: any, columnInfo: ColumnInfo): Buffer | null {
+        if (
+            this.encodingOptions.set &&
+            value instanceof this.encodingOptions.set
+        ) {
+            const arr: Array<any> = [];
+            value.forEach(function (x: any) {
+                arr.push(x);
+            });
+            return this.#encodeList(arr, columnInfo);
+        }
+        return this.#encodeList(value, columnInfo);
+    }
+
+    /**
+     * Serializes a map into a Buffer
+     * @param value
+     * @private
+     */
+    #encodeMap(value: any, columnInfo: ColumnInfo): Buffer | null {
+        const subtypes = columnInfo.info as [ColumnInfo, ColumnInfo];
+        const parts: Array<Buffer> = [];
+        let propCounter = 0;
+        let keySubtype: ColumnInfo | null = null;
+        let valueSubtype: ColumnInfo | null = null;
+        // Only null and undefined mean "no subtypes": the Encoder then guesses them.
+        if (subtypes !== null && subtypes !== undefined) {
+            if (!Array.isArray(subtypes)) {
+                throw new TypeError(
+                    "Type information not valid, a map type needs the types of its keys and values",
+                );
+            }
+            keySubtype = subtypes[0];
+            valueSubtype = subtypes[1];
+        }
+        const addItem = (val: any, key: any) => {
+            if (
+                key === null ||
+                typeof key === "undefined" ||
+                key === types.unset
+            ) {
+                throw new TypeError("A map can't contain null or unset keys");
+            }
+            if (
+                val === null ||
+                typeof val === "undefined" ||
+                val === types.unset
+            ) {
+                throw new TypeError("A map can't contain null or unset values");
+            }
+            const keyBuffer = this.encode(key, keySubtype) as Buffer;
+            // include item byte length
+            parts.push(this.getLengthBuffer(keyBuffer));
+            // include item
+            parts.push(keyBuffer);
+            // value
+            const valueBuffer = this.encode(val, valueSubtype) as Buffer;
+            // include item byte length
+            parts.push(this.getLengthBuffer(valueBuffer));
+            // include item
+            if (valueBuffer !== null) {
+                parts.push(valueBuffer);
+            }
+            propCounter++;
+        };
+        if (
+            this.encodingOptions.map &&
+            value instanceof this.encodingOptions.map
+        ) {
+            // Use Map#forEach() method to iterate
+            value.forEach(addItem);
+        } else {
+            // Use object
+            for (const key in value) {
+                if (!Object.prototype.hasOwnProperty.call(value, key)) {
+                    continue;
+                }
+                const val = value[key];
+                addItem(val, key);
+            }
+        }
+
+        parts.unshift(this.getLengthBuffer(propCounter));
+        return Buffer.concat(parts);
+    }
+
+    #encodeCustom(value: any, columnInfo: ColumnInfo): Buffer {
+        if (
+            "customTypeName" in columnInfo &&
+            columnInfo.customTypeName === "vector"
+        ) {
+            return this.#encodeVector(value, columnInfo);
+        }
+
+        if (
+            typeof columnInfo.info === "string" &&
+            columnInfo.info.startsWith(customTypeNames.vector)
+        ) {
+            const vectorColumnInfo = this.parseFqTypeName(columnInfo.info);
+            return this.#encodeVector(value, vectorColumnInfo);
+        }
+
+        const handler = customEncoders[columnInfo.info as string];
+        if (handler) {
+            return handler.call(this, value);
+        }
+        throw new TypeError(
+            "No encoding handler found for type " + util.inspect(columnInfo),
+        );
+    }
+
+    #encodeVector(value: any, params: any): Buffer {
+        checkVectorInfo(params.info);
+        if (!(value instanceof Vector)) {
+            throw new TypeError(
+                "Driver only supports Vector type when encoding a vector",
+            );
+        }
+
+        const dimension = params.info[1];
+        if (value.length !== dimension) {
+            throw new TypeError(
+                `Expected vector with ${dimension} dimensions, observed size of ${value.length}`,
+            );
+        }
+
+        const serializationSize = this.serializationSizeIfFixed(params.info[0]);
+        const encoded: Array<Buffer> = [];
+        for (const elem of value) {
+            if (elem === null || elem === undefined || elem === types.unset) {
+                throw new TypeError(
+                    "A vector can't contain null or unset values",
+                );
+            }
+            const elemBuffer = this.encode(elem, params.info[0]) as Buffer;
+            if (serializationSize === -1) {
+                encoded.push(utils.VIntCoding.uvintPack(elemBuffer.length));
+            }
+            encoded.push(elemBuffer);
+        }
+        return Buffer.concat(encoded);
     }
 
     /**
