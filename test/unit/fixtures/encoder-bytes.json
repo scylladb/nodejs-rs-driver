@@ -526,5 +526,95 @@
             "TypeError",
             "Type information not valid, a tuple type needs the types of its items"
         ]
+    },
+    "vector float": {
+        "hex": "3fc00000c0000000"
+    },
+    "vector double": {
+        "hex": "3ff8000000000000c000000000000000"
+    },
+    "vector int": {
+        "hex": "00000001fffffffe00000003"
+    },
+    "vector bigint": {
+        "hex": "0000000000000001"
+    },
+    "vector text": {
+        "hex": "0161026262"
+    },
+    "vector of lists": {
+        "hex": "0c000000010000000400000001140000000200000004000000020000000400000003"
+    },
+    "vector type name": {
+        "hex": "3f80000040000000"
+    },
+    "vector Buffer item": {
+        "hex": "00000009"
+    },
+    "vector null item": {
+        "error": ["TypeError", "A vector can't contain null or unset values"]
+    },
+    "vector null item variable": {
+        "error": ["TypeError", "A vector can't contain null or unset values"]
+    },
+    "vector bad item": {
+        "error": ["TypeError", "Expected Number, obtained 'x'"]
+    },
+    "vector wrong dimension": {
+        "error": [
+            "TypeError",
+            "Expected vector with 3 dimensions, observed size of 2"
+        ]
+    },
+    "vector not a Vector": {
+        "error": [
+            "TypeError",
+            "Driver only supports Vector type when encoding a vector"
+        ]
+    },
+    "vector empty list element": {
+        "hex": "0c0000000100000004000000010400000000"
+    },
+    "vector element type by name": {
+        "hex": "0000000100000002"
+    },
+    "vector element type by code": {
+        "hex": "0000000100000002"
+    },
+    "vector unknown element type name": {
+        "error": ["TypeError", "Data type with name no_such_type not valid"]
+    },
+    "vector without element type": {
+        "error": [
+            "TypeError",
+            "Type information not valid, a vector type needs its element type and a positive dimension"
+        ]
+    },
+    "vector dimension as string": {
+        "error": [
+            "TypeError",
+            "Type information not valid, a vector type needs its element type and a positive dimension"
+        ]
+    },
+    "vector dimension 0": {
+        "error": [
+            "TypeError",
+            "Type information not valid, a vector type needs its element type and a positive dimension"
+        ]
+    },
+    "vector without type information": {
+        "error": [
+            "TypeError",
+            "Type information not valid, a vector type needs its element type and a positive dimension"
+        ]
+    },
+    "custom duration": {
+        "hex": "020406"
+    },
+    "custom unknown": {
+        "error": [
+            "TypeError",
+            "No encoding handler found for type [object Object]"
+        ]
     }
 }

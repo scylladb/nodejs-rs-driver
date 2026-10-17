@@ -24,6 +24,14 @@ const udt = t(dataTypes.udt, {
     ],
 });
 const tuple = t(dataTypes.tuple, [int, text]);
+const Vector = require("../../../lib/types/vector");
+const vector = (subtype, dimension) => ({
+    code: dataTypes.custom,
+    customTypeName: "vector",
+    info: [subtype, dimension],
+});
+const vectorTypeName =
+    "org.apache.cassandra.db.marshal.VectorType(org.apache.cassandra.db.marshal.FloatType, 2)";
 
 /** The encoders that the cases use, by name. */
 function makeEncoders() {
@@ -413,6 +421,136 @@ const cases = [
         t(dataTypes.tuple, [int, undefined]),
         () => new types.Tuple(1, 2),
     ],
+
+    // custom: vector and duration
+    [
+        "vector float",
+        "default",
+        vector(t(dataTypes.float), 2),
+        () => new Vector(new Float32Array([1.5, -2])),
+    ],
+    [
+        "vector double",
+        "default",
+        vector(t(dataTypes.double), 2),
+        () => new Vector([1.5, -2], "double"),
+    ],
+    [
+        "vector int",
+        "default",
+        vector(int, 3),
+        () => new Vector([1, -2, 3], "int"),
+    ],
+    [
+        "vector bigint",
+        "default",
+        vector(bigint, 1),
+        () => new Vector([Long.ONE], "bigint"),
+    ],
+    [
+        "vector text",
+        "default",
+        vector(text, 2),
+        () => new Vector(["a", "bb"], "text"),
+    ],
+    [
+        "vector of lists",
+        "default",
+        vector(t(dataTypes.list, int), 2),
+        () => new Vector([[1], [2, 3]]),
+    ],
+    [
+        "vector type name",
+        "default",
+        t(dataTypes.custom, vectorTypeName),
+        () => new Vector(new Float32Array([1, 2])),
+    ],
+    [
+        "vector Buffer item",
+        "default",
+        vector(int, 1),
+        () => new Vector([Buffer.from([0, 0, 0, 9])], "int"),
+    ],
+    [
+        "vector null item",
+        "default",
+        vector(int, 2),
+        () => new Vector([1, null], "int"),
+    ],
+    [
+        "vector null item variable",
+        "default",
+        vector(text, 2),
+        () => new Vector(["a", null], "text"),
+    ],
+    [
+        "vector bad item",
+        "default",
+        vector(int, 1),
+        () => new Vector(["x"], "int"),
+    ],
+    [
+        "vector wrong dimension",
+        "default",
+        vector(int, 3),
+        () => new Vector([1, 2], "int"),
+    ],
+    ["vector not a Vector", "default", vector(int, 2), () => [1, 2]],
+    [
+        "vector empty list element",
+        "default",
+        vector(t(dataTypes.list, int), 2),
+        () => new Vector([[1], []]),
+    ],
+    [
+        "vector element type by name",
+        "default",
+        vector("int", 2),
+        () => new Vector([1, 2], "int"),
+    ],
+    [
+        "vector element type by code",
+        "default",
+        vector(dataTypes.int, 2),
+        () => new Vector([1, 2], "int"),
+    ],
+    [
+        "vector unknown element type name",
+        "default",
+        vector("no_such_type", 1),
+        () => new Vector([1], "int"),
+    ],
+    [
+        "vector without element type",
+        "default",
+        vector(undefined, 1),
+        () => new Vector([1], "int"),
+    ],
+    [
+        "vector dimension as string",
+        "default",
+        vector(int, "1"),
+        () => new Vector([1], "int"),
+    ],
+    [
+        "vector dimension 0",
+        "default",
+        vector(int, 0),
+        () => new Vector([1], "int"),
+    ],
+    [
+        "vector without type information",
+        "default",
+        { code: dataTypes.custom, customTypeName: "vector" },
+        () => new Vector([1], "int"),
+    ],
+    [
+        "custom duration",
+        "default",
+        t(dataTypes.custom, "org.apache.cassandra.db.marshal.DurationType"),
+        () => new types.Duration(1, 2, Long.fromNumber(3)),
+    ],
+    ["custom unknown", "default", t(dataTypes.custom, "no.such.Type"), () => 1],
 ];
 
 /**
