@@ -352,8 +352,6 @@ class EncoderMembers {
             [dataTypes.blob]: this.encodeBlob,
             [dataTypes.boolean]: this.encodeBoolean,
             [dataTypes.decimal]: this.encodeDecimal,
-            [dataTypes.double]: this.encodeDouble,
-            [dataTypes.float]: this.encodeFloat,
             [dataTypes.text]: this.encodeUtf8String,
             [dataTypes.uuid]: this.encodeUuid,
             [dataTypes.varchar]: this.encodeUtf8String,
@@ -373,6 +371,8 @@ class EncoderMembers {
         this.encoders = {
             [dataTypes.bigint]: this.encodeBigInt,
             [dataTypes.counter]: this.encodeBigInt,
+            [dataTypes.double]: this.encodeDouble,
+            [dataTypes.float]: this.encodeFloat,
             [dataTypes.smallint]: this.encodeSmallint,
             [dataTypes.tinyint]: this.encodeTinyint,
             [dataTypes.int]: this.encodeInt,
@@ -737,7 +737,7 @@ class EncoderMembers {
     /**
      * @private
      */
-    encodeFloat(value: any): Buffer {
+    encodeFloat(out: GrowableBuffer, start: number, value: any): number {
         if (typeof value === "string") {
             // All numeric types are supported as strings for historical reasons
             value = parseFloat(value);
@@ -755,15 +755,14 @@ class EncoderMembers {
             );
         }
 
-        const buf = utils.allocBufferUnsafe(4);
-        buf.writeFloatBE(value, 0);
-        return buf;
+        out.ensure(start, 4);
+        return out.buffer.writeFloatBE(value, start);
     }
 
     /**
      * @private
      */
-    encodeDouble(value: any): Buffer {
+    encodeDouble(out: GrowableBuffer, start: number, value: any): number {
         if (typeof value === "string") {
             // All numeric types are supported as strings for historical reasons
             value = parseFloat(value);
@@ -781,9 +780,8 @@ class EncoderMembers {
             );
         }
 
-        const buf = utils.allocBufferUnsafe(8);
-        buf.writeDoubleBE(value, 0);
-        return buf;
+        out.ensure(start, 8);
+        return out.buffer.writeDoubleBE(value, start);
     }
 
     /**
