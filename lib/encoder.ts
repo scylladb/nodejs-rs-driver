@@ -353,7 +353,6 @@ class EncoderMembers {
             [dataTypes.decimal]: this.encodeDecimal,
             [dataTypes.double]: this.encodeDouble,
             [dataTypes.float]: this.encodeFloat,
-            [dataTypes.int]: this.encodeInt,
             [dataTypes.text]: this.encodeUtf8String,
             [dataTypes.timestamp]: this.encodeTimestamp,
             [dataTypes.uuid]: this.encodeUuid,
@@ -363,8 +362,6 @@ class EncoderMembers {
             [dataTypes.inet]: this.encodeInet,
             [dataTypes.date]: this.encodeDate,
             [dataTypes.time]: this.encodeTime,
-            [dataTypes.smallint]: this.encodeSmallint,
-            [dataTypes.tinyint]: this.encodeTinyint,
             [dataTypes.duration]: encodeDuration,
             [dataTypes.list]: this.encodeList,
             [dataTypes.map]: this.encodeMap,
@@ -373,7 +370,11 @@ class EncoderMembers {
             [dataTypes.tuple]: this.encodeTuple,
         };
 
-        this.encoders = {};
+        this.encoders = {
+            [dataTypes.smallint]: this.encodeSmallint,
+            [dataTypes.tinyint]: this.encodeTinyint,
+            [dataTypes.int]: this.encodeInt,
+        };
     }
 
     /**
@@ -1105,43 +1106,40 @@ class EncoderMembers {
     /**
      * @private
      */
-    encodeInt(value: any): Buffer {
+    encodeInt(out: GrowableBuffer, start: number, value: any): number {
         if (isNaN(value)) {
             throw new TypeError(
                 "Expected Number, obtained " + util.inspect(value),
             );
         }
-        const buf = utils.allocBufferUnsafe(4);
-        buf.writeInt32BE(value, 0);
-        return buf;
+        out.ensure(start, 4);
+        return out.buffer.writeInt32BE(value, start);
     }
 
     /**
      * @private
      */
-    encodeSmallint(value: any): Buffer {
+    encodeSmallint(out: GrowableBuffer, start: number, value: any): number {
         if (isNaN(value)) {
             throw new TypeError(
                 "Expected Number, obtained " + util.inspect(value),
             );
         }
-        const buf = utils.allocBufferUnsafe(2);
-        buf.writeInt16BE(value, 0);
-        return buf;
+        out.ensure(start, 2);
+        return out.buffer.writeInt16BE(value, start);
     }
 
     /**
      * @private
      */
-    encodeTinyint(value: any): Buffer {
+    encodeTinyint(out: GrowableBuffer, start: number, value: any): number {
         if (isNaN(value)) {
             throw new TypeError(
                 "Expected Number, obtained " + util.inspect(value),
             );
         }
-        const buf = utils.allocBufferUnsafe(1);
-        buf.writeInt8(value, 0);
-        return buf;
+        out.ensure(start, 1);
+        return out.buffer.writeInt8(value, start);
     }
 
     /**
