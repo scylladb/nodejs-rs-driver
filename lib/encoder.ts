@@ -19,7 +19,7 @@ import { throwNotSupported } from "./new-utils";
 import { FrameReader } from "./reader";
 import { ColumnInfo, UdtInfo } from "./types/cql-utils";
 import type { ExecutionOptions } from "./execution-options";
-import type { GrowableBuffer } from "./growable-buffer";
+import { GrowableBuffer } from "./growable-buffer";
 
 const uuidRegex =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -36,6 +36,20 @@ const buffers = {
 const NULL_CELL_LENGTH = -1;
 /** The length of an unset cell in a request frame. */
 const UNSET_CELL_LENGTH = -2;
+/** The size of the buffer that {@link Encoder.encode} gives to a writer. */
+const WRITER_BUFFER_SIZE = 16;
+
+/**
+ * Writes the bytes of one value at `start` in `out`.
+ * It does not write the length of the value: the caller writes it.
+ * @returns The offset after the bytes.
+ */
+type ValueWriter = (
+    out: GrowableBuffer,
+    start: number,
+    value: any,
+    columnInfo: ColumnInfo,
+) => number;
 
 const bigInt32BitsOn = BigInt(0xffffffff);
 const bigInt8BitsOn = BigInt(0xff);
@@ -253,6 +267,11 @@ class EncoderMembers {
     encoders: {
         [code: number]: (value: any, columnInfo: ColumnInfo) => Buffer | null;
     };
+    /**
+     * Writes values straight into a buffer, for the types that have a writer.
+     * A type has a writer or an entry in {@link encoders}, never both.
+     */
+    writers: { [code: number]: ValueWriter };
 
     /** Selected from the protocol version by {@link setProtocolVersion}. */
     decodeCollectionLength!: (bytes: Buffer, offset: number) => number;
@@ -333,7 +352,6 @@ class EncoderMembers {
             [dataTypes.decimal]: this.encodeDecimal,
             [dataTypes.double]: this.encodeDouble,
             [dataTypes.float]: this.encodeFloat,
-            [dataTypes.int]: this.encodeInt,
             [dataTypes.text]: this.encodeUtf8String,
             [dataTypes.timestamp]: this.encodeTimestamp,
             [dataTypes.uuid]: this.encodeUuid,
@@ -351,6 +369,10 @@ class EncoderMembers {
             [dataTypes.set]: this.encodeSet,
             [dataTypes.udt]: this.encodeUdt,
             [dataTypes.tuple]: this.encodeTuple,
+        };
+
+        this.writers = {
+            [dataTypes.int]: this.writeInt,
         };
     }
 
@@ -1092,15 +1114,14 @@ class EncoderMembers {
     /**
      * @private
      */
-    encodeInt(value: any): Buffer {
+    writeInt(out: GrowableBuffer, start: number, value: any): number {
         if (isNaN(value)) {
             throw new TypeError(
                 "Expected Number, obtained " + util.inspect(value),
             );
         }
-        const buf = utils.allocBufferUnsafe(4);
-        buf.writeInt32BE(value, 0);
-        return buf;
+        out.ensure(start, 4);
+        return out.buffer.writeInt32BE(value, start);
     }
 
     /**
@@ -2323,6 +2344,12 @@ class Encoder extends EncoderMembers {
             return value;
         }
         const type = this.#resolveType(value, typeInfo);
+        const writer = this.writers[type.code];
+        if (writer) {
+            const out = new GrowableBuffer(WRITER_BUFFER_SIZE);
+            const end = writer.call(this, out, 0, value, type);
+            return out.buffer.subarray(0, end);
+        }
         return this.#encoderFor(type).call(this, value, type);
     }
 
@@ -2349,6 +2376,16 @@ class Encoder extends EncoderMembers {
             return Encoder.writeCell(out, offset, value);
         }
         const type = this.#resolveType(value, typeInfo);
+        const writer = this.writers[type.code];
+        if (writer) {
+            // Make room for the length first: the writer can grow the buffer,
+            // and then it keeps only the bytes before its start.
+            out.ensure(offset, 4);
+            const start = offset + 4;
+            const end = writer.call(this, out, start, value, type);
+            out.buffer.writeInt32BE(end - start, offset);
+            return end;
+        }
         return Encoder.writeCell(
             out,
             offset,
