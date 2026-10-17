@@ -367,5 +367,50 @@
     },
     "map null prototype": {
         "hex": "0000000100000001610000000400000001"
+    },
+    "list no subtype": {
+        "hex": "00000002000000083ff00000000000000000000178"
+    },
+    "list sparse": {
+        "error": [
+            "TypeError",
+            "A collection can't contain null or unset values"
+        ]
+    },
+    "list of empty list": {
+        "hex": "000000010000000400000000"
+    },
+    "set of empty set": {
+        "hex": "000000010000000400000000"
+    },
+    "list no subtype of empty list": {
+        "hex": "000000010000000400000000"
+    },
+    "set Set object with option": {
+        "hex": "0000000200000004000000050000000400000006"
+    },
+    "set Set object null item": {
+        "error": [
+            "TypeError",
+            "A collection can't contain null or unset values"
+        ]
+    },
+    "map no subtypes": {
+        "hex": "000000010000000161000000083ff0000000000000"
+    },
+    "map value empty list": {
+        "hex": "0000000100000001610000000400000000"
+    },
+    "map key empty list": {
+        "hex": "0000000100000004000000000000000400000001"
+    },
+    "map Map object with option": {
+        "hex": "00000001000000016b0000000400000005"
+    },
+    "map Map object null key": {
+        "error": ["TypeError", "A map can't contain null or unset keys"]
+    },
+    "map Map object unset value": {
+        "error": ["TypeError", "A map can't contain null or unset values"]
     }
 }
