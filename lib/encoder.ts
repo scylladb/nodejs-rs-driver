@@ -19,7 +19,7 @@ import { throwNotSupported } from "./new-utils";
 import { FrameReader } from "./reader";
 import { ColumnInfo, UdtInfo } from "./types/cql-utils";
 import type { ExecutionOptions } from "./execution-options";
-import type { GrowableBuffer } from "./growable-buffer";
+import { GrowableBuffer } from "./growable-buffer";
 
 const uuidRegex =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -38,6 +38,28 @@ const buffers = {
 const NULL_CELL_LENGTH = -1;
 /** The length of an unset cell in a request frame. */
 const UNSET_CELL_LENGTH = -2;
+/**
+ * The size of the new buffer that {@link Encoder.encode} gives to an encoder.
+ * It has room for each value of a fixed-size scalar type: at most 16 bytes, for a uuid.
+ * It also has room for each inet value: at most 16 bytes, for an IPv6 address.
+ * Thus, encode does not grow the buffer for these values.
+ * A fixed-size vector can be larger. For example, a `vector<int, 8>` has 32 bytes.
+ * Then the buffer grows.
+ * It must not be 0, because {@link GrowableBuffer.ensure} doubles the size.
+ */
+const NEW_BUFFER_SIZE = 16;
+
+/**
+ * Writes the bytes of one value at `start` in `out`.
+ * It does not write the length of the value: the caller writes it.
+ * @returns The offset after the bytes.
+ */
+type ValueEncoder = (
+    out: GrowableBuffer,
+    start: number,
+    value: any,
+    columnInfo: ColumnInfo,
+) => number;
 
 const bigInt32BitsOn = BigInt(0xffffffff);
 const bigInt8BitsOn = BigInt(0xff);
@@ -254,6 +276,11 @@ class EncoderMembers {
     legacyEncoders: {
         [code: number]: (value: any, columnInfo: ColumnInfo) => Buffer | null;
     };
+    /**
+     * Writes values straight into a buffer, for the types that have an encoder.
+     * A type has an encoder or an entry in {@link legacyEncoders}, never both.
+     */
+    encoders: { [code: number]: ValueEncoder };
 
     /** Selected from the encoding options by the {@link Encoder} constructor. */
     handleBuffer!: (buffer: Buffer) => Buffer;
@@ -348,6 +375,8 @@ class EncoderMembers {
             [dataTypes.udt]: this.encodeUdt,
             [dataTypes.tuple]: this.encodeTuple,
         };
+
+        this.encoders = {};
     }
 
     /**
@@ -2332,6 +2361,12 @@ class Encoder extends EncoderMembers {
             return value;
         }
         const type = this.#resolveType(value, typeInfo);
+        const encoder = this.encoders[type.code];
+        if (encoder) {
+            const out = new GrowableBuffer(NEW_BUFFER_SIZE);
+            const end = encoder.call(this, out, 0, value, type);
+            return out.buffer.subarray(0, end);
+        }
         return this.#legacyEncoderFor(type).call(this, value, type);
     }
 
@@ -2386,7 +2421,8 @@ class Encoder extends EncoderMembers {
     /**
      * Writes the bytes of a value that is not null or unset, at `start` in `out`.
      * A Buffer is written as it is.
-     * Another value is encoded by the encoding function of its type and copied.
+     * Another value is written by the encoder of its type,
+     * or encoded by the encoding function of its type and copied.
      * @returns The offset after the bytes.
      */
     #writeBytes(
@@ -2401,6 +2437,10 @@ class Encoder extends EncoderMembers {
             return start + value.length;
         }
         const type = this.#resolveType(value, typeInfo);
+        const encoder = this.encoders[type.code];
+        if (encoder) {
+            return encoder.call(this, out, start, value, type);
+        }
         const bytes = this.#legacyEncoderFor(type).call(
             this,
             value,
