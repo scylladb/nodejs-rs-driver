@@ -277,7 +277,12 @@ class EncoderMembers {
     /** Selected from the encoding options, once, in the constructor. */
     decodeLong: (bytes: Buffer) => types.Long | bigint;
     decodeVarint: (bytes: Buffer) => types.Integer | bigint;
-    writeLong: ValueWriter;
+    writeLong: (
+        out: GrowableBuffer,
+        start: number,
+        value: any,
+        columnInfo: ColumnInfo,
+    ) => number;
     encodeVarint: (value: any) => Buffer;
 
     decoders: {
@@ -373,9 +378,7 @@ class EncoderMembers {
             [dataTypes.smallint]: this.encodeSmallint,
             [dataTypes.tinyint]: this.encodeTinyint,
             [dataTypes.duration]: encodeDuration,
-            [dataTypes.list]: this.encodeList,
             [dataTypes.map]: this.encodeMap,
-            [dataTypes.set]: this.encodeSet,
             [dataTypes.udt]: this.encodeUdt,
             [dataTypes.tuple]: this.encodeTuple,
         };
@@ -1205,50 +1208,6 @@ class EncoderMembers {
     /**
      * @private
      */
-    encodeList(value: any, columnInfo: ColumnInfo): Buffer | null {
-        const subtype = columnInfo.info as ColumnInfo;
-        if (!Array.isArray(value)) {
-            throw new TypeError(
-                "Not a valid list value, expected Array obtained " +
-                    util.inspect(value),
-            );
-        }
-        const parts: Array<Buffer> = [];
-        parts.push(this.getLengthBuffer(value));
-        for (let i = 0; i < value.length; i++) {
-            const val = value[i];
-            if (
-                val === null ||
-                typeof val === "undefined" ||
-                val === types.unset
-            ) {
-                throw new TypeError(
-                    "A collection can't contain null or unset values",
-                );
-            }
-            const bytes = this.encode(val, subtype) as Buffer;
-            // include item byte length
-            parts.push(this.getLengthBuffer(bytes));
-            // include item
-            parts.push(bytes);
-        }
-        return Buffer.concat(parts);
-    }
-
-    encodeSet(value: any, columnInfo: ColumnInfo): Buffer | null {
-        if (
-            this.encodingOptions.set &&
-            value instanceof this.encodingOptions.set
-        ) {
-            const arr: Array<any> = [];
-            value.forEach(function (x: any) {
-                arr.push(x);
-            });
-            return this.encodeList(arr, columnInfo);
-        }
-        return this.encodeList(value, columnInfo);
-    }
-
     /**
      * Serializes a map into a Buffer
      * @param value
@@ -2225,6 +2184,9 @@ class Encoder extends EncoderMembers {
     constructor(protocolVersion: number, options: any) {
         super(options.encoding || utils.emptyObject);
         this.setProtocolVersion(protocolVersion);
+        // Collections need the private steps of Encoder to write their items.
+        this.writers[dataTypes.list] = this.#writeList;
+        this.writers[dataTypes.set] = this.#writeSet;
         if (this.encodingOptions.copyBuffer) {
             this.handleBuffer = handleBufferCopy;
         } else {
@@ -2420,25 +2382,141 @@ class Encoder extends EncoderMembers {
         if (value === types.unset) {
             return Encoder.writeCell(out, offset, undefined);
         }
-        if (value === null || value instanceof Buffer) {
-            return Encoder.writeCell(out, offset, value);
+        if (value === null) {
+            return Encoder.writeCell(out, offset, null);
+        }
+        // Make room for the length first: writing the bytes can grow the buffer,
+        // and then it keeps only the bytes before their start.
+        out.ensure(offset, 4);
+        const start = offset + 4;
+        const end = this.#writeBytes(out, start, value, typeInfo);
+        out.buffer.writeInt32BE(end - start, offset);
+        return end;
+    }
+
+    /**
+     * Writes the bytes of a value that is not null or unset, at `start` in `out`.
+     * A Buffer is written as it is.
+     * Another value is written by the writer of its type,
+     * or encoded by the encoding function of its type and copied.
+     * @returns The offset after the bytes.
+     */
+    #writeBytes(
+        out: GrowableBuffer,
+        start: number,
+        value: any,
+        typeInfo: any,
+    ): number {
+        if (value instanceof Buffer) {
+            out.ensure(start, value.length);
+            out.buffer.set(value, start);
+            return start + value.length;
         }
         const type = this.#resolveType(value, typeInfo);
         const writer = this.writers[type.code];
         if (writer) {
-            // Make room for the length first: the writer can grow the buffer,
-            // and then it keeps only the bytes before its start.
-            out.ensure(offset, 4);
-            const start = offset + 4;
-            const end = writer.call(this, out, start, value, type);
-            out.buffer.writeInt32BE(end - start, offset);
-            return end;
+            return writer.call(this, out, start, value, type);
         }
-        return Encoder.writeCell(
-            out,
-            offset,
-            this.#encoderFor(type).call(this, value, type),
-        );
+        const bytes = this.#encoderFor(type).call(this, value, type) as Buffer;
+        out.ensure(start, bytes.length);
+        out.buffer.set(bytes, start);
+        return start + bytes.length;
+    }
+
+    /**
+     * Writes a list: the number of items, then each item with its length.
+     * An empty list is the count 0.
+     * @returns The offset after the list.
+     */
+    #writeList(
+        out: GrowableBuffer,
+        start: number,
+        value: any,
+        columnInfo: ColumnInfo,
+    ): number {
+        const subtype = columnInfo.info as ColumnInfo;
+        if (!Array.isArray(value)) {
+            throw new TypeError(
+                "Not a valid list value, expected Array obtained " +
+                    util.inspect(value),
+            );
+        }
+        let end = this.#writeCollectionLength(out, start, value.length);
+        for (let i = 0; i < value.length; i++) {
+            const item = value[i];
+            if (item === null || item === undefined || item === types.unset) {
+                throw new TypeError(
+                    "A collection can't contain null or unset values",
+                );
+            }
+            end = this.#writeItem(out, end, item, subtype);
+        }
+        return end;
+    }
+
+    /**
+     * Writes a set, from an array, or from an instance of the `set` encoding option.
+     * @returns The offset after the set.
+     */
+    #writeSet(
+        out: GrowableBuffer,
+        start: number,
+        value: any,
+        columnInfo: ColumnInfo,
+    ): number {
+        if (
+            this.encodingOptions.set &&
+            value instanceof this.encodingOptions.set
+        ) {
+            const arr: Array<any> = [];
+            value.forEach(function (x: any) {
+                arr.push(x);
+            });
+            value = arr;
+        }
+        return this.#writeList(out, start, value, columnInfo);
+    }
+
+    /**
+     * Writes one item of a collection at `offset`: its length, with the size
+     * of the protocol version, and then its bytes.
+     * The caller checks that the item is not null or unset.
+     * @returns The offset after the item.
+     */
+    #writeItem(
+        out: GrowableBuffer,
+        offset: number,
+        value: any,
+        typeInfo: any,
+    ): number {
+        // Make room for the length first: writing the bytes can grow the buffer,
+        // and then it keeps only the bytes before their start.
+        const size = this.collectionLengthSize;
+        out.ensure(offset, size);
+        const start = offset + size;
+        const end = this.#writeBytes(out, start, value, typeInfo);
+        this.#writeCollectionLength(out, offset, end - start);
+        return end;
+    }
+
+    /**
+     * Writes a length or a count of a collection at `offset`,
+     * with the size of the protocol version.
+     * @returns The offset after it.
+     */
+    #writeCollectionLength(
+        out: GrowableBuffer,
+        offset: number,
+        length: number,
+    ): number {
+        if (this.collectionLengthSize === 4) {
+            out.ensure(offset, 4);
+            out.buffer.writeInt32BE(length, offset);
+            return offset + 4;
+        }
+        out.ensure(offset, 2);
+        out.buffer.writeUInt16BE(length, offset);
+        return offset + 2;
     }
 
     /**
