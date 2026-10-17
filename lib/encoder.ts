@@ -120,6 +120,34 @@ const customEncoders: { [typeName: string]: (value: any) => Buffer } = {
 };
 
 /**
+ * Gets the type from type information given as a hint:
+ * a type, a type name such as "int", or a type code.
+ * @throws {TypeError} When the type information is not valid
+ */
+function typeFromHint(typeInfo: any): any {
+    let type: any = null;
+    if (typeof typeInfo === "number") {
+        type = {
+            code: typeInfo,
+        };
+    } else if (typeof typeInfo === "string") {
+        type = dataTypes.getByName(typeInfo);
+    } else if (
+        typeInfo !== null &&
+        typeof typeInfo === "object" &&
+        typeof typeInfo.code === "number"
+    ) {
+        type = typeInfo;
+    }
+    if (type == null || typeof type.code !== "number") {
+        throw new TypeError(
+            "Type information not valid, only String and Number values are valid hints",
+        );
+    }
+    return type;
+}
+
+/**
  * Checks that a UDT type has its fields, and that each field has a type.
  * @throws {TypeError} When the type information is not valid
  */
@@ -1324,8 +1352,17 @@ class EncoderMembers {
         return new Vector(rv, typeInfo);
     }
 
+    /**
+     * Gets the size of each value of a type, when all its values have the same size.
+     * @param cqlType The type. It can also be a hint: a type name or a type code.
+     * @returns The size in bytes, or -1 for a type with values of different sizes.
+     * @throws {TypeError} When the type information is not valid
+     */
     serializationSizeIfFixed(cqlType: any): number {
-        switch (cqlType.code) {
+        // Resolve a hint first: the switch needs the type code.
+        // This also covers the element types of nested vectors.
+        const type = typeFromHint(cqlType);
+        switch (type.code) {
             case dataTypes.bigint:
                 return 8;
             case dataTypes.boolean:
@@ -1344,16 +1381,17 @@ class EncoderMembers {
                 return 16;
             case dataTypes.custom:
                 if (
-                    "customTypeName" in cqlType &&
-                    cqlType.customTypeName === "vector"
+                    "customTypeName" in type &&
+                    type.customTypeName === "vector"
                 ) {
+                    checkVectorInfo(type.info);
                     const subtypeSerialSize = this.serializationSizeIfFixed(
-                        cqlType.info[0],
+                        type.info[0],
                     );
                     if (subtypeSerialSize === -1) {
                         return -1;
                     }
-                    return subtypeSerialSize * cqlType.info[1];
+                    return subtypeSerialSize * type.info[1];
                 }
                 return -1;
             default:
@@ -2306,20 +2344,7 @@ class Encoder extends EncoderMembers {
         let type: any = null;
 
         if (typeInfo) {
-            if (typeof typeInfo === "number") {
-                type = {
-                    code: typeInfo,
-                };
-            } else if (typeof typeInfo === "string") {
-                type = dataTypes.getByName(typeInfo);
-            } else if (typeof typeInfo.code === "number") {
-                type = typeInfo;
-            }
-            if (type == null || typeof type.code !== "number") {
-                throw new TypeError(
-                    "Type information not valid, only String and Number values are valid hints",
-                );
-            }
+            type = typeFromHint(typeInfo);
         } else {
             // Lets guess
             type = Encoder.guessDataType(value);
