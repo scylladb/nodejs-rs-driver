@@ -29,5 +29,7 @@ encoder.js
 encoder.d.ts
 frame-writer.js
 frame-writer.d.ts
+growable-buffer.js
+growable-buffer.d.ts
 rust-session.js
 rust-session.d.ts
