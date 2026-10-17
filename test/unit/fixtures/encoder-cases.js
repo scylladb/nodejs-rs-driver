@@ -16,14 +16,24 @@ const text = t(dataTypes.text);
 const bigint = t(dataTypes.bigint);
 const timestamp = t(dataTypes.timestamp);
 const uuidString = "a3e4c8b2-1c2d-4e5f-8a9b-0c1d2e3f4a5b";
+const udt = t(dataTypes.udt, {
+    name: "u",
+    fields: [
+        { name: "a", type: int },
+        { name: "b", type: text },
+    ],
+});
+const tuple = t(dataTypes.tuple, [int, text]);
 
 /** The encoders that the cases use, by name. */
 function makeEncoders() {
     return {
         default: new Encoder(4, {}),
         bigint: new Encoder(4, { encoding: { useBigIntAsLong: true } }),
-        v2: new Encoder(2, {}),
         setMap: new Encoder(4, { encoding: { set: Set, map: Map } }),
+        undefinedAsUnset: new Encoder(4, {
+            encoding: { useUndefinedAsUnset: true },
+        }),
     };
 }
 
@@ -296,6 +306,112 @@ const cases = [
         "setMap",
         t(dataTypes.map, [text, int]),
         () => new Map([["k", types.unset]]),
+    ],
+
+    // udt
+    ["udt fields", "default", udt, () => ({ a: 1, b: "x" })],
+    ["udt missing field", "default", udt, () => ({ a: 1 })],
+    ["udt extra field", "default", udt, () => ({ a: 1, b: "x", c: 2 })],
+    ["udt null field", "default", udt, () => ({ a: null, b: "x" })],
+    ["udt unset field", "default", udt, () => ({ a: types.unset, b: "x" })],
+    [
+        "udt undefined field as unset",
+        "undefinedAsUnset",
+        udt,
+        () => ({ a: undefined, b: "x" }),
+    ],
+    [
+        "udt Buffer field",
+        "default",
+        udt,
+        () => ({ a: Buffer.from([0, 0, 0, 7]), b: Buffer.alloc(0) }),
+    ],
+    [
+        "udt empty list field",
+        "default",
+        t(dataTypes.udt, {
+            name: "u",
+            fields: [{ name: "l", type: t(dataTypes.list, int) }],
+        }),
+        () => ({ l: [] }),
+    ],
+    [
+        "udt nested",
+        "default",
+        t(dataTypes.udt, { name: "o", fields: [{ name: "in", type: udt }] }),
+        () => ({ in: { a: 2, b: "y" } }),
+    ],
+    ["udt bad field", "default", udt, () => ({ a: "x", b: "y" })],
+    ["udt not an object", "default", udt, () => 5],
+
+    // tuple
+    ["tuple values", "default", tuple, () => new types.Tuple(1, "x")],
+    ["tuple shorter value", "default", tuple, () => new types.Tuple(1)],
+    ["tuple longer value", "default", tuple, () => new types.Tuple(1, "x", 3)],
+    ["tuple null item", "default", tuple, () => new types.Tuple(null, "x")],
+    [
+        "tuple unset item",
+        "default",
+        tuple,
+        () => new types.Tuple(types.unset, "x"),
+    ],
+    ["tuple bad item", "default", tuple, () => new types.Tuple("x", "y")],
+    [
+        "tuple in list",
+        "default",
+        t(dataTypes.list, tuple),
+        () => [new types.Tuple(1, "a")],
+    ],
+    ["tuple from array", "default", tuple, () => [1, "x"]],
+    ["tuple from number", "default", tuple, () => 5],
+    [
+        "tuple without item types",
+        "default",
+        t(dataTypes.tuple),
+        () => new types.Tuple(1),
+    ],
+    ["udt without fields", "default", t(dataTypes.udt), () => ({ a: 1 })],
+    [
+        "udt field without type",
+        "default",
+        t(dataTypes.udt, { name: "u", fields: [{ name: "a" }] }),
+        () => ({ a: 1 }),
+    ],
+    [
+        "udt field hole",
+        "default",
+        t(dataTypes.udt, { name: "u", fields: [, { name: "b", type: int }] }), // eslint-disable-line no-sparse-arrays
+        () => ({ b: 1 }),
+    ],
+    [
+        "udt field null",
+        "default",
+        t(dataTypes.udt, { name: "u", fields: [null] }),
+        () => ({ a: 1 }),
+    ],
+    [
+        "tuple sparse item types",
+        "default",
+        t(dataTypes.tuple, new Array(1)),
+        () => new types.Tuple(1),
+    ],
+    [
+        "udt field type by name",
+        "default",
+        t(dataTypes.udt, { name: "u", fields: [{ name: "a", type: "int" }] }),
+        () => ({ a: 1 }),
+    ],
+    [
+        "tuple with no item types",
+        "default",
+        t(dataTypes.tuple, []),
+        () => new types.Tuple(1),
+    ],
+    [
+        "tuple item without type",
+        "default",
+        t(dataTypes.tuple, [int, undefined]),
+        () => new types.Tuple(1, 2),
     ],
 ];
 
