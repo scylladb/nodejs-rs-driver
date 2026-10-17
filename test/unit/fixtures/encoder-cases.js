@@ -565,6 +565,37 @@ const cases = [
         () => new types.Duration(1, 2, Long.fromNumber(3)),
     ],
     ["custom unknown", "default", t(dataTypes.custom, "no.such.Type"), () => 1],
+
+    // float, smallint, tinyint and inet
+    ["float 1.5", "default", t(dataTypes.float), () => 1.5],
+    ["float rounded", "default", t(dataTypes.float), () => 0.1],
+    ["float NaN", "default", t(dataTypes.float), () => NaN],
+    ["float numeric string", "default", t(dataTypes.float), () => "2.5"],
+    ["float bad string", "default", t(dataTypes.float), () => "abc"],
+    ["float boolean", "default", t(dataTypes.float), () => true],
+    ["smallint -1", "default", t(dataTypes.smallint), () => -1],
+    ["smallint numeric string", "default", t(dataTypes.smallint), () => "12"],
+    ["smallint too large", "default", t(dataTypes.smallint), () => 40000],
+    ["smallint NaN", "default", t(dataTypes.smallint), () => NaN],
+    ["tinyint -1", "default", t(dataTypes.tinyint), () => -1],
+    ["tinyint fraction", "default", t(dataTypes.tinyint), () => 1.9],
+    ["tinyint too large", "default", t(dataTypes.tinyint), () => 200],
+    ["tinyint bad string", "default", t(dataTypes.tinyint), () => "x"],
+    [
+        "inet IPv4",
+        "default",
+        t(dataTypes.inet),
+        () => types.InetAddress.fromString("10.0.0.1"),
+    ],
+    [
+        "inet IPv6",
+        "default",
+        t(dataTypes.inet),
+        () => types.InetAddress.fromString("::1"),
+    ],
+    ["inet string", "default", t(dataTypes.inet), () => "192.168.1.2"],
+    ["inet bad string", "default", t(dataTypes.inet), () => "not an address"],
+    ["inet number", "default", t(dataTypes.inet), () => 5],
 ];
 
 /**

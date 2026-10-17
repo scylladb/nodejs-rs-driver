@@ -652,5 +652,77 @@
             "TypeError",
             "No encoding handler found for type [object Object]"
         ]
+    },
+    "float 1.5": {
+        "hex": "3fc00000"
+    },
+    "float rounded": {
+        "hex": "3dcccccd"
+    },
+    "float NaN": {
+        "hex": "7fc00000"
+    },
+    "float numeric string": {
+        "hex": "40200000"
+    },
+    "float bad string": {
+        "error": [
+            "TypeError",
+            "Expected string representation of a number, obtained NaN"
+        ]
+    },
+    "float boolean": {
+        "error": ["TypeError", "Expected Number, obtained true"]
+    },
+    "smallint -1": {
+        "hex": "ffff"
+    },
+    "smallint numeric string": {
+        "hex": "000c"
+    },
+    "smallint too large": {
+        "error": [
+            "RangeError",
+            "The value of \"value\" is out of range. It must be >= -32768 and <= 32767. Received 40000"
+        ]
+    },
+    "smallint NaN": {
+        "error": ["TypeError", "Expected Number, obtained NaN"]
+    },
+    "tinyint -1": {
+        "hex": "ff"
+    },
+    "tinyint fraction": {
+        "hex": "01"
+    },
+    "tinyint too large": {
+        "error": [
+            "RangeError",
+            "The value of \"value\" is out of range. It must be >= -128 and <= 127. Received 200"
+        ]
+    },
+    "tinyint bad string": {
+        "error": ["TypeError", "Expected Number, obtained 'x'"]
+    },
+    "inet IPv4": {
+        "hex": "0a000001"
+    },
+    "inet IPv6": {
+        "hex": "00000000000000000000000000000001"
+    },
+    "inet string": {
+        "hex": "c0a80102"
+    },
+    "inet bad string": {
+        "error": [
+            "TypeError",
+            "Value could not be parsed as InetAddress: not an address"
+        ]
+    },
+    "inet number": {
+        "error": [
+            "TypeError",
+            "Not a valid Inet, expected InetAddress/Buffer, obtained 5"
+        ]
     }
 }
