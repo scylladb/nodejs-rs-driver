@@ -30,7 +30,6 @@ const collectionLengthSize = 4;
 const buffers = {
     int32Zero: utils.allocBufferFromArray([0, 0, 0, 0]),
     int8Zero: utils.allocBufferFromArray([0]),
-    int8One: utils.allocBufferFromArray([1]),
     int8MaxValue: utils.allocBufferFromArray([0xff]),
 };
 
@@ -350,7 +349,6 @@ class EncoderMembers {
             [dataTypes.custom]: this.encodeCustom,
             [dataTypes.ascii]: this.encodeAsciiString,
             [dataTypes.blob]: this.encodeBlob,
-            [dataTypes.boolean]: this.encodeBoolean,
             [dataTypes.decimal]: this.encodeDecimal,
             [dataTypes.text]: this.encodeUtf8String,
             [dataTypes.uuid]: this.encodeUuid,
@@ -371,6 +369,7 @@ class EncoderMembers {
         this.encoders = {
             [dataTypes.bigint]: this.encodeBigInt,
             [dataTypes.counter]: this.encodeBigInt,
+            [dataTypes.boolean]: this.encodeBoolean,
             [dataTypes.double]: this.encodeDouble,
             [dataTypes.float]: this.encodeFloat,
             [dataTypes.smallint]: this.encodeSmallint,
@@ -1110,8 +1109,9 @@ class EncoderMembers {
     /**
      * @private
      */
-    encodeBoolean(value: any): Buffer {
-        return value ? buffers.int8One : buffers.int8Zero;
+    encodeBoolean(out: GrowableBuffer, start: number, value: any): number {
+        out.ensure(start, 1);
+        return out.buffer.writeUInt8(value ? 1 : 0, start);
     }
 
     /**
