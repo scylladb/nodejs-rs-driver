@@ -1983,7 +1983,7 @@ class Encoder extends EncoderMembers {
         this.encoders[dataTypes.map] = this.#encodeMap;
         this.encoders[dataTypes.udt] = this.#encodeUdt;
         this.encoders[dataTypes.tuple] = this.#encodeTuple;
-        this.legacyEncoders[dataTypes.custom] = this.#encodeCustom;
+        this.encoders[dataTypes.custom] = this.#encodeCustom;
         if (this.encodingOptions.copyBuffer) {
             this.handleBuffer = handleBufferCopy;
         } else {
@@ -2454,12 +2454,21 @@ class Encoder extends EncoderMembers {
         return end;
     }
 
-    #encodeCustom(value: any, columnInfo: ColumnInfo): Buffer {
+    /**
+     * Writes a value of a custom type: a vector, or a type in `customEncoders`.
+     * @returns The offset after the value.
+     */
+    #encodeCustom(
+        out: GrowableBuffer,
+        start: number,
+        value: any,
+        columnInfo: ColumnInfo,
+    ): number {
         if (
             "customTypeName" in columnInfo &&
             columnInfo.customTypeName === "vector"
         ) {
-            return this.#encodeVector(value, columnInfo);
+            return this.#encodeVector(out, start, value, columnInfo);
         }
 
         if (
@@ -2467,19 +2476,32 @@ class Encoder extends EncoderMembers {
             columnInfo.info.startsWith(customTypeNames.vector)
         ) {
             const vectorColumnInfo = this.parseFqTypeName(columnInfo.info);
-            return this.#encodeVector(value, vectorColumnInfo);
+            return this.#encodeVector(out, start, value, vectorColumnInfo);
         }
 
         const handler = customEncoders[columnInfo.info as string];
         if (handler) {
-            return handler.call(this, value);
+            const bytes = handler.call(this, value);
+            out.ensure(start, bytes.length);
+            out.buffer.set(bytes, start);
+            return start + bytes.length;
         }
         throw new TypeError(
             "No encoding handler found for type " + util.inspect(columnInfo),
         );
     }
 
-    #encodeVector(value: any, params: any): Buffer {
+    /**
+     * Writes a vector: its elements one after another.
+     * An element of a type with a variable size has its length before it, as an unsigned vint.
+     * @returns The offset after the vector.
+     */
+    #encodeVector(
+        out: GrowableBuffer,
+        start: number,
+        value: any,
+        params: any,
+    ): number {
         checkVectorInfo(params.info);
         if (!(value instanceof Vector)) {
             throw new TypeError(
@@ -2494,21 +2516,29 @@ class Encoder extends EncoderMembers {
             );
         }
 
-        const serializationSize = this.serializationSizeIfFixed(params.info[0]);
-        const encoded: Array<Buffer> = [];
+        const subtype = params.info[0];
+        const serializationSize = this.serializationSizeIfFixed(subtype);
+        let end = start;
         for (const elem of value) {
             if (elem === null || elem === undefined || elem === types.unset) {
                 throw new TypeError(
                     "A vector can't contain null or unset values",
                 );
             }
-            const elemBuffer = this.encode(elem, params.info[0]) as Buffer;
-            if (serializationSize === -1) {
-                encoded.push(utils.VIntCoding.uvintPack(elemBuffer.length));
+            if (serializationSize !== -1) {
+                end = this.#writeBytes(out, end, elem, subtype);
+                continue;
             }
-            encoded.push(elemBuffer);
+            // The length comes before the bytes, and its size depends on the length.
+            // Thus, encode the element first.
+            const elemBuffer = this.encode(elem, subtype) as Buffer;
+            const lengthBuffer = utils.VIntCoding.uvintPack(elemBuffer.length);
+            out.ensure(end, lengthBuffer.length + elemBuffer.length);
+            out.buffer.set(lengthBuffer, end);
+            out.buffer.set(elemBuffer, end + lengthBuffer.length);
+            end += lengthBuffer.length + elemBuffer.length;
         }
-        return Buffer.concat(encoded);
+        return end;
     }
 
     /**
