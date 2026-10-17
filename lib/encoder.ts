@@ -361,7 +361,6 @@ class EncoderMembers {
         };
 
         this.encoders = {
-            [dataTypes.custom]: this.encodeCustom,
             [dataTypes.blob]: this.encodeBlob,
             [dataTypes.decimal]: this.encodeDecimal,
             [dataTypes.float]: this.encodeFloat,
@@ -1122,29 +1121,6 @@ class EncoderMembers {
         return value;
     }
 
-    encodeCustom(value: any, columnInfo: ColumnInfo): Buffer {
-        if (
-            "customTypeName" in columnInfo &&
-            columnInfo.customTypeName === "vector"
-        ) {
-            return this.encodeVector(value, columnInfo);
-        }
-
-        if (
-            typeof columnInfo.info === "string" &&
-            columnInfo.info.startsWith(customTypeNames.vector)
-        ) {
-            const vectorColumnInfo = this.parseFqTypeName(columnInfo.info);
-            return this.encodeVector(value, vectorColumnInfo);
-        }
-
-        const handler = customEncoders[columnInfo.info as string];
-        if (handler) {
-            return handler.call(this, value);
-        }
-        throw new TypeError("No encoding handler found for type " + columnInfo);
-    }
-
     /**
      * @private
      */
@@ -1286,42 +1262,6 @@ class EncoderMembers {
             default:
                 return -1;
         }
-    }
-
-    encodeVector(value: any, params: any): Buffer {
-        checkVectorInfo(params.info);
-        if (!(value instanceof Vector)) {
-            throw new TypeError(
-                "Driver only supports Vector type when encoding a vector",
-            );
-        }
-
-        const dimension = params.info[1];
-        if (value.length !== dimension) {
-            throw new TypeError(
-                `Expected vector with ${dimension} dimensions, observed size of ${value.length}`,
-            );
-        }
-
-        if (value.length === 0) {
-            throw new TypeError("Cannot encode empty array as vector");
-        }
-
-        const serializationSize = this.serializationSizeIfFixed(params.info[0]);
-        const encoded: Array<Buffer> = [];
-        for (const elem of value) {
-            if (elem === null || elem === undefined || elem === types.unset) {
-                throw new TypeError(
-                    "A vector can't contain null or unset values",
-                );
-            }
-            const elemBuffer = this.encode(elem, params.info[0]) as Buffer;
-            if (serializationSize === -1) {
-                encoded.push(utils.VIntCoding.uvintPack(elemBuffer.length));
-            }
-            encoded.push(elemBuffer);
-        }
-        return Buffer.concat(encoded);
     }
 
     /**
@@ -2041,6 +1981,7 @@ class Encoder extends EncoderMembers {
         this.writers[dataTypes.map] = this.#writeMap;
         this.writers[dataTypes.udt] = this.#writeUdt;
         this.writers[dataTypes.tuple] = this.#writeTuple;
+        this.writers[dataTypes.custom] = this.#writeCustom;
         if (this.encodingOptions.copyBuffer) {
             this.handleBuffer = handleBufferCopy;
         } else {
@@ -2475,6 +2416,95 @@ class Encoder extends EncoderMembers {
             }
         }
         this.#writeCollectionLength(out, start, count);
+        return end;
+    }
+
+    /**
+     * Writes a value of a custom type: a vector, or a type in `customEncoders`.
+     * @returns The offset after the value.
+     */
+    #writeCustom(
+        out: GrowableBuffer,
+        start: number,
+        value: any,
+        columnInfo: ColumnInfo,
+    ): number {
+        if (
+            "customTypeName" in columnInfo &&
+            columnInfo.customTypeName === "vector"
+        ) {
+            return this.#writeVector(out, start, value, columnInfo);
+        }
+
+        if (
+            typeof columnInfo.info === "string" &&
+            columnInfo.info.startsWith(customTypeNames.vector)
+        ) {
+            const vectorColumnInfo = this.parseFqTypeName(columnInfo.info);
+            return this.#writeVector(out, start, value, vectorColumnInfo);
+        }
+
+        const handler = customEncoders[columnInfo.info as string];
+        if (handler) {
+            const bytes = handler.call(this, value);
+            out.ensure(start, bytes.length);
+            out.buffer.set(bytes, start);
+            return start + bytes.length;
+        }
+        throw new TypeError("No encoding handler found for type " + columnInfo);
+    }
+
+    /**
+     * Writes a vector: its elements one after another.
+     * An element of a type with a variable size has its length before it, as an unsigned vint.
+     * @returns The offset after the vector.
+     */
+    #writeVector(
+        out: GrowableBuffer,
+        start: number,
+        value: any,
+        params: any,
+    ): number {
+        checkVectorInfo(params.info);
+        if (!(value instanceof Vector)) {
+            throw new TypeError(
+                "Driver only supports Vector type when encoding a vector",
+            );
+        }
+
+        const dimension = params.info[1];
+        if (value.length !== dimension) {
+            throw new TypeError(
+                `Expected vector with ${dimension} dimensions, observed size of ${value.length}`,
+            );
+        }
+
+        if (value.length === 0) {
+            throw new TypeError("Cannot encode empty array as vector");
+        }
+
+        const subtype = params.info[0];
+        const serializationSize = this.serializationSizeIfFixed(subtype);
+        let end = start;
+        for (const elem of value) {
+            if (elem === null || elem === undefined || elem === types.unset) {
+                throw new TypeError(
+                    "A vector can't contain null or unset values",
+                );
+            }
+            if (serializationSize !== -1) {
+                end = this.#writeBytes(out, end, elem, subtype);
+                continue;
+            }
+            // The length comes before the bytes, and its size depends on the length.
+            // Thus, encode the element first.
+            const elemBuffer = this.encode(elem, subtype) as Buffer;
+            const lengthBuffer = utils.VIntCoding.uvintPack(elemBuffer.length);
+            out.ensure(end, lengthBuffer.length + elemBuffer.length);
+            out.buffer.set(lengthBuffer, end);
+            out.buffer.set(elemBuffer, end + lengthBuffer.length);
+            end += lengthBuffer.length + elemBuffer.length;
+        }
         return end;
     }
 
