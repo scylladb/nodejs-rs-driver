@@ -28,7 +28,6 @@ const buffers = {
     int16Zero: utils.allocBufferFromArray([0, 0]),
     int32Zero: utils.allocBufferFromArray([0, 0, 0, 0]),
     int8Zero: utils.allocBufferFromArray([0]),
-    int8One: utils.allocBufferFromArray([1]),
     int8MaxValue: utils.allocBufferFromArray([0xff]),
 };
 
@@ -347,10 +346,8 @@ class EncoderMembers {
             [dataTypes.ascii]: this.encodeAsciiString,
             [dataTypes.bigint]: this.encodeLong,
             [dataTypes.blob]: this.encodeBlob,
-            [dataTypes.boolean]: this.encodeBoolean,
             [dataTypes.counter]: this.encodeLong,
             [dataTypes.decimal]: this.encodeDecimal,
-            [dataTypes.double]: this.encodeDouble,
             [dataTypes.float]: this.encodeFloat,
             [dataTypes.text]: this.encodeUtf8String,
             [dataTypes.timestamp]: this.encodeTimestamp,
@@ -372,6 +369,8 @@ class EncoderMembers {
         };
 
         this.writers = {
+            [dataTypes.boolean]: this.writeBoolean,
+            [dataTypes.double]: this.writeDouble,
             [dataTypes.int]: this.writeInt,
         };
     }
@@ -766,7 +765,7 @@ class EncoderMembers {
     /**
      * @private
      */
-    encodeDouble(value: any): Buffer {
+    writeDouble(out: GrowableBuffer, start: number, value: any): number {
         if (typeof value === "string") {
             // All numeric types are supported as strings for historical reasons
             value = parseFloat(value);
@@ -784,9 +783,8 @@ class EncoderMembers {
             );
         }
 
-        const buf = utils.allocBufferUnsafe(8);
-        buf.writeDoubleBE(value, 0);
-        return buf;
+        out.ensure(start, 8);
+        return out.buffer.writeDoubleBE(value, start);
     }
 
     /**
@@ -1107,8 +1105,9 @@ class EncoderMembers {
     /**
      * @private
      */
-    encodeBoolean(value: any): Buffer {
-        return value ? buffers.int8One : buffers.int8Zero;
+    writeBoolean(out: GrowableBuffer, start: number, value: any): number {
+        out.ensure(start, 1);
+        return out.buffer.writeUInt8(value ? 1 : 0, start);
     }
 
     /**
