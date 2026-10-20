@@ -1035,9 +1035,6 @@ class EncoderMembers {
                     util.inspect(value),
             );
         }
-        if (value.length === 0) {
-            return null;
-        }
         const parts: Array<Buffer> = [];
         parts.push(this.getLengthBuffer(value));
         for (let i = 0; i < value.length; i++) {
