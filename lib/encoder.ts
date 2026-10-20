@@ -148,6 +148,78 @@ function typeFromHint(typeInfo: any): any {
 }
 
 /**
+ * Checks that a UDT type has its fields, and that each field has a type.
+ * @throws {TypeError} When the type information is not valid
+ */
+function checkUdtInfo(udtInfo: UdtInfo | undefined): void {
+    if (!udtInfo || !Array.isArray(udtInfo.fields)) {
+        throw new TypeError(
+            "Type information not valid, a UDT type needs its fields",
+        );
+    }
+    const names = new Set<string>();
+    // An index loop, not for...of or some: they skip the holes of a sparse array.
+    for (let i = 0; i < udtInfo.fields.length; i++) {
+        const field = udtInfo.fields[i];
+        if (!field || field.type === null || field.type === undefined) {
+            throw new TypeError(
+                "Type information not valid, a UDT type needs the type of each field",
+            );
+        }
+        // The Encoder reads each field of a value by its name.
+        // A name that is not a string would read an unrelated property,
+        // and a repeated name would write a field twice.
+        if (
+            typeof field.name !== "string" ||
+            field.name === "" ||
+            names.has(field.name)
+        ) {
+            throw new TypeError(
+                "Type information not valid, a UDT type needs a different, non-empty name for each field",
+            );
+        }
+        names.add(field.name);
+    }
+}
+
+/**
+ * Checks that a tuple type has at least one item, and a type for each item.
+ * @throws {TypeError} When the type information is not valid
+ */
+function checkTupleInfo(tupleInfo: Array<ColumnInfo> | undefined): void {
+    const message =
+        "Type information not valid, a tuple type needs the types of its items";
+    if (!Array.isArray(tupleInfo) || tupleInfo.length === 0) {
+        throw new TypeError(message);
+    }
+    // An index loop, not for...of or some: they skip the holes of a sparse array.
+    for (let i = 0; i < tupleInfo.length; i++) {
+        if (tupleInfo[i] === null || tupleInfo[i] === undefined) {
+            throw new TypeError(message);
+        }
+    }
+}
+
+/**
+ * Checks that a vector type has its element type and a positive integer dimension.
+ * @throws {TypeError} When the type information is not valid
+ */
+function checkVectorInfo(info: any): void {
+    if (
+        !Array.isArray(info) ||
+        info.length !== 2 ||
+        info[0] === null ||
+        info[0] === undefined ||
+        !Number.isInteger(info[1]) ||
+        info[1] <= 0
+    ) {
+        throw new TypeError(
+            "Type information not valid, a vector type needs its element type and a positive dimension",
+        );
+    }
+}
+
+/**
  * Declares the privileged instance members.
  * Due to historical reasons, it was always separate from Encoder.
  * It's likely because previously Encoder was exposed in the API (it no longer is)
@@ -1167,6 +1239,7 @@ class EncoderMembers {
 
     encodeUdt(value: any, columnInfo: ColumnInfo): Buffer | null {
         const udtInfo = columnInfo.info as UdtInfo;
+        checkUdtInfo(udtInfo);
         const parts: Array<Buffer> = [];
         let totalLength = 0;
         for (let i = 0; i < udtInfo.fields.length; i++) {
@@ -1196,6 +1269,7 @@ class EncoderMembers {
      */
     encodeTuple(value: any, columnInfo: ColumnInfo): Buffer | null {
         const tupleInfo = columnInfo.info as Array<ColumnInfo>;
+        checkTupleInfo(tupleInfo);
         if (!(value instanceof types.Tuple)) {
             throw new TypeError(
                 "Not a valid tuple, expected Tuple obtained " +
@@ -1311,6 +1385,7 @@ class EncoderMembers {
                     "customTypeName" in type &&
                     type.customTypeName === "vector"
                 ) {
+                    checkVectorInfo(type.info);
                     const subtypeSerialSize = this.serializationSizeIfFixed(
                         type.info[0],
                     );
@@ -1326,6 +1401,7 @@ class EncoderMembers {
     }
 
     encodeVector(value: any, params: any): Buffer {
+        checkVectorInfo(params.info);
         if (!(value instanceof Vector)) {
             throw new TypeError(
                 "Driver only supports Vector type when encoding a vector",
