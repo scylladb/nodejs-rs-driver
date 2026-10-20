@@ -1340,6 +1340,11 @@ class EncoderMembers {
         const serializationSize = this.serializationSizeIfFixed(params.info[0]);
         const encoded: Array<Buffer> = [];
         for (const elem of value) {
+            if (elem === null || elem === undefined || elem === types.unset) {
+                throw new TypeError(
+                    "A vector can't contain null or unset values",
+                );
+            }
             const elemBuffer = this.encode(elem, params.info[0]) as Buffer;
             if (serializationSize === -1) {
                 encoded.push(utils.VIntCoding.uvintPack(elemBuffer.length));
