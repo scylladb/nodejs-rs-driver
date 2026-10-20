@@ -1611,6 +1611,78 @@ describe("Client @SERVER_API", function () {
             );
         });
 
+        describe("with empty collections", function () {
+            // The database stores an empty collection that is not frozen as null.
+            // It stores an empty frozen collection as an empty value, which differs from null.
+            // An empty frozen collection is also valid as a key, and inside a collection.
+            const table = "tbl_empty_collections";
+            const options = { prepare: true };
+
+            before(async function () {
+                await setupInfo.client.execute(
+                    `CREATE TABLE ${table} (id int, ck frozen<list<int>>, ` +
+                        "l list<int>, s set<int>, " +
+                        "fl frozen<list<int>>, fs frozen<set<int>>, fm frozen<map<text, int>>, " +
+                        "lfl list<frozen<list<int>>>, mval map<int, frozen<list<int>>>, " +
+                        "PRIMARY KEY (id, ck))",
+                );
+            });
+
+            async function insertAndRead(id, ck, column, value) {
+                const client = setupInfo.client;
+                await client.execute(
+                    `INSERT INTO ${table} (id, ck, ${column}) VALUES (?, ?, ?)`,
+                    [id, ck, value],
+                    options,
+                );
+                const result = await client.execute(
+                    `SELECT ${column} FROM ${table} WHERE id = ? AND ck = ?`,
+                    [id, ck],
+                    options,
+                );
+                assert.strictEqual(result.rowLength, 1);
+                return result.first()[column];
+            }
+
+            it("should store an empty collection that is not frozen as null", async () => {
+                assert.strictEqual(await insertAndRead(1, [1], "l", []), null);
+                assert.strictEqual(await insertAndRead(2, [1], "s", []), null);
+            });
+
+            it("should store an empty frozen collection as empty, not as null", async () => {
+                assert.deepStrictEqual(
+                    await insertAndRead(3, [1], "fl", []),
+                    [],
+                );
+                assert.deepStrictEqual(
+                    await insertAndRead(4, [1], "fs", []),
+                    [],
+                );
+                assert.deepStrictEqual(
+                    await insertAndRead(5, [1], "fm", {}),
+                    {},
+                );
+            });
+
+            it("should accept an empty frozen collection as a clustering key", async () => {
+                assert.deepStrictEqual(
+                    await insertAndRead(6, [], "fl", [2]),
+                    [2],
+                );
+            });
+
+            it("should accept empty collections inside collections", async () => {
+                assert.deepStrictEqual(
+                    await insertAndRead(7, [1], "lfl", [[], [1]]),
+                    [[], [1]],
+                );
+                assert.deepStrictEqual(
+                    await insertAndRead(8, [1], "mval", { 1: [] }),
+                    { 1: [] },
+                );
+            });
+        });
+
         describe("with smallint and tinyint types", function () {
             const insertQuery =
                 "INSERT INTO tbl_smallints (id, smallint_sample, tinyint_sample) VALUES (?, ?, ?)";
