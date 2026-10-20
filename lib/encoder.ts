@@ -19,17 +19,54 @@ import { throwNotSupported } from "./new-utils";
 import { FrameReader } from "./reader";
 import { ColumnInfo, UdtInfo } from "./types/cql-utils";
 import type { ExecutionOptions } from "./execution-options";
+import { GrowableBuffer } from "./growable-buffer";
 
 const uuidRegex =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const buffers = {
-    int16Zero: utils.allocBufferFromArray([0, 0]),
-    int32Zero: utils.allocBufferFromArray([0, 0, 0, 0]),
     int8Zero: utils.allocBufferFromArray([0]),
-    int8One: utils.allocBufferFromArray([1]),
     int8MaxValue: utils.allocBufferFromArray([0xff]),
 };
+
+/** The length of a null cell in a request frame. */
+const NULL_CELL_LENGTH = -1;
+/** The length of an unset cell in a request frame. */
+const UNSET_CELL_LENGTH = -2;
+/**
+ * A string writer grows the buffer by the upper bound of the byte length of the string
+ * only up to this size. For a longer string, it grows the buffer by the exact byte length.
+ */
+const MAX_STRING_GROWTH_BY_UPPER_BOUND = 16 * 1024;
+/** The size of the buffer that {@link Encoder.encode} gives to a writer. */
+const WRITER_BUFFER_SIZE = 16;
+
+/**
+ * Writes the bytes of one value at `start` in `out`.
+ * It does not write the length of the value: the caller writes it.
+ * @returns The offset after the bytes.
+ */
+type ValueWriter = (
+    out: GrowableBuffer,
+    start: number,
+    value: any,
+    columnInfo: ColumnInfo,
+) => number;
+
+/**
+ * Calls a writer with a new small buffer.
+ * @returns A view of the bytes that the writer wrote.
+ */
+function writeToNewBuffer(
+    encoder: EncoderMembers,
+    writer: ValueWriter,
+    value: any,
+    columnInfo: ColumnInfo,
+): Buffer {
+    const out = new GrowableBuffer(WRITER_BUFFER_SIZE);
+    const end = writer.call(encoder, out, 0, value, columnInfo);
+    return out.buffer.subarray(0, end);
+}
 
 const bigInt32BitsOn = BigInt(0xffffffff);
 const bigInt8BitsOn = BigInt(0xff);
@@ -95,9 +132,6 @@ const customTypeNames = Object.freeze({
     vector: "org.apache.cassandra.db.marshal.VectorType",
 });
 
-const nullValueBuffer = utils.allocBufferFromArray([255, 255, 255, 255]);
-const unsetValueBuffer = utils.allocBufferFromArray([255, 255, 255, 254]);
-
 /**
  * For backwards compatibility, empty buffers as text/blob/custom values are supported.
  * In the case of other types, they are going to be decoded as a `null` value.
@@ -120,6 +154,107 @@ const customEncoders: { [typeName: string]: (value: any) => Buffer } = {
 };
 
 /**
+ * Gets the type from type information given as a hint:
+ * a type, a type name such as "int", or a type code.
+ * @throws {TypeError} When the type information is not valid
+ */
+function typeFromHint(typeInfo: any): any {
+    let type: any = null;
+    if (typeof typeInfo === "number") {
+        type = {
+            code: typeInfo,
+        };
+    } else if (typeof typeInfo === "string") {
+        type = dataTypes.getByName(typeInfo);
+    } else if (
+        typeInfo !== null &&
+        typeof typeInfo === "object" &&
+        typeof typeInfo.code === "number"
+    ) {
+        type = typeInfo;
+    }
+    // A type code is an integer, also in a type object.
+    if (type == null || !Number.isInteger(type.code)) {
+        throw new TypeError(
+            "Type information not valid, only String and Number values are valid hints",
+        );
+    }
+    return type;
+}
+
+/**
+ * Checks that a UDT type has its fields, and that each field has a type.
+ * @throws {TypeError} When the type information is not valid
+ */
+function checkUdtInfo(udtInfo: UdtInfo | undefined): void {
+    if (!udtInfo || !Array.isArray(udtInfo.fields)) {
+        throw new TypeError(
+            "Type information not valid, a UDT type needs its fields",
+        );
+    }
+    const names = new Set<string>();
+    // An index loop, not for...of or some: they skip the holes of a sparse array.
+    for (let i = 0; i < udtInfo.fields.length; i++) {
+        const field = udtInfo.fields[i];
+        if (!field || field.type === null || field.type === undefined) {
+            throw new TypeError(
+                "Type information not valid, a UDT type needs the type of each field",
+            );
+        }
+        // The Encoder reads each field of a value by its name.
+        // A name that is not a string would read an unrelated property,
+        // and a repeated name would write a field twice.
+        if (
+            typeof field.name !== "string" ||
+            field.name === "" ||
+            names.has(field.name)
+        ) {
+            throw new TypeError(
+                "Type information not valid, a UDT type needs a different, non-empty name for each field",
+            );
+        }
+        names.add(field.name);
+    }
+}
+
+/**
+ * Checks that a tuple type has at least one item, and a type for each item.
+ * @throws {TypeError} When the type information is not valid
+ */
+function checkTupleInfo(tupleInfo: Array<ColumnInfo> | undefined): void {
+    const message =
+        "Type information not valid, a tuple type needs the types of its items";
+    if (!Array.isArray(tupleInfo) || tupleInfo.length === 0) {
+        throw new TypeError(message);
+    }
+    // An index loop, not for...of or some: they skip the holes of a sparse array.
+    for (let i = 0; i < tupleInfo.length; i++) {
+        if (tupleInfo[i] === null || tupleInfo[i] === undefined) {
+            throw new TypeError(message);
+        }
+    }
+}
+
+/**
+ * Checks that a vector type has its element type and a positive integer dimension.
+ * @throws {TypeError} When the type information is not valid
+ */
+function checkVectorInfo(info: any): void {
+    if (
+        !Array.isArray(info) ||
+        info.length !== 2 ||
+        info[0] === null ||
+        info[0] === undefined ||
+        !Number.isInteger(info[1]) ||
+        info[1] <= 0
+    ) {
+        throw new TypeError(
+            "Type information not valid, a vector type needs its element type and a positive dimension",
+        );
+    }
+}
+
+/**
  * Declares the privileged instance members.
  * Due to historical reasons, it was always separate from Encoder.
  * It's likely because previously Encoder was exposed in the API (it no longer is)
@@ -137,7 +272,12 @@ class EncoderMembers {
     /** Selected from the encoding options, once, in the constructor. */
     decodeLong: (bytes: Buffer) => types.Long | bigint;
     decodeVarint: (bytes: Buffer) => types.Integer | bigint;
-    encodeLong: (value: any) => Buffer;
+    writeLong: (
+        out: GrowableBuffer,
+        start: number,
+        value: any,
+        columnInfo: ColumnInfo,
+    ) => number;
     encodeVarint: (value: any) => Buffer;
 
     decoders: {
@@ -146,10 +286,14 @@ class EncoderMembers {
     encoders: {
         [code: number]: (value: any, columnInfo: ColumnInfo) => Buffer | null;
     };
+    /**
+     * Writes values straight into a buffer, for the types that have a writer.
+     * A type has a writer or an entry in {@link encoders}, never both.
+     */
+    writers: { [code: number]: ValueWriter };
 
     /** Selected from the protocol version by {@link setProtocolVersion}. */
     decodeCollectionLength!: (bytes: Buffer, offset: number) => number;
-    getLengthBuffer!: (value: any) => Buffer;
     collectionLengthSize!: number;
 
     /** Selected from the encoding options by the {@link Encoder} constructor. */
@@ -178,9 +322,9 @@ class EncoderMembers {
             ? this.#decodeVarintAsBigInt
             : this.#decodeVarintAsInteger;
 
-        this.encodeLong = encodingOptions.useBigIntAsLong
-            ? this.#encodeBigIntFromBigInt
-            : this.#encodeBigIntFromLong;
+        this.writeLong = encodingOptions.useBigIntAsLong
+            ? this.#writeBigIntFromBigInt
+            : this.#writeBigIntFromLong;
 
         this.encodeVarint = encodingOptions.useBigIntAsVarint
             ? this.#encodeVarintFromBigInt
@@ -217,33 +361,30 @@ class EncoderMembers {
         };
 
         this.encoders = {
-            [dataTypes.custom]: this.encodeCustom,
-            [dataTypes.ascii]: this.encodeAsciiString,
-            [dataTypes.bigint]: this.encodeLong,
             [dataTypes.blob]: this.encodeBlob,
-            [dataTypes.boolean]: this.encodeBoolean,
-            [dataTypes.counter]: this.encodeLong,
             [dataTypes.decimal]: this.encodeDecimal,
-            [dataTypes.double]: this.encodeDouble,
-            [dataTypes.float]: this.encodeFloat,
-            [dataTypes.int]: this.encodeInt,
-            [dataTypes.text]: this.encodeUtf8String,
-            [dataTypes.timestamp]: this.encodeTimestamp,
-            [dataTypes.uuid]: this.encodeUuid,
-            [dataTypes.varchar]: this.encodeUtf8String,
             [dataTypes.varint]: this.encodeVarint,
-            [dataTypes.timeuuid]: this.encodeUuid,
-            [dataTypes.inet]: this.encodeInet,
             [dataTypes.date]: this.encodeDate,
             [dataTypes.time]: this.encodeTime,
-            [dataTypes.smallint]: this.encodeSmallint,
-            [dataTypes.tinyint]: this.encodeTinyint,
             [dataTypes.duration]: encodeDuration,
-            [dataTypes.list]: this.encodeList,
-            [dataTypes.map]: this.encodeMap,
-            [dataTypes.set]: this.encodeSet,
-            [dataTypes.udt]: this.encodeUdt,
-            [dataTypes.tuple]: this.encodeTuple,
+        };
+
+        this.writers = {
+            [dataTypes.ascii]: this.writeAsciiString,
+            [dataTypes.bigint]: this.writeLong,
+            [dataTypes.counter]: this.writeLong,
+            [dataTypes.text]: this.writeUtf8String,
+            [dataTypes.varchar]: this.writeUtf8String,
+            [dataTypes.boolean]: this.writeBoolean,
+            [dataTypes.double]: this.writeDouble,
+            [dataTypes.float]: this.writeFloat,
+            [dataTypes.inet]: this.writeInet,
+            [dataTypes.smallint]: this.writeSmallint,
+            [dataTypes.tinyint]: this.writeTinyint,
+            [dataTypes.int]: this.writeInt,
+            [dataTypes.timestamp]: this.writeTimestamp,
+            [dataTypes.timeuuid]: this.writeUuid,
+            [dataTypes.uuid]: this.writeUuid,
         };
     }
 
@@ -256,7 +397,6 @@ class EncoderMembers {
         this.protocolVersion = value;
         // Set the collection serialization based on the protocol version
         this.decodeCollectionLength = decodeCollectionLengthV3;
-        this.getLengthBuffer = getLengthBufferV3;
         this.collectionLengthSize = 4;
         if (
             !types.protocolVersion.uses4BytesCollectionLength(
@@ -264,7 +404,6 @@ class EncoderMembers {
             )
         ) {
             this.decodeCollectionLength = decodeCollectionLengthV2;
-            this.getLengthBuffer = getLengthBufferV2;
             this.collectionLengthSize = 2;
         }
     }
@@ -611,7 +750,7 @@ class EncoderMembers {
     /**
      * @private
      */
-    encodeFloat(value: any): Buffer {
+    writeFloat(out: GrowableBuffer, start: number, value: any): number {
         if (typeof value === "string") {
             // All numeric types are supported as strings for historical reasons
             value = parseFloat(value);
@@ -629,15 +768,14 @@ class EncoderMembers {
             );
         }
 
-        const buf = utils.allocBufferUnsafe(4);
-        buf.writeFloatBE(value, 0);
-        return buf;
+        out.ensure(start, 4);
+        return out.buffer.writeFloatBE(value, start);
     }
 
     /**
      * @private
      */
-    encodeDouble(value: any): Buffer {
+    writeDouble(out: GrowableBuffer, start: number, value: any): number {
         if (typeof value === "string") {
             // All numeric types are supported as strings for historical reasons
             value = parseFloat(value);
@@ -655,15 +793,19 @@ class EncoderMembers {
             );
         }
 
-        const buf = utils.allocBufferUnsafe(8);
-        buf.writeDoubleBE(value, 0);
-        return buf;
+        out.ensure(start, 8);
+        return out.buffer.writeDoubleBE(value, start);
     }
 
     /**
      * @private
      */
-    encodeTimestamp(value: any): Buffer {
+    writeTimestamp(
+        out: GrowableBuffer,
+        start: number,
+        value: any,
+        columnInfo: ColumnInfo,
+    ): number {
         const originalValue = value;
         if (typeof value === "string") {
             value = new Date(value);
@@ -678,7 +820,7 @@ class EncoderMembers {
         if (this.encodingOptions.useBigIntAsLong) {
             value = BigInt(value);
         }
-        return this.encodeLong(value);
+        return this.writeLong(out, start, value, columnInfo);
     }
 
     /**
@@ -731,7 +873,7 @@ class EncoderMembers {
     /**
      * @private
      */
-    encodeUuid(value: any): Buffer {
+    writeUuid(out: GrowableBuffer, start: number, value: any): number {
         if (typeof value === "string") {
             try {
                 value = types.Uuid.fromString(value).getBuffer();
@@ -747,13 +889,14 @@ class EncoderMembers {
             );
         }
 
-        return value;
+        out.ensure(start, value.length);
+        return start + value.copy(out.buffer, start);
     }
 
     /**
      * @private
      */
-    encodeInet(value: any): Buffer {
+    writeInet(out: GrowableBuffer, start: number, value: any): number {
         if (typeof value === "string") {
             value = types.InetAddress.fromString(value);
         }
@@ -766,39 +909,45 @@ class EncoderMembers {
                     util.inspect(value),
             );
         }
-        return value;
+        out.ensure(start, value.length);
+        return start + value.copy(out.buffer, start);
     }
 
     /**
      * @private
      */
-    #encodeBigIntFromLong(value: any): Buffer {
+    #writeBigIntFromLong(
+        out: GrowableBuffer,
+        start: number,
+        value: any,
+    ): number {
         if (typeof value === "number") {
             value = Long.fromNumber(value);
         } else if (typeof value === "string") {
             value = Long.fromString(value);
         }
 
-        let buf = null;
-
-        if (value instanceof Long) {
-            buf = (Long as any).toBuffer(value);
-        }
-
-        if (buf === null) {
+        if (!(value instanceof Long)) {
             throw new TypeError(
                 "Not a valid bigint, expected Long/Number/String/Buffer, obtained " +
                     util.inspect(value),
             );
         }
 
-        return buf;
+        out.ensure(start, 8);
+        out.buffer.writeUInt32BE(value.getHighBitsUnsigned(), start);
+        out.buffer.writeUInt32BE(value.getLowBitsUnsigned(), start + 4);
+        return start + 8;
     }
 
     /**
      * @private
      */
-    #encodeBigIntFromBigInt(value: any): Buffer {
+    #writeBigIntFromBigInt(
+        out: GrowableBuffer,
+        start: number,
+        value: any,
+    ): number {
         if (typeof value === "string") {
             // All numeric types are supported as strings for historical reasons
             value = BigInt(value);
@@ -811,10 +960,10 @@ class EncoderMembers {
             );
         }
 
-        const buffer = utils.allocBufferUnsafe(8);
-        buffer.writeUInt32BE(Number(value >> bigIntThirtyTwo) >>> 0, 0);
-        buffer.writeUInt32BE(Number(value & bigInt32BitsOn), 4);
-        return buffer;
+        out.ensure(start, 8);
+        out.buffer.writeUInt32BE(Number(value >> bigIntThirtyTwo) >>> 0, start);
+        out.buffer.writeUInt32BE(Number(value & bigInt32BitsOn), start + 4);
+        return start + 8;
     }
 
     /**
@@ -913,30 +1062,50 @@ class EncoderMembers {
     }
 
     /**
+     * Writes a string in the given encoding.
      * @private
      */
-    encodeString(value: any, encoding?: BufferEncoding): Buffer {
+    writeString(
+        out: GrowableBuffer,
+        start: number,
+        value: any,
+        encoding: "utf8" | "ascii",
+    ): number {
         if (typeof value !== "string") {
             throw new TypeError(
                 "Not a valid text value, expected String obtained " +
                     util.inspect(value),
             );
         }
-        return utils.allocBufferFromString(value, encoding);
+        // UTF-8 needs at most 3 bytes for each UTF-16 code unit, and ASCII needs 1.
+        // Measuring the exact byte length costs one more pass over the string.
+        // Thus, grow by the upper bound while it is small.
+        // For a long string, the upper bound could make the buffer much larger than necessary.
+        // Thus, grow by the exact byte length.
+        const maxBytes = encoding === "ascii" ? value.length : value.length * 3;
+        if (start + maxBytes > out.buffer.length) {
+            out.ensure(
+                start,
+                maxBytes <= MAX_STRING_GROWTH_BY_UPPER_BOUND
+                    ? maxBytes
+                    : Buffer.byteLength(value, encoding),
+            );
+        }
+        return start + out.buffer.write(value, start, encoding);
     }
 
     /**
      * @private
      */
-    encodeUtf8String(value: any): Buffer {
-        return this.encodeString(value, "utf8");
+    writeUtf8String(out: GrowableBuffer, start: number, value: any): number {
+        return this.writeString(out, start, value, "utf8");
     }
 
     /**
      * @private
      */
-    encodeAsciiString(value: any): Buffer {
-        return this.encodeString(value, "ascii");
+    writeAsciiString(out: GrowableBuffer, start: number, value: any): number {
+        return this.writeString(out, start, value, "ascii");
     }
 
     /**
@@ -952,253 +1121,51 @@ class EncoderMembers {
         return value;
     }
 
-    encodeCustom(value: any, columnInfo: ColumnInfo): Buffer {
-        if (
-            "customTypeName" in columnInfo &&
-            columnInfo.customTypeName === "vector"
-        ) {
-            return this.encodeVector(value, columnInfo);
-        }
-
-        if (
-            typeof columnInfo.info === "string" &&
-            columnInfo.info.startsWith(customTypeNames.vector)
-        ) {
-            const vectorColumnInfo = this.parseFqTypeName(columnInfo.info);
-            return this.encodeVector(value, vectorColumnInfo);
-        }
-
-        const handler = customEncoders[columnInfo.info as string];
-        if (handler) {
-            return handler.call(this, value);
-        }
-        throw new TypeError("No encoding handler found for type " + columnInfo);
+    /**
+     * @private
+     */
+    writeBoolean(out: GrowableBuffer, start: number, value: any): number {
+        out.ensure(start, 1);
+        return out.buffer.writeUInt8(value ? 1 : 0, start);
     }
 
     /**
      * @private
      */
-    encodeBoolean(value: any): Buffer {
-        return value ? buffers.int8One : buffers.int8Zero;
-    }
-
-    /**
-     * @private
-     */
-    encodeInt(value: any): Buffer {
+    writeInt(out: GrowableBuffer, start: number, value: any): number {
         if (isNaN(value)) {
             throw new TypeError(
                 "Expected Number, obtained " + util.inspect(value),
             );
         }
-        const buf = utils.allocBufferUnsafe(4);
-        buf.writeInt32BE(value, 0);
-        return buf;
+        out.ensure(start, 4);
+        return out.buffer.writeInt32BE(value, start);
     }
 
     /**
      * @private
      */
-    encodeSmallint(value: any): Buffer {
+    writeSmallint(out: GrowableBuffer, start: number, value: any): number {
         if (isNaN(value)) {
             throw new TypeError(
                 "Expected Number, obtained " + util.inspect(value),
             );
         }
-        const buf = utils.allocBufferUnsafe(2);
-        buf.writeInt16BE(value, 0);
-        return buf;
+        out.ensure(start, 2);
+        return out.buffer.writeInt16BE(value, start);
     }
 
     /**
      * @private
      */
-    encodeTinyint(value: any): Buffer {
+    writeTinyint(out: GrowableBuffer, start: number, value: any): number {
         if (isNaN(value)) {
             throw new TypeError(
                 "Expected Number, obtained " + util.inspect(value),
             );
         }
-        const buf = utils.allocBufferUnsafe(1);
-        buf.writeInt8(value, 0);
-        return buf;
-    }
-
-    /**
-     * @private
-     */
-    encodeList(value: any, columnInfo: ColumnInfo): Buffer | null {
-        const subtype = columnInfo.info as ColumnInfo;
-        if (!Array.isArray(value)) {
-            throw new TypeError(
-                "Not a valid list value, expected Array obtained " +
-                    util.inspect(value),
-            );
-        }
-        if (value.length === 0) {
-            return null;
-        }
-        const parts: Array<Buffer> = [];
-        parts.push(this.getLengthBuffer(value));
-        for (let i = 0; i < value.length; i++) {
-            const val = value[i];
-            if (
-                val === null ||
-                typeof val === "undefined" ||
-                val === types.unset
-            ) {
-                throw new TypeError(
-                    "A collection can't contain null or unset values",
-                );
-            }
-            const bytes = this.encode(val, subtype) as Buffer;
-            // include item byte length
-            parts.push(this.getLengthBuffer(bytes));
-            // include item
-            parts.push(bytes);
-        }
-        return Buffer.concat(parts);
-    }
-
-    encodeSet(value: any, columnInfo: ColumnInfo): Buffer | null {
-        if (
-            this.encodingOptions.set &&
-            value instanceof this.encodingOptions.set
-        ) {
-            const arr: Array<any> = [];
-            value.forEach(function (x: any) {
-                arr.push(x);
-            });
-            return this.encodeList(arr, columnInfo);
-        }
-        return this.encodeList(value, columnInfo);
-    }
-
-    /**
-     * Serializes a map into a Buffer
-     * @param value
-     * @private
-     */
-    encodeMap(value: any, columnInfo: ColumnInfo): Buffer | null {
-        const subtypes = columnInfo.info as [ColumnInfo, ColumnInfo];
-        const parts: Array<Buffer> = [];
-        let propCounter = 0;
-        let keySubtype: ColumnInfo | null = null;
-        let valueSubtype: ColumnInfo | null = null;
-        if (subtypes) {
-            keySubtype = subtypes[0];
-            valueSubtype = subtypes[1];
-        }
-        const addItem = (val: any, key: any) => {
-            if (
-                key === null ||
-                typeof key === "undefined" ||
-                key === types.unset
-            ) {
-                throw new TypeError("A map can't contain null or unset keys");
-            }
-            if (
-                val === null ||
-                typeof val === "undefined" ||
-                val === types.unset
-            ) {
-                throw new TypeError("A map can't contain null or unset values");
-            }
-            const keyBuffer = this.encode(key, keySubtype) as Buffer;
-            // include item byte length
-            parts.push(this.getLengthBuffer(keyBuffer));
-            // include item
-            parts.push(keyBuffer);
-            // value
-            const valueBuffer = this.encode(val, valueSubtype) as Buffer;
-            // include item byte length
-            parts.push(this.getLengthBuffer(valueBuffer));
-            // include item
-            if (valueBuffer !== null) {
-                parts.push(valueBuffer);
-            }
-            propCounter++;
-        };
-        if (
-            this.encodingOptions.map &&
-            value instanceof this.encodingOptions.map
-        ) {
-            // Use Map#forEach() method to iterate
-            value.forEach(addItem);
-        } else {
-            // Use object
-            for (const key in value) {
-                if (!Object.prototype.hasOwnProperty.call(value, key)) {
-                    continue;
-                }
-                const val = value[key];
-                addItem(val, key);
-            }
-        }
-
-        parts.unshift(this.getLengthBuffer(propCounter));
-        return Buffer.concat(parts);
-    }
-
-    encodeUdt(value: any, columnInfo: ColumnInfo): Buffer | null {
-        const udtInfo = columnInfo.info as UdtInfo;
-        const parts: Array<Buffer> = [];
-        let totalLength = 0;
-        for (let i = 0; i < udtInfo.fields.length; i++) {
-            const field = udtInfo.fields[i];
-            const item: any = this.encode(value[field.name], field.type);
-            if (!item) {
-                parts.push(nullValueBuffer);
-                totalLength += 4;
-                continue;
-            }
-            if (item === types.unset) {
-                parts.push(unsetValueBuffer);
-                totalLength += 4;
-                continue;
-            }
-            const lengthBuffer = utils.allocBufferUnsafe(4);
-            lengthBuffer.writeInt32BE(item.length, 0);
-            parts.push(lengthBuffer);
-            parts.push(item);
-            totalLength += item.length + 4;
-        }
-        return Buffer.concat(parts, totalLength);
-    }
-
-    /**
-     * @private
-     */
-    encodeTuple(value: any, columnInfo: ColumnInfo): Buffer | null {
-        const tupleInfo = columnInfo.info as Array<ColumnInfo>;
-        const parts: Array<Buffer> = [];
-        let totalLength = 0;
-        const length = Math.min(tupleInfo.length, value.length);
-
-        for (let i = 0; i < length; i++) {
-            const type = tupleInfo[i];
-            const item: any = this.encode(value.get(i), type);
-
-            if (!item) {
-                parts.push(nullValueBuffer);
-                totalLength += 4;
-                continue;
-            }
-
-            if (item === types.unset) {
-                parts.push(unsetValueBuffer);
-                totalLength += 4;
-                continue;
-            }
-
-            const lengthBuffer = utils.allocBufferUnsafe(4);
-            lengthBuffer.writeInt32BE(item.length, 0);
-            parts.push(lengthBuffer);
-            parts.push(item);
-            totalLength += item.length + 4;
-        }
-
-        return Buffer.concat(parts, totalLength);
+        out.ensure(start, 1);
+        return out.buffer.writeInt8(value, start);
     }
 
     /**
@@ -1248,8 +1215,17 @@ class EncoderMembers {
         return new Vector(rv, typeInfo);
     }
 
+    /**
+     * Gets the size of each value of a type, when all its values have the same size.
+     * @param cqlType The type. It can also be a hint: a type name or a type code.
+     * @returns The size in bytes, or -1 for a type with values of different sizes.
+     * @throws {TypeError} When the type information is not valid
+     */
     serializationSizeIfFixed(cqlType: any): number {
-        switch (cqlType.code) {
+        // Resolve a hint first: the switch needs the type code.
+        // This also covers the element types of nested vectors.
+        const type = typeFromHint(cqlType);
+        switch (type.code) {
             case dataTypes.bigint:
                 return 8;
             case dataTypes.boolean:
@@ -1268,51 +1244,22 @@ class EncoderMembers {
                 return 16;
             case dataTypes.custom:
                 if (
-                    "customTypeName" in cqlType &&
-                    cqlType.customTypeName === "vector"
+                    "customTypeName" in type &&
+                    type.customTypeName === "vector"
                 ) {
+                    checkVectorInfo(type.info);
                     const subtypeSerialSize = this.serializationSizeIfFixed(
-                        cqlType.info[0],
+                        type.info[0],
                     );
                     if (subtypeSerialSize === -1) {
                         return -1;
                     }
-                    return subtypeSerialSize * cqlType.info[1];
+                    return subtypeSerialSize * type.info[1];
                 }
                 return -1;
             default:
                 return -1;
         }
-    }
-
-    encodeVector(value: any, params: any): Buffer {
-        if (!(value instanceof Vector)) {
-            throw new TypeError(
-                "Driver only supports Vector type when encoding a vector",
-            );
-        }
-
-        const dimension = params.info[1];
-        if (value.length !== dimension) {
-            throw new TypeError(
-                `Expected vector with ${dimension} dimensions, observed size of ${value.length}`,
-            );
-        }
-
-        if (value.length === 0) {
-            throw new TypeError("Cannot encode empty array as vector");
-        }
-
-        const serializationSize = this.serializationSizeIfFixed(params.info[0]);
-        const encoded: Array<Buffer> = [];
-        for (const elem of value) {
-            const elemBuffer = this.encode(elem, params.info[0]) as Buffer;
-            if (serializationSize === -1) {
-                encoded.push(utils.VIntCoding.uvintPack(elemBuffer.length));
-            }
-            encoded.push(elemBuffer);
-        }
-        return Buffer.concat(encoded);
     }
 
     /**
@@ -2026,6 +1973,13 @@ class Encoder extends EncoderMembers {
     constructor(protocolVersion: number, options: any) {
         super(options.encoding || utils.emptyObject);
         this.setProtocolVersion(protocolVersion);
+        // Collections need the private steps of Encoder to write their items.
+        this.writers[dataTypes.list] = this.#writeList;
+        this.writers[dataTypes.set] = this.#writeSet;
+        this.writers[dataTypes.map] = this.#writeMap;
+        this.writers[dataTypes.udt] = this.#writeUdt;
+        this.writers[dataTypes.tuple] = this.#writeTuple;
+        this.writers[dataTypes.custom] = this.#writeCustom;
         if (this.encodingOptions.copyBuffer) {
             this.handleBuffer = handleBufferCopy;
         } else {
@@ -2185,11 +2139,425 @@ class Encoder extends EncoderMembers {
      * @throws {TypeError} When there is an encoding error
      */
     encode(value: any, typeInfo?: any): Buffer | null | undefined {
-        // Here, we parse the user provided value. This can be:
-        // - null which represents a CQL null value.
-        // - types.unset which represents an unset value
-        // - undefined which depending on the options, we change into one of the above values
-        // - a regular value
+        value = this.#normalizeValue(value);
+        // For the internal representation, types.unset becomes undefined.
+        // This is only an internal convention. It does not change the meaning of the value provided by the user.
+        if (value === types.unset) {
+            return undefined;
+        }
+        if (value === null || value instanceof Buffer) {
+            return value;
+        }
+        const type = this.#resolveType(value, typeInfo);
+        const writer = this.writers[type.code];
+        if (writer) {
+            return writeToNewBuffer(this, writer, value, type);
+        }
+        return this.#encoderFor(type).call(this, value, type);
+    }
+
+    /**
+     * Encodes a value as one cell of a request frame, `[i32 length][bytes]`,
+     * and writes the cell at `offset` in `out`.
+     * It takes the same values and type information as {@link encode},
+     * and throws the same errors.
+     * A null value is written as length -1, and an unset value as length -2.
+     * @returns The offset after the cell.
+     * @throws {TypeError} When there is an encoding error
+     */
+    encodeInto(
+        out: GrowableBuffer,
+        offset: number,
+        value: any,
+        typeInfo?: any,
+    ): number {
+        return this.#writeValueCell(
+            out,
+            offset,
+            value,
+            typeInfo,
+            UNSET_CELL_LENGTH,
+        );
+    }
+
+    /**
+     * Encodes a value as one cell, `[i32 length][bytes]`, at `offset` in `out`.
+     * A null value is written as length -1.
+     * @param unsetLength The length for an unset value.
+     * UDT and tuple fields use the null length for it.
+     * @returns The offset after the cell.
+     */
+    #writeValueCell(
+        out: GrowableBuffer,
+        offset: number,
+        value: any,
+        typeInfo: any,
+        unsetLength: number,
+    ): number {
+        value = this.#normalizeValue(value);
+        // Make room for the length first: writing the bytes can grow the buffer,
+        // and then it keeps only the bytes before their start.
+        out.ensure(offset, 4);
+        const start = offset + 4;
+        if (value === types.unset) {
+            out.buffer.writeInt32BE(unsetLength, offset);
+            return start;
+        }
+        if (value === null) {
+            out.buffer.writeInt32BE(NULL_CELL_LENGTH, offset);
+            return start;
+        }
+        const end = this.#writeBytes(out, start, value, typeInfo);
+        out.buffer.writeInt32BE(end - start, offset);
+        return end;
+    }
+
+    /**
+     * Writes a UDT: each field of the type as a cell, in the order of the type.
+     * A missing, null or unset field is written as null.
+     * @returns The offset after the UDT.
+     */
+    #writeUdt(
+        out: GrowableBuffer,
+        start: number,
+        value: any,
+        columnInfo: ColumnInfo,
+    ): number {
+        const udtInfo = columnInfo.info as UdtInfo;
+        checkUdtInfo(udtInfo);
+        const fields = udtInfo.fields;
+        let end = start;
+        for (let i = 0; i < fields.length; i++) {
+            const field = fields[i];
+            end = this.#writeValueCell(
+                out,
+                end,
+                value[field.name],
+                field.type,
+                NULL_CELL_LENGTH,
+            );
+        }
+        return end;
+    }
+
+    /**
+     * Writes a tuple: its items as cells, up to the shorter of the type and the value.
+     * A null or unset item is written as null.
+     * @returns The offset after the tuple.
+     */
+    #writeTuple(
+        out: GrowableBuffer,
+        start: number,
+        value: any,
+        columnInfo: ColumnInfo,
+    ): number {
+        const tupleInfo = columnInfo.info as Array<ColumnInfo>;
+        checkTupleInfo(tupleInfo);
+        if (!(value instanceof types.Tuple)) {
+            throw new TypeError(
+                "Not a valid tuple, expected Tuple obtained " +
+                    util.inspect(value),
+            );
+        }
+        const length = Math.min(tupleInfo.length, value.length);
+        let end = start;
+        for (let i = 0; i < length; i++) {
+            end = this.#writeValueCell(
+                out,
+                end,
+                value.get(i),
+                tupleInfo[i],
+                NULL_CELL_LENGTH,
+            );
+        }
+        return end;
+    }
+
+    /**
+     * Writes the bytes of a value that is not null or unset, at `start` in `out`.
+     * A Buffer is written as it is.
+     * Another value is written by the writer of its type,
+     * or encoded by the encoding function of its type and copied.
+     * @returns The offset after the bytes.
+     */
+    #writeBytes(
+        out: GrowableBuffer,
+        start: number,
+        value: any,
+        typeInfo: any,
+    ): number {
+        if (value instanceof Buffer) {
+            out.ensure(start, value.length);
+            out.buffer.set(value, start);
+            return start + value.length;
+        }
+        const type = this.#resolveType(value, typeInfo);
+        const writer = this.writers[type.code];
+        if (writer) {
+            return writer.call(this, out, start, value, type);
+        }
+        const bytes = this.#encoderFor(type).call(this, value, type) as Buffer;
+        out.ensure(start, bytes.length);
+        out.buffer.set(bytes, start);
+        return start + bytes.length;
+    }
+
+    /**
+     * Writes a list: the number of items, then each item with its length.
+     * An empty list is the count 0.
+     * @returns The offset after the list.
+     */
+    #writeList(
+        out: GrowableBuffer,
+        start: number,
+        value: any,
+        columnInfo: ColumnInfo,
+    ): number {
+        const subtype = columnInfo.info as ColumnInfo;
+        if (!Array.isArray(value)) {
+            throw new TypeError(
+                "Not a valid list value, expected Array obtained " +
+                    util.inspect(value),
+            );
+        }
+        let end = this.#writeCollectionLength(out, start, value.length);
+        for (let i = 0; i < value.length; i++) {
+            const item = value[i];
+            if (item === null || item === undefined || item === types.unset) {
+                throw new TypeError(
+                    "A collection can't contain null or unset values",
+                );
+            }
+            end = this.#writeItem(out, end, item, subtype);
+        }
+        return end;
+    }
+
+    /**
+     * Writes a set, from an array, or from an instance of the `set` encoding option.
+     * @returns The offset after the set.
+     */
+    #writeSet(
+        out: GrowableBuffer,
+        start: number,
+        value: any,
+        columnInfo: ColumnInfo,
+    ): number {
+        if (
+            this.encodingOptions.set &&
+            value instanceof this.encodingOptions.set
+        ) {
+            const arr: Array<any> = [];
+            value.forEach(function (x: any) {
+                arr.push(x);
+            });
+            value = arr;
+        }
+        return this.#writeList(out, start, value, columnInfo);
+    }
+
+    /**
+     * Writes a map: the number of entries, then the key and the value of each entry,
+     * each with its length. The map is a plain object, or an instance of the
+     * `map` encoding option. Of a plain object, it writes only the own properties.
+     * @returns The offset after the map.
+     */
+    #writeMap(
+        out: GrowableBuffer,
+        start: number,
+        value: any,
+        columnInfo: ColumnInfo,
+    ): number {
+        const subtypes = columnInfo.info as [ColumnInfo, ColumnInfo];
+        let keySubtype: ColumnInfo | null = null;
+        let valueSubtype: ColumnInfo | null = null;
+        if (subtypes) {
+            keySubtype = subtypes[0];
+            valueSubtype = subtypes[1];
+        }
+        // The count comes first, but it is known only after the entries.
+        out.ensure(start, this.collectionLengthSize);
+        let end = start + this.collectionLengthSize;
+        let count = 0;
+        const addEntry = (val: any, key: any) => {
+            if (
+                key === null ||
+                typeof key === "undefined" ||
+                key === types.unset
+            ) {
+                throw new TypeError("A map can't contain null or unset keys");
+            }
+            if (
+                val === null ||
+                typeof val === "undefined" ||
+                val === types.unset
+            ) {
+                throw new TypeError("A map can't contain null or unset values");
+            }
+            end = this.#writeItem(out, end, key, keySubtype);
+            end = this.#writeItem(out, end, val, valueSubtype);
+            count++;
+        };
+        if (
+            this.encodingOptions.map &&
+            value instanceof this.encodingOptions.map
+        ) {
+            // Use Map#forEach() method to iterate
+            value.forEach(addEntry);
+        } else {
+            // Use object
+            for (const key in value) {
+                if (!Object.prototype.hasOwnProperty.call(value, key)) {
+                    continue;
+                }
+                addEntry(value[key], key);
+            }
+        }
+        this.#writeCollectionLength(out, start, count);
+        return end;
+    }
+
+    /**
+     * Writes a value of a custom type: a vector, or a type in `customEncoders`.
+     * @returns The offset after the value.
+     */
+    #writeCustom(
+        out: GrowableBuffer,
+        start: number,
+        value: any,
+        columnInfo: ColumnInfo,
+    ): number {
+        if (
+            "customTypeName" in columnInfo &&
+            columnInfo.customTypeName === "vector"
+        ) {
+            return this.#writeVector(out, start, value, columnInfo);
+        }
+
+        if (
+            typeof columnInfo.info === "string" &&
+            columnInfo.info.startsWith(customTypeNames.vector)
+        ) {
+            const vectorColumnInfo = this.parseFqTypeName(columnInfo.info);
+            return this.#writeVector(out, start, value, vectorColumnInfo);
+        }
+
+        const handler = customEncoders[columnInfo.info as string];
+        if (handler) {
+            const bytes = handler.call(this, value);
+            out.ensure(start, bytes.length);
+            out.buffer.set(bytes, start);
+            return start + bytes.length;
+        }
+        throw new TypeError("No encoding handler found for type " + columnInfo);
+    }
+
+    /**
+     * Writes a vector: its elements one after another.
+     * An element of a type with a variable size has its length before it, as an unsigned vint.
+     * @returns The offset after the vector.
+     */
+    #writeVector(
+        out: GrowableBuffer,
+        start: number,
+        value: any,
+        params: any,
+    ): number {
+        checkVectorInfo(params.info);
+        if (!(value instanceof Vector)) {
+            throw new TypeError(
+                "Driver only supports Vector type when encoding a vector",
+            );
+        }
+
+        const dimension = params.info[1];
+        if (value.length !== dimension) {
+            throw new TypeError(
+                `Expected vector with ${dimension} dimensions, observed size of ${value.length}`,
+            );
+        }
+
+        if (value.length === 0) {
+            throw new TypeError("Cannot encode empty array as vector");
+        }
+
+        const subtype = params.info[0];
+        const serializationSize = this.serializationSizeIfFixed(subtype);
+        let end = start;
+        for (const elem of value) {
+            if (elem === null || elem === undefined || elem === types.unset) {
+                throw new TypeError(
+                    "A vector can't contain null or unset values",
+                );
+            }
+            if (serializationSize !== -1) {
+                end = this.#writeBytes(out, end, elem, subtype);
+                continue;
+            }
+            // The length comes before the bytes, and its size depends on the length.
+            // Thus, encode the element first.
+            const elemBuffer = this.encode(elem, subtype) as Buffer;
+            const lengthBuffer = utils.VIntCoding.uvintPack(elemBuffer.length);
+            out.ensure(end, lengthBuffer.length + elemBuffer.length);
+            out.buffer.set(lengthBuffer, end);
+            out.buffer.set(elemBuffer, end + lengthBuffer.length);
+            end += lengthBuffer.length + elemBuffer.length;
+        }
+        return end;
+    }
+
+    /**
+     * Writes one item of a collection at `offset`: its length, with the size
+     * of the protocol version, and then its bytes.
+     * The caller checks that the item is not null or unset.
+     * @returns The offset after the item.
+     */
+    #writeItem(
+        out: GrowableBuffer,
+        offset: number,
+        value: any,
+        typeInfo: any,
+    ): number {
+        // Make room for the length first: writing the bytes can grow the buffer,
+        // and then it keeps only the bytes before their start.
+        const size = this.collectionLengthSize;
+        out.ensure(offset, size);
+        const start = offset + size;
+        const end = this.#writeBytes(out, start, value, typeInfo);
+        this.#writeCollectionLength(out, offset, end - start);
+        return end;
+    }
+
+    /**
+     * Writes a length or a count of a collection at `offset`,
+     * with the size of the protocol version.
+     * @returns The offset after it.
+     */
+    #writeCollectionLength(
+        out: GrowableBuffer,
+        offset: number,
+        length: number,
+    ): number {
+        if (this.collectionLengthSize === 4) {
+            out.ensure(offset, 4);
+            out.buffer.writeInt32BE(length, offset);
+            return offset + 4;
+        }
+        out.ensure(offset, 2);
+        out.buffer.writeUInt16BE(length, offset);
+        return offset + 2;
+    }
+
+    /**
+     * Parses the user provided value. This can be:
+     * - null, which represents a CQL null value,
+     * - types.unset, which represents an unset value,
+     * - undefined, which becomes one of the above values, by the options,
+     * - a regular value.
+     * @returns The value, with undefined replaced.
+     * @throws {TypeError} When the value is unset, and the protocol version does not support unset values
+     */
+    #normalizeValue(value: any): any {
         if (value === undefined) {
             value =
                 this.encodingOptions.useUndefinedAsUnset &&
@@ -2197,41 +2565,30 @@ class Encoder extends EncoderMembers {
                     ? types.unset
                     : null;
         }
-
-        // And here, for the the internal representation, we change the types.unset into undefined
-        // This is only internal convention and it does not interfere with the meaning of the value provided by the user
-        if (value === types.unset) {
-            if (!types.protocolVersion.supportsUnset(this.protocolVersion)) {
-                throw new TypeError(
-                    "Unset value can not be used for this version of Cassandra, protocol version: " +
-                        this.protocolVersion,
-                );
-            }
-
-            return undefined;
+        if (
+            value === types.unset &&
+            !types.protocolVersion.supportsUnset(this.protocolVersion)
+        ) {
+            throw new TypeError(
+                "Unset value can not be used for this version of Cassandra, protocol version: " +
+                    this.protocolVersion,
+            );
         }
+        return value;
+    }
 
-        if (value === null || value instanceof Buffer) {
-            return value;
-        }
-
+    /**
+     * Gets the type to encode a regular value with, from the type information,
+     * or guessed from the value when there is no type information.
+     * @throws {TypeError} When the type information is not valid, or the type cannot be guessed
+     */
+    #resolveType(value: any, typeInfo: any): any {
         let type: any = null;
 
-        if (typeInfo) {
-            if (typeof typeInfo === "number") {
-                type = {
-                    code: typeInfo,
-                };
-            } else if (typeof typeInfo === "string") {
-                type = dataTypes.getByName(typeInfo);
-            } else if (typeof typeInfo.code === "number") {
-                type = typeInfo;
-            }
-            if (type == null || typeof type.code !== "number") {
-                throw new TypeError(
-                    "Type information not valid, only String and Number values are valid hints",
-                );
-            }
+        // Only null and undefined mean "no hint". Other falsy values, such as
+        // false, 0 or "", are hints too: 0 is the code of custom, and the others are not valid.
+        if (typeInfo !== null && typeInfo !== undefined) {
+            type = typeFromHint(typeInfo);
         } else {
             // Lets guess
             type = Encoder.guessDataType(value);
@@ -2242,49 +2599,49 @@ class Encoder extends EncoderMembers {
                 );
             }
         }
+        return type;
+    }
 
+    /**
+     * @throws {Error} When the type is not supported
+     */
+    #encoderFor(type: any): (value: any, type: any) => any {
         const encoder = this.encoders[type.code];
-
         if (!encoder) {
             throw new Error("Type not supported " + type.code);
         }
+        return encoder;
+    }
 
-        return encoder.call(this, value, type);
+    /**
+     * Writes a value that is already encoded as one cell of a request frame,
+     * `[i32 length][bytes]`, at `offset` in `out`.
+     * `null` is written as length -1, and `undefined` (unset) as length -2.
+     * @returns The offset after the cell.
+     */
+    static writeCell(
+        out: GrowableBuffer,
+        offset: number,
+        bytes: Uint8Array | null | undefined,
+    ): number {
+        switch (bytes) {
+            case null:
+                out.ensure(offset, 4);
+                out.buffer.writeInt32BE(NULL_CELL_LENGTH, offset);
+                return offset + 4;
+            case undefined:
+                out.ensure(offset, 4);
+                out.buffer.writeInt32BE(UNSET_CELL_LENGTH, offset);
+                return offset + 4;
+            default:
+                // Fails to compile if the parameter type gets a member that is not a Uint8Array.
+                bytes satisfies Uint8Array;
+                out.ensure(offset, 4 + bytes.length);
+                out.buffer.writeInt32BE(bytes.length, offset);
+                out.buffer.set(bytes, offset + 4);
+                return offset + 4 + bytes.length;
+        }
     }
-}
-
-/**
- * Gets a buffer containing with the bytes (BE) representing the collection length for protocol v2 and below
- * @private
- */
-function getLengthBufferV2(value: any): Buffer {
-    if (!value) {
-        return buffers.int16Zero;
-    }
-    const lengthBuffer = utils.allocBufferUnsafe(2);
-    if (typeof value === "number") {
-        lengthBuffer.writeUInt16BE(value, 0);
-    } else {
-        lengthBuffer.writeUInt16BE(value.length, 0);
-    }
-    return lengthBuffer;
-}
-
-/**
- * Gets a buffer containing with the bytes (BE) representing the collection length for protocol v3 and above
- * @private
- */
-function getLengthBufferV3(value: any): Buffer {
-    if (!value) {
-        return buffers.int32Zero;
-    }
-    const lengthBuffer = utils.allocBufferUnsafe(4);
-    if (typeof value === "number") {
-        lengthBuffer.writeInt32BE(value, 0);
-    } else {
-        lengthBuffer.writeInt32BE(value.length, 0);
-    }
-    return lengthBuffer;
 }
 
 /**
