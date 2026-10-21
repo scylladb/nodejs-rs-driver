@@ -40,6 +40,10 @@ The regular CI consists of the following workflows:
 - JSDoc linter
 - Partial examples (see below)
 - Partial integration tests
+- Code coverage (see below)
+
+Besides the actions, the code coverage workflow (`.github/workflows/coverage.yml`) pins the version of cargo-llvm-cov it installs (`CARGO_LLVM_COV_VERSION`).
+Bump it by hand, as with the actions (see "Updating workflows" below).
 
 ### Extended CI
 
