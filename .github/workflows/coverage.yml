@@ -53,8 +53,14 @@ jobs:
       # by, set once so that those cannot disagree.
       CARGO_LLVM_COV_VERSION: "0.9.1"
     steps:
+      # On a pull request, this checks out its head commit rather than the merge
+      # commit GitHub checks out by default: the Codecov upload below files the
+      # report under the head commit, so lines measured on the merge would be
+      # laid over the head's version of each file, out of place in any file the
+      # base has changed.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       # Takes seconds, as every tool coverage.sh runs is stubbed out. A change
       # that makes the script stop at a failing suite, or exit 0 after one,
@@ -127,3 +133,27 @@ jobs:
           path: |
             coverage/js/
             coverage/rust/
+      # No `if: always()` here: only a run in which every step above passed
+      # uploads. scripts/coverage.sh writes both reports even when a suite fails
+      # and exits non-zero only afterwards, and on main such a partial report
+      # would become the baseline later pull requests are compared against.
+      # Pull requests from forks get no secrets and upload without a token,
+      # Dependabot-triggered runs get no CODECOV_TOKEN either, and nor does a
+      # run in a fork of the repository; none of them fails the job if Codecov
+      # refuses the upload.
+      # The action downloads the Codecov CLI, by default its latest release. Its
+      # version is pinned, as the actions themselves are (see "Updating
+      # workflows" in MAINTENANCE.md), so a new CLI release cannot break the
+      # uploads, which fail the job on main.
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          version: v11.3.1
+          files: coverage/js/lcov.info,coverage/rust/lcov.info
+          disable_search: true
+          # disable_search leaves the CLI's xcode, gcov and pycoverage plugins
+          # running, each looking for reports of its own kind; noop turns them
+          # off.
+          plugins: noop
+          fail_ci_if_error: ${{ github.repository == 'scylladb/nodejs-rs-driver' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')) }}

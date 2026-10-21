@@ -29,3 +29,4 @@ eslint.config.mjs
 coverage
 *.profraw
 scripts
+codecov.yml
