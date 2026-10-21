@@ -42,8 +42,12 @@ The regular CI consists of the following workflows:
 - Partial integration tests
 - Code coverage (see below)
 
-Besides the actions, the code coverage workflow (`.github/workflows/coverage.yml`) pins the version of cargo-llvm-cov it installs (`CARGO_LLVM_COV_VERSION`).
-Bump it by hand, as with the actions (see "Updating workflows" below).
+The code coverage workflow (`.github/workflows/coverage.yml`) uploads its reports to Codecov with the `CODECOV_TOKEN` repository secret,
+the upload token from the repository's settings on Codecov.
+In this repository, a run fails when Codecov refuses its upload, so keep that secret valid.
+Pull requests from forks, which get no secrets, and Dependabot's pull requests are exempt, as is every run in a fork.
+Besides the actions, it pins the versions of two tools it installs: cargo-llvm-cov (`CARGO_LLVM_COV_VERSION`) and the Codecov CLI (the `version` input of the Codecov action).
+Bump those by hand, as with the actions (see "Updating workflows" below).
 
 ### Extended CI
 

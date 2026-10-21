@@ -127,3 +127,23 @@ jobs:
           path: |
             coverage/js/
             coverage/rust/
+      # No `if: always()` here: only a run in which every step above passed
+      # uploads. scripts/coverage.sh writes both reports even when a suite fails
+      # and exits non-zero only afterwards, and on main such a partial report
+      # would become the baseline later pull requests are compared against.
+      # Pull requests from forks get no secrets and upload without a token,
+      # Dependabot-triggered runs get no CODECOV_TOKEN either, and nor does a
+      # run in a fork of the repository; none of them fails the job if Codecov
+      # refuses the upload.
+      # The action downloads the Codecov CLI, by default its latest release. Its
+      # version is pinned, as the actions themselves are (see "Updating
+      # workflows" in MAINTENANCE.md), so a new CLI release cannot break the
+      # uploads, which fail the job on main.
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          version: v11.3.1
+          files: coverage/js/lcov.info,coverage/rust/lcov.info
+          disable_search: true
+          fail_ci_if_error: ${{ github.repository == 'scylladb/nodejs-rs-driver' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')) }}
