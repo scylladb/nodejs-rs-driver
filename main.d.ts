@@ -23,7 +23,8 @@ export { auth, metadata, metrics, policies, tracker, types };
 export { Host, HostMap };
 export type { Replica };
 export { ExecutionOptions };
-export { ClientOptions, SslOptions, ClientRoutesProxy };
+export { ClientOptions, ClientRoutesProxy };
+export type { SslOptions };
 export { QueryOptions };
 export { ExecutionProfile };
 
