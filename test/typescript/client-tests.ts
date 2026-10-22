@@ -28,6 +28,17 @@ async function myTest(): Promise<any> {
     result = await client.execute(query, params1);
     result = await client.execute(query, params2);
     result = await client.execute(query, params1, { prepare: true });
+    result = await client.execute(query, params1, {
+        routingIndexes: [0],
+        routingKey: [Buffer.from("key")],
+        routingNames: ["key"],
+    });
+    // @ts-expect-error Routing indexes must be numbers.
+    result = await client.execute(query, params1, { routingIndexes: ["0"] });
+    // @ts-expect-error Routing key parts must be Buffers.
+    result = await client.execute(query, params1, { routingKey: ["key"] });
+    // @ts-expect-error Routing names must be strings.
+    result = await client.execute(query, params1, { routingNames: [0] });
 
     // Callback-based execution
     client.execute(query, useResult);
