@@ -128,6 +128,25 @@ describe("Encoder.encodeInto", function () {
         assert.strictEqual(out.buffer.toString("utf8", 62004, end), value);
     });
 
+    it("makes room for the length of a value of zero bytes at the end of the buffer", function () {
+        const encoder = new Encoder(4, {});
+        const tupleType = t(dataTypes.tuple, [t(dataTypes.int)]);
+        // A tuple of zero items has zero bytes, and its encoder does not call ensure.
+        // A Tuple has at least one item, but the encoder takes any object with get() and length.
+        const empty = { length: 0, get: () => undefined };
+        const cases = [
+            // The cell of the tuple: only its length.
+            [tupleType, empty, "00000000"],
+            // A list of one tuple: the length of the list, the count, and the length of the tuple.
+            [t(dataTypes.list, tupleType), [empty], "000000080000000100000000"],
+        ];
+        for (const [type, value, hex] of cases) {
+            const out = new GrowableBuffer(8);
+            const end = encoder.encodeInto(out, 8, value, type);
+            assert.strictEqual(out.buffer.toString("hex", 8, end), hex);
+        }
+    });
+
     it("throws the errors of encode", function () {
         const encoder = new Encoder(4, {});
         const bad = [
