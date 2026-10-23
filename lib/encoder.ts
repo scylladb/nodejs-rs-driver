@@ -149,9 +149,6 @@ const customTypeNames = Object.freeze({
     vector: "org.apache.cassandra.db.marshal.VectorType",
 });
 
-const nullValueBuffer = utils.allocBufferFromArray([255, 255, 255, 255]);
-const unsetValueBuffer = utils.allocBufferFromArray([255, 255, 255, 254]);
-
 /**
  * For backwards compatibility, empty buffers as text/blob/custom values are supported.
  * In the case of other types, they are going to be decoded as a `null` value.
@@ -1985,7 +1982,7 @@ class Encoder extends EncoderMembers {
         this.encoders[dataTypes.set] = this.#encodeSet;
         this.encoders[dataTypes.map] = this.#encodeMap;
         this.encoders[dataTypes.udt] = this.#encodeUdt;
-        this.legacyEncoders[dataTypes.tuple] = this.#encodeTuple;
+        this.encoders[dataTypes.tuple] = this.#encodeTuple;
         this.legacyEncoders[dataTypes.custom] = this.#encodeCustom;
         if (this.encodingOptions.copyBuffer) {
             this.handleBuffer = handleBufferCopy;
@@ -2243,11 +2240,13 @@ class Encoder extends EncoderMembers {
     }
 
     /**
-     * Writes a field of a UDT as one cell, `[i32 length][bytes]`, at `offset` in `out`.
-     * In the protocol, a field is a `[bytes]`, not a `[value]` as in {@link encodeInto}.
+     * Writes a field of a UDT or an item of a tuple as one cell, `[i32 length][bytes]`,
+     * at `offset` in `out`.
+     * In the protocol, a field or an item is a `[bytes]`,
+     * not a `[value]` as in {@link encodeInto}.
      * A `[bytes]` has no length for unset: each negative length is null.
-     * Thus, an unset field is written as null, with length -1.
-     * For example, with `useUndefinedAsUnset`, a missing field is unset.
+     * Thus, an unset field or item is written as null, with length -1.
+     * For example, with `useUndefinedAsUnset`, a missing field of a UDT is unset.
      * @returns The offset after the cell.
      */
     #writeFieldCell(
@@ -2301,9 +2300,16 @@ class Encoder extends EncoderMembers {
     }
 
     /**
-     * @private
+     * Writes a tuple: its items as cells, up to the shorter of the type and the value.
+     * A null or unset item is written as null.
+     * @returns The offset after the tuple.
      */
-    #encodeTuple(value: any, columnInfo: ColumnInfo): Buffer | null {
+    #encodeTuple(
+        out: GrowableBuffer,
+        start: number,
+        value: any,
+        columnInfo: ColumnInfo,
+    ): number {
         const tupleInfo = columnInfo.info as Array<ColumnInfo>;
         checkTupleInfo(tupleInfo);
         // Accept any object with get() and length, not only a Tuple of this
@@ -2319,34 +2325,12 @@ class Encoder extends EncoderMembers {
                     util.inspect(value),
             );
         }
-        const parts: Array<Buffer> = [];
-        let totalLength = 0;
         const length = Math.min(tupleInfo.length, value.length);
-
+        let end = start;
         for (let i = 0; i < length; i++) {
-            const type = tupleInfo[i];
-            const item: any = this.encode(value.get(i), type);
-
-            if (!item) {
-                parts.push(nullValueBuffer);
-                totalLength += 4;
-                continue;
-            }
-
-            if (item === types.unset) {
-                parts.push(unsetValueBuffer);
-                totalLength += 4;
-                continue;
-            }
-
-            const lengthBuffer = utils.allocBufferUnsafe(4);
-            lengthBuffer.writeInt32BE(item.length, 0);
-            parts.push(lengthBuffer);
-            parts.push(item);
-            totalLength += item.length + 4;
+            end = this.#writeFieldCell(out, end, value.get(i), tupleInfo[i]);
         }
-
-        return Buffer.concat(parts, totalLength);
+        return end;
     }
 
     /**
