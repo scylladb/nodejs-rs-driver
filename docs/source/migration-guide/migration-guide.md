@@ -138,6 +138,26 @@ and results are **not cached** between `client.batch()` calls.
 
 Avoid using unprepared batches unless all statements take no bind markers.
 
+## Empty collections
+
+The Apache `cassandra-driver` sends an empty list or set (`[]`) as `null`.
+This driver sends it as an empty collection: a collection with no elements.
+
+The result depends on the column:
+- **A collection that is not frozen:** the database stores an empty collection as `null`.
+  Thus, the result is the same as with the Apache `cassandra-driver`.
+- **A frozen collection:** the database stores an empty collection as an empty value, not as `null`.
+  Thus, reading the column gives `[]`, not `null`.
+
+An empty collection is also valid where `null` is not, for example:
+- as an element of another collection, such as `[[], [1]]` for `list<frozen<list<int>>>`,
+- as a map key or a map value,
+- as a clustering key or a partition key of type `frozen<list<...>>` or `frozen<set<...>>`.
+
+The Apache `cassandra-driver` failed for these values.
+
+To store `null`, send `null`.
+
 ## Subclassing driver base classes
 
 Some base classes that were constructor functions in the `cassandra-driver` are now
