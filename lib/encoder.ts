@@ -1984,7 +1984,7 @@ class Encoder extends EncoderMembers {
         this.encoders[dataTypes.list] = this.#encodeList;
         this.encoders[dataTypes.set] = this.#encodeSet;
         this.encoders[dataTypes.map] = this.#encodeMap;
-        this.legacyEncoders[dataTypes.udt] = this.#encodeUdt;
+        this.encoders[dataTypes.udt] = this.#encodeUdt;
         this.legacyEncoders[dataTypes.tuple] = this.#encodeTuple;
         this.legacyEncoders[dataTypes.custom] = this.#encodeCustom;
         if (this.encodingOptions.copyBuffer) {
@@ -2242,7 +2242,40 @@ class Encoder extends EncoderMembers {
         return start + bytes.length;
     }
 
-    #encodeUdt(value: any, columnInfo: ColumnInfo): Buffer | null {
+    /**
+     * Writes a field of a UDT as one cell, `[i32 length][bytes]`, at `offset` in `out`.
+     * In the protocol, a field is a `[bytes]`, not a `[value]` as in {@link encodeInto}.
+     * A `[bytes]` has no length for unset: each negative length is null.
+     * Thus, an unset field is written as null, with length -1.
+     * For example, with `useUndefinedAsUnset`, a missing field is unset.
+     * @returns The offset after the cell.
+     */
+    #writeFieldCell(
+        out: GrowableBuffer,
+        offset: number,
+        value: any,
+        typeInfo: any,
+    ): number {
+        value = this.#normalizeValue(value);
+        return this.#writeValueCell(
+            out,
+            offset,
+            value === types.unset ? null : value,
+            typeInfo,
+        );
+    }
+
+    /**
+     * Writes a UDT: each field of the type as a cell, in the order of the type.
+     * A missing, null or unset field is written as null.
+     * @returns The offset after the UDT.
+     */
+    #encodeUdt(
+        out: GrowableBuffer,
+        start: number,
+        value: any,
+        columnInfo: ColumnInfo,
+    ): number {
         const udtInfo = columnInfo.info as UdtInfo;
         checkUdtInfo(udtInfo);
         // The fields are read by name. Thus, a primitive, an array or a Map
@@ -2258,28 +2291,13 @@ class Encoder extends EncoderMembers {
                     util.inspect(value),
             );
         }
-        const parts: Array<Buffer> = [];
-        let totalLength = 0;
-        for (let i = 0; i < udtInfo.fields.length; i++) {
-            const field = udtInfo.fields[i];
-            const item: any = this.encode(value[field.name], field.type);
-            if (!item) {
-                parts.push(nullValueBuffer);
-                totalLength += 4;
-                continue;
-            }
-            if (item === types.unset) {
-                parts.push(unsetValueBuffer);
-                totalLength += 4;
-                continue;
-            }
-            const lengthBuffer = utils.allocBufferUnsafe(4);
-            lengthBuffer.writeInt32BE(item.length, 0);
-            parts.push(lengthBuffer);
-            parts.push(item);
-            totalLength += item.length + 4;
+        const fields = udtInfo.fields;
+        let end = start;
+        for (let i = 0; i < fields.length; i++) {
+            const field = fields[i];
+            end = this.#writeFieldCell(out, end, value[field.name], field.type);
         }
-        return Buffer.concat(parts, totalLength);
+        return end;
     }
 
     /**
