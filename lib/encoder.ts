@@ -1988,7 +1988,7 @@ class Encoder extends EncoderMembers {
         // Thus, Encoder adds them.
         this.encoders[dataTypes.list] = this.#encodeList;
         this.encoders[dataTypes.set] = this.#encodeSet;
-        this.legacyEncoders[dataTypes.map] = this.#encodeMap;
+        this.encoders[dataTypes.map] = this.#encodeMap;
         this.legacyEncoders[dataTypes.udt] = this.#encodeUdt;
         this.legacyEncoders[dataTypes.tuple] = this.#encodeTuple;
         this.legacyEncoders[dataTypes.custom] = this.#encodeCustom;
@@ -2391,14 +2391,18 @@ class Encoder extends EncoderMembers {
     }
 
     /**
-     * Serializes a map into a Buffer
-     * @param value
-     * @private
+     * Writes a map: the number of entries, then the key and the value of each entry,
+     * each with its length. The map is a plain object, or an instance of the
+     * `map` encoding option. Of a plain object, it writes only the own properties.
+     * @returns The offset after the map.
      */
-    #encodeMap(value: any, columnInfo: ColumnInfo): Buffer | null {
+    #encodeMap(
+        out: GrowableBuffer,
+        start: number,
+        value: any,
+        columnInfo: ColumnInfo,
+    ): number {
         const subtypes = columnInfo.info as [ColumnInfo, ColumnInfo];
-        const parts: Array<Buffer> = [];
-        let propCounter = 0;
         let keySubtype: ColumnInfo | null = null;
         let valueSubtype: ColumnInfo | null = null;
         // Only null and undefined mean "no subtypes": the Encoder then guesses them.
@@ -2411,7 +2415,11 @@ class Encoder extends EncoderMembers {
             keySubtype = subtypes[0];
             valueSubtype = subtypes[1];
         }
-        const addItem = (val: any, key: any) => {
+        // The count comes first, but it is known only after the entries.
+        out.ensure(start, this.collectionLengthSize);
+        let end = start + this.collectionLengthSize;
+        let count = 0;
+        const addEntry = (val: any, key: any) => {
             if (
                 key === null ||
                 typeof key === "undefined" ||
@@ -2426,40 +2434,27 @@ class Encoder extends EncoderMembers {
             ) {
                 throw new TypeError("A map can't contain null or unset values");
             }
-            const keyBuffer = this.encode(key, keySubtype) as Buffer;
-            // include item byte length
-            parts.push(this.getLengthBuffer(keyBuffer));
-            // include item
-            parts.push(keyBuffer);
-            // value
-            const valueBuffer = this.encode(val, valueSubtype) as Buffer;
-            // include item byte length
-            parts.push(this.getLengthBuffer(valueBuffer));
-            // include item
-            if (valueBuffer !== null) {
-                parts.push(valueBuffer);
-            }
-            propCounter++;
+            end = this.#writeItem(out, end, key, keySubtype);
+            end = this.#writeItem(out, end, val, valueSubtype);
+            count++;
         };
         if (
             this.encodingOptions.map &&
             value instanceof this.encodingOptions.map
         ) {
             // Use Map#forEach() method to iterate
-            value.forEach(addItem);
+            value.forEach(addEntry);
         } else {
             // Use object
             for (const key in value) {
                 if (!Object.prototype.hasOwnProperty.call(value, key)) {
                     continue;
                 }
-                const val = value[key];
-                addItem(val, key);
+                addEntry(value[key], key);
             }
         }
-
-        parts.unshift(this.getLengthBuffer(propCounter));
-        return Buffer.concat(parts);
+        this.#writeCollectionLength(out, start, count);
+        return end;
     }
 
     #encodeCustom(value: any, columnInfo: ColumnInfo): Buffer {
