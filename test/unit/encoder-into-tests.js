@@ -181,6 +181,13 @@ describe("Encoder.encodeInto", function () {
             [t(dataTypes.ascii), "a".repeat(40), 14],
             // The length at 10-13, the count at 14-17, the item with its length at 18-61.
             [t(dataTypes.list, t(dataTypes.blob)), [bytes], 10],
+            // The length at 10-13, the count at 14-17, the key with its length at 18-51,
+            // and the value with its length at 52-59.
+            [
+                t(dataTypes.map, [t(dataTypes.ascii), t(dataTypes.int)]),
+                { ["a".repeat(30)]: 1 },
+                10,
+            ],
         ];
         for (const [type, value, offset] of cases) {
             const out = new RecordingBuffer(16);
