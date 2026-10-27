@@ -1,6 +1,6 @@
 "use strict";
 
-import { TableMetadata, ColumnMetadata } from "./table-metadata";
+import { ColumnMetadata, TableMetadata } from "./table-metadata";
 import rust = require("../../index");
 
 /**

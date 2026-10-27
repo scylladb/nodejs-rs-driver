@@ -3,9 +3,9 @@
 import events = require("events");
 import util = require("util");
 import {
-    throwNotSupported,
-    isNamedParameters,
     PreparedInfo,
+    isNamedParameters,
+    throwNotSupported,
 } from "./new-utils";
 
 import assert = require("assert");
@@ -17,13 +17,13 @@ import executionProfile = require("./execution-profile");
 import clientOptions = require("./client-options");
 import ClientState = require("./metadata/client-state");
 import packageInfo = require("../package.json");
-import { ExecutionOptions, DefaultExecutionOptions } from "./execution-options";
+import { DefaultExecutionOptions, ExecutionOptions } from "./execution-options";
 import { ResultColumnsCache, RustResult } from "./types/results-wrapper";
 import { RustSession } from "./rust-session";
 import promiseUtils = require("./promise-utils");
 import rust = require("../index");
 import ResultSet = require("./types/result-set");
-import { convertComplexType, ColumnInfo } from "./types/cql-utils";
+import { ColumnInfo, convertComplexType } from "./types/cql-utils";
 import Encoder = require("./encoder");
 import { HostMap } from "./host";
 import type { Replica } from "./host";
