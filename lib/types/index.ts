@@ -570,16 +570,6 @@ function generateTimestamp(date?: Date, microseconds?: number): Long {
 // error classes
 
 /** @private */
-class QueryParserError extends errors.DriverError {
-    internalError: Error;
-
-    constructor(e: Error) {
-        super(e.message);
-        this.internalError = e;
-    }
-}
-
-/** @private */
 class TimeoutError extends errors.DriverError {
     constructor(message: string) {
         super(message);

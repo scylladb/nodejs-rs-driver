@@ -1,7 +1,6 @@
 "use strict";
 
 import errors = require("./errors");
-import promiseUtils = require("./promise-utils");
 import type { PreparedInfo } from "./new-utils";
 import type { ExecutionOptions } from "./execution-options";
 

@@ -2,7 +2,6 @@
 
 import utils = require("../utils");
 import errors = require("../errors");
-import rust = require("../../index");
 import resultsWrapper = require("./results-wrapper");
 import {
     ColumnMetadata,
