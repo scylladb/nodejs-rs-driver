@@ -99,13 +99,11 @@ export interface QueryOptions {
     /**
      * Determines if the batch should be written to the batchlog. Only valid for
      * [Client#batch()]{@link Client#batch}, it will be ignored by other methods. Default: true.
-     * [TODO: Add support for this field]
      */
     logged?: boolean;
     /**
      * Determines if its a counter batch. Only valid for
      * [Client#batch()]{@link Client#batch}, it will be ignored by other methods. Default: false.
-     * [TODO: Add support for this field]
      */
     counter?: boolean;
     /** Determines if the query should be paged. Default: true. */
@@ -229,4 +227,22 @@ export function queryOptionsIntoRustArgs(
         timestamp as bigint | undefined,
         options.isQueryTracing(),
     ];
+}
+
+/**
+ * Converts the `counter` and `logged` batch options into the batch kind argument
+ * of the Rust batch calls. `counter` takes precedence over `logged`.
+ * @internal
+ * @ignore
+ */
+export function batchKindIntoRustArg(
+    options: ExecutionOptions,
+): rust.BatchKind {
+    if (options.isBatchCounter()) {
+        return rust.BatchKind.Counter;
+    }
+    // Only an explicit `false` disables the batchlog, as in the mapper.
+    return options.isBatchLogged() === false
+        ? rust.BatchKind.Unlogged
+        : rust.BatchKind.Logged;
 }
