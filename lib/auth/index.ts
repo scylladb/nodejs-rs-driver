@@ -15,7 +15,7 @@ import DseGssapiAuthProvider = require("../datastax/deprecated-auth/dse-gssapi-a
 // @ts-ignore
 import DsePlainTextAuthProvider = require("../datastax/deprecated-auth/dse-plain-text-auth-provider");
 import NoAuthProvider = require("./no-auth-provider");
-import { Authenticator, AuthProvider } from "./provider";
+import { AuthProvider, Authenticator } from "./provider";
 import { PlainTextAuthProvider } from "./plain-text-auth-provider";
 
 export { AuthenticatorCallback } from "./provider";
