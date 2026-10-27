@@ -107,7 +107,7 @@ class Metadata {
      * @returns {Set<TokenRange>} The ranges of the ring or empty set if schema metadata is not enabled.
      */
     getTokenRanges(): Set<TokenRange> {
-        let ringTokens = this.#rustClient.getRingTokens();
+        const ringTokens = this.#rustClient.getRingTokens();
         const tokenRanges = new Set<TokenRange>();
         if (ringTokens.length === 1) {
             // A single token owns the whole ring, that is the range ]minToken, minToken].
