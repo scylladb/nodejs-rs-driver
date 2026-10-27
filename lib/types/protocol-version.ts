@@ -306,7 +306,7 @@ namespace protocolVersion {
                     // Anything else is < 2.x and requires protocol version V1.
                     maxVersion = protocolVersion.v1;
                 }
-            } catch (e) {
+            } catch {
                 log(
                     "warning",
                     "Encountered host " +
