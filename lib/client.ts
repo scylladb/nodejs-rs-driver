@@ -25,13 +25,15 @@ import rust = require("../index");
 import ResultSet = require("./types/result-set");
 import { ColumnInfo, convertComplexType } from "./types/cql-utils";
 import Encoder = require("./encoder");
-import { HostMap } from "./host";
-import type { Replica } from "./host";
+import { HostMap, type Replica } from "./host";
+import {
+    type QueryOptions,
+    type RustQueryOptions,
+    batchKindIntoRustArg,
+} from "./query-options";
 import type { Token, TokenRange } from "./token";
 
 // Imports for the purpose of type hints.
-import type { QueryOptions, RustQueryOptions } from "./query-options";
-import { batchKindIntoRustArg } from "./query-options";
 import type { ArrayOrObject, CqlValue, metrics as metricsModule } from "../";
 import * as metadataModule from "./metadata";
 
