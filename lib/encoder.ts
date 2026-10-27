@@ -2354,7 +2354,7 @@ class Encoder extends EncoderMembers {
             return value;
         }
 
-        let type: any = null;
+        let type: any;
 
         // Only null and undefined mean "no hint". Other falsy values, such as
         // false, 0 or "", are hints too: 0 is the code of custom, and the others are not valid.
