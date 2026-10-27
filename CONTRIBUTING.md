@@ -37,7 +37,7 @@ npm run build:debug
 ## Static checks
 
 Currently, for the rust code we require new PRs to compile without warnings, pass cargo fmt and clippy.
-For the JS code we require that [prettier](https://prettier.io/) and [eslint](https://eslint.org/) checks pass.
+For the JS and TS code we require that [prettier](https://prettier.io/) and [eslint](https://eslint.org/) checks pass.
 You can launch all Rust and JS static checks with the `npm run pre-push` command.
 
 ## Testing the driver
