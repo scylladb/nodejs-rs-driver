@@ -1,20 +1,28 @@
 import globals from "globals";
 import pluginJs from "@eslint/js";
-import { includeIgnoreFile } from "@eslint/compat";
+import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// tsc emits a .js file and a .d.ts file next to each .ts source file in lib/.
+// Do not lint these outputs. Other .js and .d.ts files in lib/ are source files.
+const tscOutputs = fs
+  .readdirSync(path.join(__dirname, "lib"), { recursive: true })
+  .filter((file) => file.endsWith(".ts") && !file.endsWith(".d.ts"))
+  .flatMap((file) => {
+    // Example: "auth/provider.ts" gives "lib/auth/provider.js" and "lib/auth/provider.d.ts".
+    // readdirSync gives the path relative to lib/, with the separator of the OS.
+    // An ESLint pattern uses "/", and it is relative to this config file.
+    const tsFile = "lib/" + file.replaceAll(path.sep, "/");
+    const withoutExtension = tsFile.slice(0, -".ts".length);
+    return [`${withoutExtension}.js`, `${withoutExtension}.d.ts`];
+  });
+
 /** @type {import('eslint').Linter.Config[]} */
 export default [
-  // Ignore JS files emitted in-place by tsc (listed in per-directory .gitignore files)
-  includeIgnoreFile(path.join(__dirname, "lib", ".gitignore")),
-  includeIgnoreFile(path.join(__dirname, "lib", "auth", ".gitignore")),
-  includeIgnoreFile(path.join(__dirname, "lib", "concurrent", ".gitignore")),
-  includeIgnoreFile(path.join(__dirname, "lib", "metadata", ".gitignore")),
-  includeIgnoreFile(path.join(__dirname, "lib", "policies", ".gitignore")),
-  includeIgnoreFile(path.join(__dirname, "lib", "types", ".gitignore")),
+  { ignores: tscOutputs },
   pluginJs.configs.recommended,
   {
     languageOptions: {
