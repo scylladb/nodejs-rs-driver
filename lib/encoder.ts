@@ -1566,7 +1566,7 @@ class EncoderMembers {
                 routingIndexes,
                 encodeParam,
             );
-        } catch (e) {
+        } catch {
             // There was an error encoding a parameter that is part of the routing key,
             // ignore now to fail afterwards
         }
@@ -1609,7 +1609,7 @@ class EncoderMembers {
                 routingIndexes,
                 encodeParam,
             );
-        } catch (e) {
+        } catch {
             // There was an error encoding a parameter that is part of the routing key,
             // ignore now to fail afterwards
         }
@@ -2231,7 +2231,7 @@ class Encoder extends EncoderMembers {
                 if (value.subtype) {
                     try {
                         subtypeColumnInfo = dataTypes.getByName(value.subtype);
-                    } catch (TypeError) {
+                    } catch {
                         // ignore
                     }
                 }
