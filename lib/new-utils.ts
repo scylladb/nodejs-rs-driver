@@ -27,7 +27,7 @@ const minusOne = BigInt(-1);
  * while Long is the legacy way the code handles 64-bit integers.
  */
 function bigintToLong(from: bigint): Long {
-    let lo = from % maxInt;
+    const lo = from % maxInt;
     let hi = from / maxInt;
     if (lo < 0) hi += minusOne;
     return Long.fromValue({

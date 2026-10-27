@@ -997,7 +997,7 @@ class EncoderMembers {
         }
 
         if (value instanceof BigDecimal) {
-            let buf = BigDecimal.toBuffer(value);
+            const buf = BigDecimal.toBuffer(value);
             return buf;
         }
         throw new TypeError(

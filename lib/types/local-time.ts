@@ -125,8 +125,8 @@ class LocalTime {
             throw new TypeError("Invalid value format");
         }
 
-        let hour = parseInt(parts[0], 10);
-        let minutes = parseInt(parts[1], 10);
+        const hour = parseInt(parts[0], 10);
+        const minutes = parseInt(parts[1], 10);
         if (hour < 0 || hour >= 24) {
             throw new TypeError(
                 `Invalid hour. Expected value between 0 and 23, got ${hour}`,

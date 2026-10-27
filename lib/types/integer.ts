@@ -37,7 +37,7 @@ class Integer {
         // top that equal the sign since they are redundant.
         let top = true;
         for (let i = bits.length - 1; i >= 0; i--) {
-            let val = bits[i] | 0;
+            const val = bits[i] | 0;
             if (!top || val != sign) {
                 this.#bits[i] = val;
                 top = false;
@@ -51,13 +51,13 @@ class Integer {
      */
     static fromInt(value: number): Integer {
         if (-128 <= value && value < 128) {
-            let cachedObj = Integer.IntCache_[value];
+            const cachedObj = Integer.IntCache_[value];
             if (cachedObj) {
                 return cachedObj;
             }
         }
 
-        let obj = new Integer([value | 0], value < 0 ? -1 : 0);
+        const obj = new Integer([value | 0], value < 0 ? -1 : 0);
         if (-128 <= value && value < 128) {
             Integer.IntCache_[value] = obj;
         }
@@ -75,7 +75,7 @@ class Integer {
         } else if (value < 0) {
             return Integer.fromNumber(-value).negate();
         }
-        let bits: Array<number> = [];
+        const bits: Array<number> = [];
         let pow = 1;
         for (let i = 0; value >= pow; i++) {
             bits[i] = (value / pow) | 0;
@@ -93,7 +93,7 @@ class Integer {
      * @returns The corresponding Integer value.
      */
     static fromBits(bits: Array<number>): Integer {
-        let high = bits[bits.length - 1];
+        const high = bits[bits.length - 1];
         // noinspection JSBitwiseOperatorUsage
         return new Integer(bits, high & (1 << 31) ? -1 : 0);
     }
@@ -109,7 +109,7 @@ class Integer {
             throw TypeError("number format error: empty string");
         }
 
-        let radix = optRadix || 10;
+        const radix = optRadix || 10;
         if (radix < 2 || 36 < radix) {
             throw Error("radix out of range: " + radix);
         }
@@ -122,14 +122,14 @@ class Integer {
 
         // Do several (8) digits each time through the loop, so as to
         // minimize the calls to the very expensive emulated div.
-        let radixToPower = Integer.fromNumber(Math.pow(radix, 8));
+        const radixToPower = Integer.fromNumber(Math.pow(radix, 8));
 
         let result = Integer.ZERO;
         for (let i = 0; i < str.length; i += 8) {
-            let size = Math.min(8, str.length - i);
-            let value = parseInt(str.substring(i, i + size), radix);
+            const size = Math.min(8, str.length - i);
+            const value = parseInt(str.substring(i, i + size), radix);
             if (size < 8) {
-                let power = Integer.fromNumber(Math.pow(radix, size));
+                const power = Integer.fromNumber(Math.pow(radix, size));
                 result = result.multiply(power).add(Integer.fromNumber(value));
             } else {
                 result = result.multiply(radixToPower);
@@ -143,9 +143,9 @@ class Integer {
      * The internal representation of bits contains bytes in groups of 4
      */
     static fromBuffer(buf: Buffer): Integer {
-        let bits = new Array(Math.ceil(buf.length / 4));
+        const bits = new Array(Math.ceil(buf.length / 4));
         // noinspection JSBitwiseOperatorUsage
-        let sign = buf[0] & (1 << 7) ? -1 : 0;
+        const sign = buf[0] & (1 << 7) ? -1 : 0;
         for (let i = 0; i < bits.length; i++) {
             let offset = buf.length - (i + 1) * 4;
             let value: number;
@@ -179,8 +179,8 @@ class Integer {
      * For example: 0x00000001 -> '01', 0xFFFFFFFF -> 'FF', 0xFFFFFF01 -> 'FF01'
      */
     static toBuffer(value: Integer): Buffer {
-        let sign = value.#sign;
-        let bits = value.#bits;
+        const sign = value.#sign;
+        const bits = value.#bits;
         if (bits.length === 0) {
             // [0] or [0xffffffff]
             return utils.allocBufferFromArray([value.#sign]);
@@ -190,7 +190,7 @@ class Integer {
         if (sign === -1) {
             highBits = ~highBits;
         }
-        let high: Array<number> = [];
+        const high: Array<number> = [];
         if (highBits >>> 24 > 0) {
             high.push((highBits >> 24) & 0xff);
         }
@@ -211,9 +211,11 @@ class Integer {
             // its positive but it lost the byte containing the sign bit
             high.unshift(0);
         }
-        let buf = utils.allocBufferUnsafe(high.length + (bits.length - 1) * 4);
+        const buf = utils.allocBufferUnsafe(
+            high.length + (bits.length - 1) * 4,
+        );
         for (let j = 0; j < high.length; j++) {
-            let b = high[j];
+            const b = high[j];
             if (sign === -1) {
                 buf[j] = ~b;
             } else {
@@ -221,8 +223,8 @@ class Integer {
             }
         }
         for (let i = 0; i < bits.length - 1; i++) {
-            let group = bits[bits.length - 2 - i];
-            let offset = high.length + i * 4;
+            const group = bits[bits.length - 2 - i];
+            const offset = high.length + i * 4;
             buf.writeInt32BE(group, offset);
         }
         return buf;
@@ -265,7 +267,7 @@ class Integer {
      * @override
      */
     toString(optRadix?: number): string {
-        let radix = optRadix || 10;
+        const radix = optRadix || 10;
         if (radix < 2 || 36 < radix) {
             throw Error("radix out of range: " + radix);
         }
@@ -278,13 +280,13 @@ class Integer {
 
         // Do several (6) digits each time through the loop, so as to
         // minimize the calls to the very expensive emulated div.
-        let radixToPower = Integer.fromNumber(Math.pow(radix, 6));
+        const radixToPower = Integer.fromNumber(Math.pow(radix, 6));
 
         let rem: Integer = this;
         let result = "";
         while (true) {
-            let remDiv = rem.divide(radixToPower);
-            let intval = rem.subtract(remDiv.multiply(radixToPower)).toInt();
+            const remDiv = rem.divide(radixToPower);
+            const intval = rem.subtract(remDiv.multiply(radixToPower)).toInt();
             let digits = intval.toString(radix);
 
             rem = remDiv;
@@ -317,7 +319,7 @@ class Integer {
      * @returns The requested 32-bits as an unsigned number.
      */
     getBitsUnsigned(index: number): number {
-        let val = this.getBits(index);
+        const val = this.getBits(index);
         return val >= 0 ? val : Integer.TWO_PWR_32_DBL_ + val;
     }
     /** @returns The sign bit of this number, -1 or 0. */
@@ -355,7 +357,7 @@ class Integer {
         if (this.#sign != other.#sign) {
             return false;
         }
-        let len = Math.max(this.#bits.length, other.#bits.length);
+        const len = Math.max(this.#bits.length, other.#bits.length);
         for (let i = 0; i < len; i++) {
             if (this.getBits(i) != other.getBits(i)) {
                 return false;
@@ -405,7 +407,7 @@ class Integer {
      *     if the given one is greater.
      */
     compare(other: Integer): number {
-        let diff = this.subtract(other);
+        const diff = this.subtract(other);
         if (diff.isNegative()) {
             return -1;
         } else if (diff.isZero()) {
@@ -420,13 +422,13 @@ class Integer {
      * @returns The shorted integer value.
      */
     shorten(numBits: number): Integer {
-        let arrIndex = (numBits - 1) >> 5;
-        let bitIndex = (numBits - 1) % 32;
-        let bits: Array<number> = [];
+        const arrIndex = (numBits - 1) >> 5;
+        const bitIndex = (numBits - 1) % 32;
+        const bits: Array<number> = [];
         for (let i = 0; i < arrIndex; i++) {
             bits[i] = this.getBits(i);
         }
-        let sigBits = bitIndex == 31 ? 0xffffffff : (1 << (bitIndex + 1)) - 1;
+        const sigBits = bitIndex == 31 ? 0xffffffff : (1 << (bitIndex + 1)) - 1;
         let val = this.getBits(arrIndex) & sigBits;
         // noinspection JSBitwiseOperatorUsage
         if (val & (1 << bitIndex)) {
@@ -447,16 +449,16 @@ class Integer {
      * @returns The Integer result.
      */
     add(other: Integer): Integer {
-        let len = Math.max(this.#bits.length, other.#bits.length);
-        let arr: Array<number> = [];
+        const len = Math.max(this.#bits.length, other.#bits.length);
+        const arr: Array<number> = [];
         let carry = 0;
 
         for (let i = 0; i <= len; i++) {
-            let a1 = this.getBits(i) >>> 16;
-            let a0 = this.getBits(i) & 0xffff;
+            const a1 = this.getBits(i) >>> 16;
+            const a0 = this.getBits(i) & 0xffff;
 
-            let b1 = other.getBits(i) >>> 16;
-            let b0 = other.getBits(i) & 0xffff;
+            const b1 = other.getBits(i) >>> 16;
+            const b0 = other.getBits(i) & 0xffff;
 
             let c0 = carry + a0 + b0;
             let c1 = (c0 >>> 16) + a1 + b1;
@@ -505,18 +507,18 @@ class Integer {
         }
 
         // Fill in an array of 16-bit products.
-        let len = this.#bits.length + other.#bits.length;
-        let arr: Array<number> = [];
+        const len = this.#bits.length + other.#bits.length;
+        const arr: Array<number> = [];
         for (let i = 0; i < 2 * len; i++) {
             arr[i] = 0;
         }
         for (let i = 0; i < this.#bits.length; i++) {
             for (let j = 0; j < other.#bits.length; j++) {
-                let a1 = this.getBits(i) >>> 16;
-                let a0 = this.getBits(i) & 0xffff;
+                const a1 = this.getBits(i) >>> 16;
+                const a0 = this.getBits(i) & 0xffff;
 
-                let b1 = other.getBits(j) >>> 16;
-                let b0 = other.getBits(j) & 0xffff;
+                const b1 = other.getBits(j) >>> 16;
+                const b0 = other.getBits(j) & 0xffff;
 
                 arr[2 * i + 2 * j] += a0 * b0;
                 Integer.#carry16(arr, 2 * i + 2 * j);
@@ -576,8 +578,8 @@ class Integer {
 
             // We will tweak the approximate result by changing it in the 48-th digit or
             // the smallest non-fractional digit, whichever is larger.
-            let log2 = Math.ceil(Math.log(approx) / Math.LN2);
-            let delta = log2 <= 48 ? 1 : Math.pow(2, log2 - 48);
+            const log2 = Math.ceil(Math.log(approx) / Math.LN2);
+            const delta = log2 <= 48 ? 1 : Math.pow(2, log2 - 48);
 
             // Decrease the approximation until it is smaller than the remainder.  Note
             // that if it is too large, the product overflows and is negative.
@@ -610,8 +612,8 @@ class Integer {
     }
     /** @returns The bitwise-NOT of this value. */
     not(): Integer {
-        let len = this.#bits.length;
-        let arr: Array<number> = [];
+        const len = this.#bits.length;
+        const arr: Array<number> = [];
         for (let i = 0; i < len; i++) {
             arr[i] = ~this.#bits[i];
         }
@@ -623,8 +625,8 @@ class Integer {
      * @returns The bitwise-AND of this and the other.
      */
     and(other: Integer): Integer {
-        let len = Math.max(this.#bits.length, other.#bits.length);
-        let arr: Array<number> = [];
+        const len = Math.max(this.#bits.length, other.#bits.length);
+        const arr: Array<number> = [];
         for (let i = 0; i < len; i++) {
             arr[i] = this.getBits(i) & other.getBits(i);
         }
@@ -636,8 +638,8 @@ class Integer {
      * @returns The bitwise-OR of this and the other.
      */
     or(other: Integer): Integer {
-        let len = Math.max(this.#bits.length, other.#bits.length);
-        let arr: Array<number> = [];
+        const len = Math.max(this.#bits.length, other.#bits.length);
+        const arr: Array<number> = [];
         for (let i = 0; i < len; i++) {
             arr[i] = this.getBits(i) | other.getBits(i);
         }
@@ -649,8 +651,8 @@ class Integer {
      * @returns The bitwise-XOR of this and the other.
      */
     xor(other: Integer): Integer {
-        let len = Math.max(this.#bits.length, other.#bits.length);
-        let arr: Array<number> = [];
+        const len = Math.max(this.#bits.length, other.#bits.length);
+        const arr: Array<number> = [];
         for (let i = 0; i < len; i++) {
             arr[i] = this.getBits(i) ^ other.getBits(i);
         }
@@ -662,10 +664,10 @@ class Integer {
      * @returns This shifted to the left by the given amount.
      */
     shiftLeft(numBits: number): Integer {
-        let arrDelta = numBits >> 5;
-        let bitDelta = numBits % 32;
-        let len = this.#bits.length + arrDelta + (bitDelta > 0 ? 1 : 0);
-        let arr: Array<number> = [];
+        const arrDelta = numBits >> 5;
+        const bitDelta = numBits % 32;
+        const len = this.#bits.length + arrDelta + (bitDelta > 0 ? 1 : 0);
+        const arr: Array<number> = [];
         for (let i = 0; i < len; i++) {
             if (bitDelta > 0) {
                 arr[i] =
@@ -683,10 +685,10 @@ class Integer {
      * @returns This shifted to the right by the given amount.
      */
     shiftRight(numBits: number): Integer {
-        let arrDelta = numBits >> 5;
-        let bitDelta = numBits % 32;
-        let len = this.#bits.length - arrDelta;
-        let arr: Array<number> = [];
+        const arrDelta = numBits >> 5;
+        const bitDelta = numBits % 32;
+        const len = this.#bits.length - arrDelta;
+        const arr: Array<number> = [];
         for (let i = 0; i < len; i++) {
             if (bitDelta > 0) {
                 arr[i] =
