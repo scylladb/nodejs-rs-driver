@@ -2,6 +2,7 @@ import globals from "globals";
 import pluginJs from "@eslint/js";
 import fs from "fs";
 import path from "path";
+import tseslint from "typescript-eslint";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -64,6 +65,32 @@ export default [
       "no-lonely-if": "error",
       "no-else-return": "error",
       "no-useless-assignment": "error",
+    }
+  },
+  // The blocks above have no "files" key. Thus, they apply to the .ts files too,
+  // because the block below matches them.
+  // This preset turns off the core rules that tsc already checks, for example
+  // no-undef and no-redeclare. It also turns on prefer-const and prefer-spread.
+  tseslint.configs.eslintRecommended,
+  {
+    files: ["**/*.ts"],
+    languageOptions: {
+      parser: tseslint.parser,
+      sourceType: "module",
+    },
+    plugins: {
+      "@typescript-eslint": tseslint.plugin,
+    },
+    rules: {
+      // The core rule does not know about TS types. Use the TS version, with the same options.
+      "no-unused-vars": "off",
+      "@typescript-eslint/no-unused-vars": ["error", unusedVarsOptions],
+
+      // Check the order of the members in each import, but not the order of the imports
+      "sort-imports": ["error", { "ignoreDeclarationSort": true }],
+
+      // The preset turns this rule on. Keep it off, as for the JS files.
+      "prefer-rest-params": "off",
     }
   },
 ];
