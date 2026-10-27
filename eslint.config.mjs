@@ -39,6 +39,12 @@ const tscOutputs = libFiles
     return [`${withoutExtension}.js`, `${withoutExtension}.d.ts`];
   });
 
+// Options for no-unused-vars, and for the TS version of the rule:
+// - If a value is passed to a function but not used the error is ignored
+// - Unused caught errors are reported. Use "catch {" when the error is not needed
+// - Variables whose names start with "_" are ignored. This does not apply to caught errors
+const unusedVarsOptions = { "args": "none", "caughtErrors": "all", "varsIgnorePattern": "^_" };
+
 /** @type {import('eslint').Linter.Config[]} */
 export default [
   { ignores: [...gitignoredFiles, ...tscOutputs] },
@@ -55,10 +61,7 @@ export default [
     },
     rules: {
       // Check if there is no unused variables
-      // If a value is passed to a function but not used the error is ignored
-      // Catched but unused errors are also ignored
-      // Values starting with "_" are also ignored
-      "no-unused-vars": ["error", { "args": "none", "caughtErrors": "none", "varsIgnorePattern": "^_" }],
+      "no-unused-vars": ["error", unusedVarsOptions],
 
       // Checks if var is not used
       "no-var": "error",
