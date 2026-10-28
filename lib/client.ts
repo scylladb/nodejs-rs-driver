@@ -31,6 +31,7 @@ import type { Token, TokenRange } from "./token";
 
 // Imports for the purpose of type hints.
 import type { QueryOptions, RustQueryOptions } from "./query-options";
+import { batchKindIntoRustArg } from "./query-options";
 import type { ArrayOrObject, CqlValue, metrics as metricsModule } from "../";
 import * as metadataModule from "./metadata";
 
@@ -991,6 +992,7 @@ class Client extends events.EventEmitter {
         }
 
         let rustOptions = execOptions.getRustOptions();
+        let batchKind = batchKindIntoRustArg(execOptions);
         let wrappedResult = new RustResult(
             shouldBePrepared
                 ? await this.rustClient!.batchPrepared(
@@ -998,12 +1000,14 @@ class Client extends events.EventEmitter {
                       allTypes,
                       allParams,
                       rustOptions,
+                      batchKind,
                   )
                 : await this.rustClient!.batch(
                       allQueries,
                       allTypes,
                       allParams,
                       rustOptions,
+                      batchKind,
                   ),
         );
         return new ResultSet(wrappedResult, this.#encoder);

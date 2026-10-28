@@ -11,15 +11,14 @@ use scylla::client::session::Session;
 use scylla::errors::{ExecutionError, RequestAttemptError};
 use scylla::response::{PagingState, PagingStateResponse};
 use scylla::serialize::row::{BuiltinTypeCheckError, BuiltinTypeCheckErrorKind};
-use scylla::statement::batch::{Batch, BatchStatement};
+use scylla::statement::batch::{Batch, BatchStatement, BatchType};
 use scylla::statement::prepared::PreparedStatement;
 use scylla::statement::{Consistency, SerialConsistency, Statement};
 
 use crate::async_bridge::{BridgedPromise, JsAsyncResult};
 use crate::errors::{ConvertedError, ConvertedResult, make_js_error};
 use crate::metadata::state::ClusterSnapshot;
-use crate::requests::request::PreparedStatementWrapper;
-use crate::requests::request::QueryOptionsObj;
+use crate::requests::request::{BatchKind, PreparedStatementWrapper, QueryOptionsObj};
 use crate::result::{NextPage, QueryResultWrapper, ResultMetadataTracker};
 use crate::session::config::configure_session_builder;
 use crate::types::encoded_data::{BatchValuesWrapper, SerializedValuesWrapper};
@@ -378,6 +377,7 @@ impl SessionWrapper {
         serial_consistency: Option<i16>,
         timestamp: Option<BigInt>,
         trace_query: Option<bool>,
+        batch_kind: BatchKind,
     ) -> JsAsyncResult<QueryResultWrapper> {
         let options = QueryOptionsObj::new(
             consistency,
@@ -392,6 +392,7 @@ impl SessionWrapper {
             env,
             params,
             &options,
+            batch_kind.into(),
             statements
                 .into_iter()
                 .map(Statement::from)
@@ -415,6 +416,7 @@ impl SessionWrapper {
         serial_consistency: Option<i16>,
         timestamp: Option<BigInt>,
         trace_query: Option<bool>,
+        batch_kind: BatchKind,
     ) -> JsAsyncResult<QueryResultWrapper> {
         let options = QueryOptionsObj::new(
             consistency,
@@ -429,22 +431,24 @@ impl SessionWrapper {
             env,
             params,
             &options,
+            batch_kind.into(),
             statements
                 .iter()
                 .map(|handle| BatchStatement::PreparedStatement(handle.prepared.clone())),
         )
     }
 
-    /// Builds a batch of the given statements, applies the options, and executes it.
+    /// Builds a batch of the given type and statements, applies the options, and executes it.
     fn execute_batch(
         &self,
         env: Env,
         params: BatchValuesWrapper,
         options: &QueryOptionsObj,
+        batch_type: BatchType,
         statements: impl Iterator<Item = BatchStatement>,
     ) -> JsAsyncResult<QueryResultWrapper> {
         BridgedPromise::spawn(&env, || {
-            let mut batch: Batch = Default::default();
+            let mut batch = Batch::new(batch_type);
             statements.for_each(|statement| batch.append_statement(statement));
             let batch = self.apply_batch_options(batch, options)?;
             let inner = Arc::clone(&self.inner);
@@ -663,6 +667,7 @@ pub fn session_batch(
     serial_consistency: Option<i16>,
     timestamp: Option<BigInt>,
     trace_query: Option<bool>,
+    batch_kind: BatchKind,
 ) -> JsAsyncResult<QueryResultWrapper> {
     session.batch(
         env,
@@ -675,6 +680,7 @@ pub fn session_batch(
         serial_consistency,
         timestamp,
         trace_query,
+        batch_kind,
     )
 }
 
@@ -695,6 +701,7 @@ pub fn session_batch_prepared(
     serial_consistency: Option<i16>,
     timestamp: Option<BigInt>,
     trace_query: Option<bool>,
+    batch_kind: BatchKind,
 ) -> JsAsyncResult<QueryResultWrapper> {
     session.batch_prepared(
         env,
@@ -707,6 +714,7 @@ pub fn session_batch_prepared(
         serial_consistency,
         timestamp,
         trace_query,
+        batch_kind,
     )
 }
 
