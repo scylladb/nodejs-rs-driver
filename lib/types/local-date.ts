@@ -1,5 +1,6 @@
 "use strict";
 import utils = require("../utils");
+import type { GrowableBuffer } from "../growable-buffer";
 /** @module types */
 
 const millisecondsPerDay = 86400000;
@@ -283,14 +284,34 @@ class LocalDate {
      * Gets the bytes representation of the instance.
      */
     toBuffer(): Buffer {
+        const buf = utils.allocBufferUnsafe(4);
+        this.#writeUnchecked(buf, 0);
+        return buf;
+    }
+
+    /**
+     * Writes the bytes representation of the instance at `start` in `out`.
+     * @returns The offset after the bytes.
+     * @internal
+     */
+    appendTo(out: GrowableBuffer, start: number): number {
+        out.ensure(start, 4);
+        return this.#writeUnchecked(out.buffer, start);
+    }
+
+    /**
+     * Writes the 4 bytes of the instance at `offset` in `buf`.
+     * It does not make room: `buf` must have room for the 4 bytes after `offset`.
+     * If it does not, Node throws a RangeError.
+     * @returns The offset after the bytes.
+     */
+    #writeUnchecked(buf: Buffer, offset: number): number {
         // days since unix epoch
         const daysSinceEpoch = isNaN(this.date.getTime())
             ? this.#value!
             : Math.floor(this.date.getTime() / millisecondsPerDay);
         const value = daysSinceEpoch + dateCenter;
-        const buf = utils.allocBufferUnsafe(4);
-        buf.writeUInt32BE(value, 0);
-        return buf;
+        return buf.writeUInt32BE(value, offset);
     }
 
     /**

@@ -1,6 +1,7 @@
 import Long = require("long");
 import util = require("util");
 import utils = require("../utils");
+import type { GrowableBuffer } from "../growable-buffer";
 
 /** @module types */
 
@@ -256,9 +257,32 @@ class LocalTime {
      */
     toBuffer(): Buffer {
         const buffer = utils.allocBufferUnsafe(8);
-        buffer.writeUInt32BE(this.value.getHighBitsUnsigned(), 0);
-        buffer.writeUInt32BE(this.value.getLowBitsUnsigned(), 4);
+        this.#writeUnchecked(buffer, 0);
         return buffer;
+    }
+
+    /**
+     * Writes a big-endian bytes representation of the instance at `start` in `out`.
+     * @returns The offset after the bytes.
+     * @internal
+     */
+    appendTo(out: GrowableBuffer, start: number): number {
+        out.ensure(start, 8);
+        return this.#writeUnchecked(out.buffer, start);
+    }
+
+    /**
+     * Writes the 8 bytes of the instance at `offset` in `buffer`.
+     * It does not make room: `buffer` must have room for the 8 bytes after `offset`.
+     * If it does not, Node throws a RangeError.
+     * @returns The offset after the bytes.
+     */
+    #writeUnchecked(buffer: Buffer, offset: number): number {
+        buffer.writeUInt32BE(this.value.getHighBitsUnsigned(), offset);
+        return buffer.writeUInt32BE(
+            this.value.getLowBitsUnsigned(),
+            offset + 4,
+        );
     }
 
     /**
