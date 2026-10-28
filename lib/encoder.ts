@@ -161,7 +161,7 @@ const customDecoders: { [typeName: string]: (bytes: Buffer) => any } = {
     [customTypeNames.duration]: decodeDuration,
 };
 
-const customEncoders: { [typeName: string]: (value: any) => Buffer } = {
+const customEncoders: { [typeName: string]: ValueEncoder } = {
     [customTypeNames.duration]: encodeDuration,
 };
 
@@ -360,9 +360,7 @@ class EncoderMembers {
             [dataTypes.tuple]: this.decodeTuple,
         };
 
-        this.legacyEncoders = {
-            [dataTypes.duration]: encodeDuration,
-        };
+        this.legacyEncoders = {};
 
         this.encoders = {
             [dataTypes.ascii]: this.encodeAsciiString,
@@ -376,6 +374,7 @@ class EncoderMembers {
             [dataTypes.decimal]: this.encodeDecimal,
             [dataTypes.time]: this.encodeTime,
             [dataTypes.double]: this.encodeDouble,
+            [dataTypes.duration]: encodeDuration,
             [dataTypes.float]: this.encodeFloat,
             [dataTypes.inet]: this.encodeInet,
             [dataTypes.smallint]: this.encodeSmallint,
@@ -2493,12 +2492,9 @@ class Encoder extends EncoderMembers {
             return this.#encodeVector(out, start, value, vectorColumnInfo);
         }
 
-        const handler = customEncoders[columnInfo.info as string];
-        if (handler) {
-            const bytes = handler.call(this, value);
-            out.ensure(start, bytes.length);
-            out.buffer.set(bytes, start);
-            return start + bytes.length;
+        const encoder = customEncoders[columnInfo.info as string];
+        if (encoder) {
+            return encoder.call(this, out, start, value, columnInfo);
         }
         throw new TypeError(
             "No encoding handler found for type " + util.inspect(columnInfo),
@@ -2732,14 +2728,18 @@ function decodeDuration(bytes: Buffer): types.Duration {
     return types.Duration.fromBuffer(bytes);
 }
 
-function encodeDuration(value: any): Buffer {
+function encodeDuration(
+    out: GrowableBuffer,
+    start: number,
+    value: any,
+): number {
     if (!(value instanceof types.Duration)) {
         throw new TypeError(
             "Not a valid duration, expected Duration/Buffer obtained " +
                 util.inspect(value),
         );
     }
-    return value.toBuffer();
+    return value.appendTo(out, start);
 }
 
 /**
