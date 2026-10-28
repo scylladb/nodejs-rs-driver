@@ -1,6 +1,7 @@
 /** @module types */
 
 import utils = require("../utils");
+import type { GrowableBuffer } from "../growable-buffer";
 
 /**
  * The internal representation of an integer is an array of 32-bit signed
@@ -182,6 +183,20 @@ class Integer {
         const buf = utils.allocBufferUnsafe(Integer.byteLength(value));
         Integer.writeUnchecked(value, buf, 0);
         return buf;
+    }
+
+    /**
+     * Writes the big endian bytes representation of an Integer at `start` in `out`.
+     * @returns The offset after the bytes.
+     * @internal
+     */
+    static appendTo(
+        value: Integer,
+        out: GrowableBuffer,
+        start: number,
+    ): number {
+        out.ensure(start, Integer.byteLength(value));
+        return Integer.writeUnchecked(value, out.buffer, start);
     }
 
     /**
