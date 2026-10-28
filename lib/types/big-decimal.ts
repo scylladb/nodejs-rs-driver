@@ -1,5 +1,6 @@
 import Integer = require("./integer");
 import utils = require("../utils");
+import type { GrowableBuffer } from "../growable-buffer";
 
 /** @module types */
 
@@ -70,6 +71,21 @@ class BigDecimal {
         const buf = utils.allocBufferUnsafe(BigDecimal.#byteLength(value));
         BigDecimal.#writeUnchecked(value, buf, 0);
         return buf;
+    }
+
+    /**
+     * Writes the scale as a BE int 32 and the unscaled value as a signed BE varint, at `start` in `out`.
+     * @returns The offset after the bytes.
+     * @internal
+     * @ignore
+     */
+    static appendTo(
+        value: BigDecimal,
+        out: GrowableBuffer,
+        start: number,
+    ): number {
+        out.ensure(start, BigDecimal.#byteLength(value));
+        return BigDecimal.#writeUnchecked(value, out.buffer, start);
     }
 
     static #byteLength(value: BigDecimal): number {
