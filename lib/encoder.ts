@@ -27,11 +27,6 @@ const uuidRegex =
 /** The size in bytes of the length of a collection, and of the length of each item */
 const collectionLengthSize = 4;
 
-const buffers = {
-    int8Zero: utils.allocBufferFromArray([0]),
-    int8MaxValue: utils.allocBufferFromArray([0xff]),
-};
-
 /** The length of a null cell in a request frame. */
 const NULL_CELL_LENGTH = -1;
 /** The length of an unset cell in a request frame. */
@@ -287,7 +282,7 @@ class EncoderMembers {
     decodeBigInt: (bytes: Buffer) => types.Long | bigint;
     decodeVarint: (bytes: Buffer) => types.Integer | bigint | null;
     encodeBigInt: ValueEncoder;
-    encodeVarint: (value: any) => Buffer;
+    encodeVarint: (out: GrowableBuffer, start: number, value: any) => number;
 
     decoders: {
         [code: number]: (bytes: Buffer, columnInfo: ColumnInfo) => any;
@@ -366,8 +361,6 @@ class EncoderMembers {
         };
 
         this.legacyEncoders = {
-            [dataTypes.decimal]: this.encodeDecimal,
-            [dataTypes.varint]: this.encodeVarint,
             [dataTypes.duration]: encodeDuration,
         };
 
@@ -380,6 +373,7 @@ class EncoderMembers {
             [dataTypes.blob]: this.encodeBlob,
             [dataTypes.boolean]: this.encodeBoolean,
             [dataTypes.date]: this.encodeDate,
+            [dataTypes.decimal]: this.encodeDecimal,
             [dataTypes.time]: this.encodeTime,
             [dataTypes.double]: this.encodeDouble,
             [dataTypes.float]: this.encodeFloat,
@@ -390,6 +384,7 @@ class EncoderMembers {
             [dataTypes.timestamp]: this.encodeTimestamp,
             [dataTypes.timeuuid]: this.encodeUuid,
             [dataTypes.uuid]: this.encodeUuid,
+            [dataTypes.varint]: this.encodeVarint,
         };
     }
 
@@ -969,30 +964,34 @@ class EncoderMembers {
     /**
      * @private
      */
-    #encodeVarintFromInteger(value: any): Buffer {
+    #encodeVarintFromInteger(
+        out: GrowableBuffer,
+        start: number,
+        value: any,
+    ): number {
         if (typeof value === "number") {
             value = Integer.fromNumber(value);
         }
         if (typeof value === "string") {
             value = Integer.fromString(value);
         }
-        let buf: Buffer | null = null;
         if (value instanceof Integer) {
-            buf = Integer.toBuffer(value);
+            return Integer.appendTo(value, out, start);
         }
-        if (buf === null) {
-            throw new TypeError(
-                "Not a valid varint, expected Integer/Number/String/Buffer, obtained " +
-                    util.inspect(value),
-            );
-        }
-        return buf;
+        throw new TypeError(
+            "Not a valid varint, expected Integer/Number/String/Buffer, obtained " +
+                util.inspect(value),
+        );
     }
 
     /**
      * @private
      */
-    #encodeVarintFromBigInt(value: any): Buffer {
+    #encodeVarintFromBigInt(
+        out: GrowableBuffer,
+        start: number,
+        value: any,
+    ): number {
         if (typeof value === "string") {
             // All numeric types are supported as strings for historical reasons
             value = BigInt(value);
@@ -1006,42 +1005,56 @@ class EncoderMembers {
         }
 
         if (value === bigIntZero) {
-            return buffers.int8Zero;
+            out.ensure(start, 1);
+            out.buffer[start] = 0;
+            return start + 1;
         } else if (value === bigIntMinusOne) {
-            return buffers.int8MaxValue;
+            out.ensure(start, 1);
+            out.buffer[start] = 0xff;
+            return start + 1;
         }
 
-        const parts: Array<number> = [];
-
+        // Write the bytes from the lowest one, and then reverse them.
+        let end = start;
         if (value > bigIntZero) {
             while (value !== bigIntZero) {
-                parts.unshift(Number(value & bigInt8BitsOn));
+                out.ensure(end, 1);
+                out.buffer[end++] = Number(value & bigInt8BitsOn);
                 value = value >> bigIntEight;
             }
 
-            if (parts[0] > 0x7f) {
+            if (out.buffer[end - 1] > 0x7f) {
                 // Positive value needs a padding
-                parts.unshift(0);
+                out.ensure(end, 1);
+                out.buffer[end++] = 0;
             }
         } else {
             while (value !== bigIntMinusOne) {
-                parts.unshift(Number(value & bigInt8BitsOn));
+                out.ensure(end, 1);
+                out.buffer[end++] = Number(value & bigInt8BitsOn);
                 value = value >> bigIntEight;
             }
 
-            if (parts[0] <= 0x7f) {
+            if (out.buffer[end - 1] <= 0x7f) {
                 // Negative value needs a padding
-                parts.unshift(0xff);
+                out.ensure(end, 1);
+                out.buffer[end++] = 0xff;
             }
         }
 
-        return utils.allocBufferFromArray(parts);
+        const buf = out.buffer;
+        for (let i = start, j = end - 1; i < j; i++, j--) {
+            const b = buf[i];
+            buf[i] = buf[j];
+            buf[j] = b;
+        }
+        return end;
     }
 
     /**
      * @private
      */
-    encodeDecimal(value: any): Buffer {
+    encodeDecimal(out: GrowableBuffer, start: number, value: any): number {
         if (typeof value === "number") {
             value = BigDecimal.fromNumber(value);
         } else if (typeof value === "string") {
@@ -1049,8 +1062,7 @@ class EncoderMembers {
         }
 
         if (value instanceof BigDecimal) {
-            const buf = BigDecimal.toBuffer(value);
-            return buf;
+            return BigDecimal.appendTo(value, out, start);
         }
         throw new TypeError(
             "Not a valid varint, expected BigDecimal/Number/String/Buffer, obtained " +
