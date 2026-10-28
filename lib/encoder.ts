@@ -358,8 +358,6 @@ class EncoderMembers {
         this.legacyEncoders = {
             [dataTypes.decimal]: this.encodeDecimal,
             [dataTypes.varint]: this.encodeVarint,
-            [dataTypes.date]: this.encodeDate,
-            [dataTypes.time]: this.encodeTime,
             [dataTypes.duration]: encodeDuration,
         };
 
@@ -371,6 +369,8 @@ class EncoderMembers {
             [dataTypes.varchar]: this.encodeUtf8String,
             [dataTypes.blob]: this.encodeBlob,
             [dataTypes.boolean]: this.encodeBoolean,
+            [dataTypes.date]: this.encodeDate,
+            [dataTypes.time]: this.encodeTime,
             [dataTypes.double]: this.encodeDouble,
             [dataTypes.float]: this.encodeFloat,
             [dataTypes.inet]: this.encodeInet,
@@ -816,7 +816,7 @@ class EncoderMembers {
     /**
      * @private
      */
-    encodeDate(value: any): Buffer {
+    encodeDate(out: GrowableBuffer, start: number, value: any): number {
         const originalValue = value;
         try {
             if (typeof value === "string") {
@@ -835,13 +835,13 @@ class EncoderMembers {
                     util.inspect(originalValue),
             );
         }
-        return value.toBuffer();
+        return value.appendTo(out, start);
     }
 
     /**
      * @private
      */
-    encodeTime(value: any): Buffer {
+    encodeTime(out: GrowableBuffer, start: number, value: any): number {
         const originalValue = value;
         try {
             if (typeof value === "string") {
@@ -857,7 +857,7 @@ class EncoderMembers {
                     util.inspect(originalValue),
             );
         }
-        return value.toBuffer();
+        return value.appendTo(out, start);
     }
 
     /**
