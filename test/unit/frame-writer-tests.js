@@ -195,6 +195,21 @@ describe("FrameWriter", function () {
         assert.strictEqual(second.buffer.byteLength, 65536);
     });
 
+    it("keeps its buffer when a duration ends near 64 KiB", function () {
+        const writer = new FrameWriter();
+        const columns = [
+            { code: types.dataTypes.blob },
+            { code: types.dataTypes.duration },
+        ];
+        const values = [Buffer.alloc(65509), new types.Duration(0, 0, 0)];
+        const first = writer.params(columns, values, encoder);
+        // The frame fits in 64 KiB.
+        assert.lengthOf(first, 65522);
+        const second = writer.params(columns, values, encoder);
+        assert.strictEqual(second.buffer, first.buffer);
+        assert.strictEqual(second.buffer.byteLength, 65536);
+    });
+
     it("keeps the frames of two writers apart", function () {
         const a = new FrameWriter().params([int], [1], encoder);
         const b = new FrameWriter().params([int], [2], encoder);
