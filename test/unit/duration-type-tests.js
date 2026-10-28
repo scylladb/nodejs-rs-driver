@@ -3,6 +3,7 @@ const assert = require("assert");
 const util = require("util");
 const types = require("../../lib/types");
 const utils = require("../../lib/utils");
+const { GrowableBuffer } = require("../../lib/growable-buffer");
 const Duration = types.Duration;
 const Long = types.Long;
 
@@ -55,6 +56,67 @@ describe("Duration", function () {
             values.forEach(function (item) {
                 assert.strictEqual(item[0].toBuffer().toString("hex"), item[1]);
             });
+        });
+    });
+    describe("#appendTo()", function () {
+        const durations = [
+            ...values.map((item) => item[0]),
+            // The largest and the smallest durations: 19 bytes.
+            new Duration(2147483647, 2147483647, BigInt("9223372036854775807")),
+            new Duration(
+                -2147483648,
+                -2147483648,
+                -BigInt("9223372036854775808"),
+            ),
+        ];
+
+        it("writes the bytes of toBuffer when the buffer has room for the largest duration", function () {
+            for (const duration of durations) {
+                const out = new GrowableBuffer(64);
+                const end = duration.appendTo(out, 5);
+                assert.strictEqual(out.buffer.length, 64);
+                assert.strictEqual(
+                    out.buffer.toString("hex", 5, end),
+                    duration.toBuffer().toString("hex"),
+                );
+            }
+        });
+
+        it("writes the bytes of toBuffer when only these bytes fit", function () {
+            for (const duration of durations) {
+                const bytes = duration.toBuffer();
+                const out = new GrowableBuffer(32);
+                const start = 32 - bytes.length;
+                const end = duration.appendTo(out, start);
+                assert.strictEqual(end, 32);
+                assert.strictEqual(out.buffer.length, 32);
+                assert.strictEqual(
+                    out.buffer.toString("hex", start, end),
+                    bytes.toString("hex"),
+                );
+            }
+        });
+
+        it("grows the buffer only by the bytes of the duration", function () {
+            // In a values frame, the count (2 bytes), a blob cell (4 + 65,509 bytes)
+            // and the length of the duration cell (4 bytes) end at byte 65,519.
+            const out = new GrowableBuffer(65536);
+            const end = new Duration(0, 0, 0).appendTo(out, 65519);
+            assert.strictEqual(end, 65522);
+            assert.strictEqual(out.buffer.length, 65536);
+        });
+
+        it("grows the buffer, and keeps the bytes before the offset", function () {
+            for (const duration of durations) {
+                const out = new GrowableBuffer(4);
+                out.buffer.write("abc", 0, "latin1");
+                const end = duration.appendTo(out, 3);
+                assert.strictEqual(out.buffer.toString("latin1", 0, 3), "abc");
+                assert.strictEqual(
+                    out.buffer.toString("hex", 3, end),
+                    duration.toBuffer().toString("hex"),
+                );
+            }
         });
     });
     describe("fromBuffer()", function () {
