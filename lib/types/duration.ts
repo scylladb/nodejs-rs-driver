@@ -202,7 +202,7 @@ class Duration {
         if (this.#months < 0 || this.#days < 0 || this.#nanoseconds < _zero) {
             value = "-";
         }
-        let remainder = append(Math.abs(this.#months), monthsPerYear, "y");
+        const remainder = append(Math.abs(this.#months), monthsPerYear, "y");
         append(remainder, 1, "mo");
         append(Math.abs(this.#days), 1, "d");
 

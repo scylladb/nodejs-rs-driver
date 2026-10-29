@@ -1,7 +1,6 @@
 "use strict";
 
 import errors = require("./errors");
-import promiseUtils = require("./promise-utils");
 import type { PreparedInfo } from "./new-utils";
 import type { ExecutionOptions } from "./execution-options";
 
@@ -209,13 +208,13 @@ function propCompare(propName: string): CompareFunction {
     };
 }
 
-function funcCompare(name: string, argArray: any[]): CompareFunction {
+function funcCompare(name: string, argArray: any[] = []): CompareFunction {
     return function (a: any, b: any) {
         if (typeof a[name] === "undefined") {
             return 0;
         }
-        const valA = a[name].apply(a, argArray);
-        const valB = b[name].apply(b, argArray);
+        const valA = a[name](...argArray);
+        const valB = b[name](...argArray);
         if (valA > valB) {
             return 1;
         }

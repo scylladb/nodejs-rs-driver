@@ -3,9 +3,9 @@
 import events = require("events");
 import util = require("util");
 import {
-    throwNotSupported,
-    isNamedParameters,
     PreparedInfo,
+    isNamedParameters,
+    throwNotSupported,
 } from "./new-utils";
 
 import assert = require("assert");
@@ -17,21 +17,23 @@ import executionProfile = require("./execution-profile");
 import clientOptions = require("./client-options");
 import ClientState = require("./metadata/client-state");
 import packageInfo = require("../package.json");
-import { ExecutionOptions, DefaultExecutionOptions } from "./execution-options";
+import { DefaultExecutionOptions, ExecutionOptions } from "./execution-options";
 import { ResultColumnsCache, RustResult } from "./types/results-wrapper";
 import { RustSession } from "./rust-session";
 import promiseUtils = require("./promise-utils");
 import rust = require("../index");
 import ResultSet = require("./types/result-set");
-import { convertComplexType, ColumnInfo } from "./types/cql-utils";
+import { ColumnInfo, convertComplexType } from "./types/cql-utils";
 import Encoder = require("./encoder");
-import { HostMap } from "./host";
-import type { Replica } from "./host";
+import { HostMap, type Replica } from "./host";
+import {
+    type QueryOptions,
+    type RustQueryOptions,
+    batchKindIntoRustArg,
+} from "./query-options";
 import type { Token, TokenRange } from "./token";
 
 // Imports for the purpose of type hints.
-import type { QueryOptions, RustQueryOptions } from "./query-options";
-import { batchKindIntoRustArg } from "./query-options";
 import type { ArrayOrObject, CqlValue, metrics as metricsModule } from "../";
 import * as metadataModule from "./metadata";
 
@@ -234,7 +236,7 @@ class Client extends events.EventEmitter {
             options.convertOptionsIfNotConvertedYet();
             return options;
         }
-        let fullOptions = DefaultExecutionOptions.create(options, this);
+        const fullOptions = DefaultExecutionOptions.create(options, this);
         fullOptions.convertOptionsIfNotConvertedYet();
         return fullOptions;
     }
@@ -394,15 +396,16 @@ class Client extends events.EventEmitter {
             );
             this.metadata = new metadataModule.Metadata(this.rustClient);
         } catch (err) {
-            if (err instanceof Error && err.name === "InvalidLocalDatacenter") {
-                err = new errors.ArgumentError(err.message);
-            }
+            const error =
+                err instanceof Error && err.name === "InvalidLocalDatacenter"
+                    ? new errors.ArgumentError(err.message)
+                    : err;
             // We should close the pools (if any) and reset the state to allow successive calls to connect()
             this.connected = false;
             this.connecting = false;
-            this.emit("connected", err);
+            this.emit("connected", error);
             this.#closeLogging();
-            throw err;
+            throw error;
         }
 
         this.connected = true;
@@ -465,7 +468,7 @@ class Client extends events.EventEmitter {
                 options as QueryOptions | undefined,
             );
             // The rusty execute will take the page state from options, but we need to indicate whether it's a paged query.
-            let pageState = execOptions.isPaged() ? null : undefined;
+            const pageState = execOptions.isPaged() ? null : undefined;
             return promiseUtils.optionalCallback(
                 this.rustyExecute(
                     query,
@@ -525,7 +528,7 @@ class Client extends events.EventEmitter {
             await this.#connect();
         }
 
-        let rustOptions = execOptions.getRustOptions();
+        const rustOptions = execOptions.getRustOptions();
 
         let result: RustResult;
         let columnsCache: ResultColumnsCache | undefined;
@@ -554,9 +557,9 @@ class Client extends events.EventEmitter {
         }
 
         // Only paged results can have a next page.
-        let resultPageState = paged ? result.getPagingState() : null;
+        const resultPageState = paged ? result.getPagingState() : null;
 
-        let resultSet = new ResultSet(
+        const resultSet = new ResultSet(
             result,
             this.#encoder,
             resultPageState,
@@ -726,7 +729,7 @@ class Client extends events.EventEmitter {
             rowCallback = options;
         } else {
             cleanCallback = callback || utils.noop;
-            let tempRowCallback = rowCallback || options || params;
+            const tempRowCallback = rowCallback || options || params;
             assert(
                 tempRowCallback instanceof Function,
                 "Improper overload of each row. Expected row callback to be a function",
@@ -845,7 +848,7 @@ class Client extends events.EventEmitter {
         options?: QueryOptions,
         callback?: Function,
     ): ResultStream {
-        let cleanCallback = callback || utils.noop;
+        const cleanCallback = callback || utils.noop;
         // NOTE: the nodejs stream maintains yet another internal buffer
         // we rely on the default stream implementation to keep memory
         // usage reasonable.
@@ -939,21 +942,21 @@ class Client extends events.EventEmitter {
 
         await this.#connect();
 
-        let shouldBePrepared = execOptions.isPrepared();
-        let allQueries: string[] = [];
-        let allPrepared: PreparedInfo[] = [];
-        let allTypes: Array<Array<ColumnInfo | null>> = [];
-        let allParams: Array<Array<any>> = [];
-        let hints = execOptions.getHints() || [];
+        const shouldBePrepared = execOptions.isPrepared();
+        const allQueries: string[] = [];
+        const allPrepared: PreparedInfo[] = [];
+        const allTypes: Array<Array<ColumnInfo | null>> = [];
+        const allParams: Array<Array<any>> = [];
+        const hints = execOptions.getHints() || [];
 
         for (let i = 0; i < queries.length; i++) {
-            let element = queries[i];
+            const element = queries[i];
             if (!element) {
                 throw new errors.ArgumentError(`Invalid query at index ${i}`);
             }
-            let statement =
+            const statement =
                 typeof element === "string" ? element : element.query;
-            let params: object | Array<any> =
+            const params: object | Array<any> =
                 typeof element !== "string" ? element.params || [] : [];
             let cleanParams: Array<any>;
             let types;
@@ -967,7 +970,7 @@ class Client extends events.EventEmitter {
 
             if (shouldBePrepared) {
                 // prepareStatement reuses cached handles, also for repeated statements in this batch.
-                let prepared = await this.prepareStatement(statement);
+                const prepared = await this.prepareStatement(statement);
                 types = prepared.types;
                 allPrepared.push(prepared);
 
@@ -991,9 +994,9 @@ class Client extends events.EventEmitter {
             allParams.push(cleanParams || []);
         }
 
-        let rustOptions = execOptions.getRustOptions();
-        let batchKind = batchKindIntoRustArg(execOptions);
-        let wrappedResult = new RustResult(
+        const rustOptions = execOptions.getRustOptions();
+        const batchKind = batchKindIntoRustArg(execOptions);
+        const wrappedResult = new RustResult(
             shouldBePrepared
                 ? await this.rustClient!.batchPrepared(
                       allPrepared.map((prepared) => prepared.handle),
@@ -1115,7 +1118,7 @@ function normalizePagingState(
     pageState: Buffer | null | undefined,
     execOptions: ExecutionOptions,
 ): Buffer | undefined {
-    let optionsPageState = execOptions.getPageState();
+    const optionsPageState = execOptions.getPageState();
     switch (true) {
         // Paging is disabled, so we do not care about value of paging state
         case pageState === undefined:
