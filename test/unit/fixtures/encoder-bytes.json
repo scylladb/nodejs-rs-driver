@@ -569,5 +569,101 @@
             "TypeError",
             "Expected String/LocalTime, obtained Long { low: 5, high: 0, unsigned: false }"
         ]
+    },
+    "varint 0": { "hex": "00" },
+    "varint -1": { "hex": "ff" },
+    "varint 127": { "hex": "7f" },
+    "varint 128": { "hex": "0080" },
+    "varint -128": { "hex": "80" },
+    "varint -129": { "hex": "ff7f" },
+    "varint 255": { "hex": "00ff" },
+    "varint 256": { "hex": "0100" },
+    "varint 2^31": { "hex": "0080000000" },
+    "varint 2^32 - 1": { "hex": "00ffffffff" },
+    "varint 2^32": { "hex": "0100000000" },
+    "varint -(2^32)": { "hex": "ff00000000" },
+    "varint -(2^32) - 1": { "hex": "feffffffff" },
+    "varint max safe integer": { "hex": "1fffffffffffff" },
+    "varint fraction": { "hex": "01" },
+    "varint NaN": { "hex": "00" },
+    "varint Integer": { "hex": "018ee90ff6c373e0ee4e3f0ad2" },
+    "varint negative Integer": { "hex": "fe7116f0093c8c1f11b1c0f52e" },
+    "varint Integer from bits": { "hex": "7fffffffff00000000" },
+    "varint numeric string": { "hex": "ff54ab567314e0f52e" },
+    "varint empty string": {
+        "error": ["TypeError", "number format error: empty string"]
+    },
+    "varint bad string": { "hex": "00" },
+    "varint Buffer": { "hex": "0102" },
+    "varint boolean": {
+        "error": [
+            "TypeError",
+            "Not a valid varint, expected Integer/Number/String/Buffer, obtained true"
+        ]
+    },
+    "varint BigInt": {
+        "error": [
+            "TypeError",
+            "Not a valid varint, expected Integer/Number/String/Buffer, obtained 5n"
+        ]
+    },
+    "varint BigInt mode 0": { "hex": "00" },
+    "varint BigInt mode -1": { "hex": "ff" },
+    "varint BigInt mode 127": { "hex": "7f" },
+    "varint BigInt mode 128": { "hex": "0080" },
+    "varint BigInt mode -128": { "hex": "80" },
+    "varint BigInt mode -129": { "hex": "ff7f" },
+    "varint BigInt mode 255": { "hex": "00ff" },
+    "varint BigInt mode 256": { "hex": "0100" },
+    "varint BigInt mode -256": { "hex": "ff00" },
+    "varint BigInt mode 2^64": { "hex": "010000000000000000" },
+    "varint BigInt mode -(2^64)": { "hex": "ff0000000000000000" },
+    "varint BigInt mode 2^64 - 1": { "hex": "00ffffffffffffffff" },
+    "varint BigInt mode large": { "hex": "018ee90ff6c373e0ee4e3f0ad2" },
+    "varint BigInt mode negative large": {
+        "hex": "fe7116f0093c8c1f11b1c0f52e"
+    },
+    "varint BigInt mode numeric string": { "hex": "85" },
+    "varint BigInt mode bad string": {
+        "error": ["SyntaxError", "Cannot convert abc to a BigInt"]
+    },
+    "varint BigInt mode number": {
+        "error": [
+            "TypeError",
+            "Not a valid varint, expected BigInt, obtained 5"
+        ]
+    },
+    "varint BigInt mode Integer": {
+        "error": [
+            "TypeError",
+            "Not a valid varint, expected BigInt, obtained Integer {}"
+        ]
+    },
+    "decimal BigDecimal": { "hex": "00000004075bcd15" },
+    "decimal negative": { "hex": "00000003ff" },
+    "decimal zero": { "hex": "0000000000" },
+    "decimal number fraction": { "hex": "000000027d" },
+    "decimal number with exponent": { "hex": "0000001409184e72a000" },
+    "decimal number 1e21": { "hex": "0000000001" },
+    "decimal NaN": { "hex": "0000000000" },
+    "decimal large": { "hex": "0000000306163e665beb7ca6a2e1a64244cb" },
+    "decimal negative large": { "hex": "00000001ca758afbc70c7f0ad7" },
+    "decimal negative scale": { "hex": "fffffffd05" },
+    "decimal string with spaces": { "hex": "000000010f" },
+    "decimal empty string": {
+        "error": ["TypeError", "Invalid null or undefined value"]
+    },
+    "decimal bad string": { "hex": "0000000000" },
+    "decimal boolean": {
+        "error": [
+            "TypeError",
+            "Not a valid varint, expected BigDecimal/Number/String/Buffer, obtained true"
+        ]
+    },
+    "decimal BigInt": {
+        "error": [
+            "TypeError",
+            "Not a valid varint, expected BigDecimal/Number/String/Buffer, obtained 5n"
+        ]
     }
 }
