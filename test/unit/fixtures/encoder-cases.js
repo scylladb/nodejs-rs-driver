@@ -3,6 +3,8 @@
 // Edge cases of the Encoder, for each type.
 // test/unit/fixtures/encoder-bytes.json holds the bytes or the error that the Encoder
 // gives for each case. Thus, the tests catch any change of an encoding.
+// After you add a case, run `npm run build:ts`, and then
+// `node scripts/generate-encoder-bytes.js --write`.
 
 const Encoder = require("../../../lib/encoder");
 
