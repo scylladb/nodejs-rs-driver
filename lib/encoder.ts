@@ -229,9 +229,9 @@ class EncoderMembers {
     protocolVersion!: number;
 
     /** Selected from the encoding options, once, in the constructor. */
-    decodeLong: (bytes: Buffer) => types.Long | bigint;
+    decodeBigInt: (bytes: Buffer) => types.Long | bigint;
     decodeVarint: (bytes: Buffer) => types.Integer | bigint;
-    encodeLong: (value: any) => Buffer;
+    encodeBigInt: (value: any) => Buffer;
     encodeVarint: (value: any) => Buffer;
 
     decoders: {
@@ -264,7 +264,7 @@ class EncoderMembers {
         }
         this.encodingOptions = encodingOptions;
 
-        this.decodeLong = encodingOptions.useBigIntAsLong
+        this.decodeBigInt = encodingOptions.useBigIntAsLong
             ? this.#decodeCqlLongAsBigInt
             : this.#decodeCqlLongAsLong;
 
@@ -272,7 +272,7 @@ class EncoderMembers {
             ? this.#decodeVarintAsBigInt
             : this.#decodeVarintAsInteger;
 
-        this.encodeLong = encodingOptions.useBigIntAsLong
+        this.encodeBigInt = encodingOptions.useBigIntAsLong
             ? this.#encodeBigIntFromBigInt
             : this.#encodeBigIntFromLong;
 
@@ -283,10 +283,10 @@ class EncoderMembers {
         this.decoders = {
             [dataTypes.custom]: this.decodeCustom,
             [dataTypes.ascii]: this.decodeAsciiString,
-            [dataTypes.bigint]: this.decodeLong,
+            [dataTypes.bigint]: this.decodeBigInt,
             [dataTypes.blob]: this.decodeBlob,
             [dataTypes.boolean]: this.decodeBoolean,
-            [dataTypes.counter]: this.decodeLong,
+            [dataTypes.counter]: this.decodeBigInt,
             [dataTypes.decimal]: this.decodeDecimal,
             [dataTypes.double]: this.decodeDouble,
             [dataTypes.float]: this.decodeFloat,
@@ -313,10 +313,10 @@ class EncoderMembers {
         this.legacyEncoders = {
             [dataTypes.custom]: this.encodeCustom,
             [dataTypes.ascii]: this.encodeAsciiString,
-            [dataTypes.bigint]: this.encodeLong,
+            [dataTypes.bigint]: this.encodeBigInt,
             [dataTypes.blob]: this.encodeBlob,
             [dataTypes.boolean]: this.encodeBoolean,
-            [dataTypes.counter]: this.encodeLong,
+            [dataTypes.counter]: this.encodeBigInt,
             [dataTypes.decimal]: this.encodeDecimal,
             [dataTypes.double]: this.encodeDouble,
             [dataTypes.float]: this.encodeFloat,
@@ -772,7 +772,7 @@ class EncoderMembers {
         if (this.encodingOptions.useBigIntAsLong) {
             value = BigInt(value);
         }
-        return this.encodeLong(value);
+        return this.encodeBigInt(value);
     }
 
     /**
