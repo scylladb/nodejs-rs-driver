@@ -614,11 +614,13 @@ export const Tuple: typeof import("./tuple") = require("./tuple");
 export type Vector = import("./vector");
 export const Vector: typeof import("./vector") = require("./vector");
 
+/** @internal */
+export { getDataTypeNameByCode };
+
 export {
     consistencies,
     consistencyToString,
     dataTypes,
-    getDataTypeNameByCode,
     distance,
     logLevels,
     protocolVersion,
