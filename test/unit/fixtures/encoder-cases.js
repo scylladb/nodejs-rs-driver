@@ -23,6 +23,7 @@ function makeEncoders() {
     return {
         default: new Encoder(4, {}),
         bigint: new Encoder(4, { encoding: { useBigIntAsLong: true } }),
+        setMap: new Encoder(4, { encoding: { set: Set, map: Map } }),
         undefinedAsUnset: new Encoder(4, {
             encoding: { useUndefinedAsUnset: true },
         }),
@@ -201,6 +202,166 @@ const cases = [
     ["inet string", "default", t(dataTypes.inet), () => "192.168.1.2"],
     ["inet bad string", "default", t(dataTypes.inet), () => "not an address"],
     ["inet number", "default", t(dataTypes.inet), () => 5],
+
+    // list and set
+    ["list int", "default", t(dataTypes.list, int), () => [1, 2]],
+    ["list empty", "default", t(dataTypes.list, int), () => []],
+    ["list text", "default", t(dataTypes.list, text), () => ["a", "bb"]],
+    ["list mixed", "default", t(dataTypes.list, int), () => [1, "2"]],
+    [
+        "list of lists",
+        "default",
+        t(dataTypes.list, t(dataTypes.list, int)),
+        () => [[1], [2, 3]],
+    ],
+    ["list null item", "default", t(dataTypes.list, int), () => [1, null]],
+    [
+        "list undefined item",
+        "default",
+        t(dataTypes.list, int),
+        () => [1, undefined],
+    ],
+    ["list unset item", "default", t(dataTypes.list, int), () => [types.unset]],
+    [
+        "list Buffer item",
+        "default",
+        t(dataTypes.list, t(dataTypes.boolean)),
+        () => [Buffer.from([0])],
+    ],
+    ["list bad item", "default", t(dataTypes.list, int), () => ["x"]],
+    ["list not array", "default", t(dataTypes.list, int), () => "abc"],
+    ["set int", "default", t(dataTypes.set, int), () => [3, 4]],
+    ["set empty", "default", t(dataTypes.set, int), () => []],
+    ["set Set object", "default", t(dataTypes.set, int), () => new Set([1])],
+
+    // map
+    [
+        "map text int",
+        "default",
+        t(dataTypes.map, [text, int]),
+        () => ({ a: 1, b: 2 }),
+    ],
+    ["map empty", "default", t(dataTypes.map, [text, int]), () => ({})],
+    [
+        "map Map object",
+        "default",
+        t(dataTypes.map, [text, int]),
+        () => new Map([["a", 1]]),
+    ],
+    [
+        "map int keys",
+        "default",
+        t(dataTypes.map, [int, text]),
+        () => new Map([[1, "x"]]),
+    ],
+    [
+        "map nested",
+        "default",
+        t(dataTypes.map, [text, t(dataTypes.list, text)]),
+        () => ({ k: ["x"] }),
+    ],
+    [
+        "map null value",
+        "default",
+        t(dataTypes.map, [text, int]),
+        () => ({ a: null }),
+    ],
+    [
+        "map unset value",
+        "default",
+        t(dataTypes.map, [text, int]),
+        () => ({ a: types.unset }),
+    ],
+    [
+        "map undefined value",
+        "default",
+        t(dataTypes.map, [text, int]),
+        () => ({ a: undefined }),
+    ],
+    [
+        "map Buffer value",
+        "default",
+        t(dataTypes.map, [text, t(dataTypes.boolean)]),
+        () => ({ a: Buffer.from([0]) }),
+    ],
+    [
+        "map bad value",
+        "default",
+        t(dataTypes.map, [text, int]),
+        () => ({ a: "x" }),
+    ],
+    [
+        "map inherited key",
+        "default",
+        t(dataTypes.map, [text, int]),
+        () => Object.assign(Object.create({ inherited: 1 }), { own: 2 }),
+    ],
+    [
+        "map null prototype",
+        "default",
+        t(dataTypes.map, [text, int]),
+        () => Object.assign(Object.create(null), { a: 1 }),
+    ],
+
+    // More collection edge cases
+    ["list no subtype", "default", t(dataTypes.list), () => [1, "x"]],
+    ["list sparse", "default", t(dataTypes.list, int), () => [1, , 3]], // eslint-disable-line no-sparse-arrays
+    [
+        "list of empty list",
+        "default",
+        t(dataTypes.list, t(dataTypes.list, int)),
+        () => [[]],
+    ],
+    [
+        "set of empty set",
+        "default",
+        t(dataTypes.set, t(dataTypes.set, int)),
+        () => [[]],
+    ],
+    ["list no subtype of empty list", "default", t(dataTypes.list), () => [[]]],
+    [
+        "set Set object with option",
+        "setMap",
+        t(dataTypes.set, int),
+        () => new Set([5, 6]),
+    ],
+    [
+        "set Set object null item",
+        "setMap",
+        t(dataTypes.set, int),
+        () => new Set([null]),
+    ],
+    ["map no subtypes", "default", t(dataTypes.map), () => ({ a: 1 })],
+    [
+        "map value empty list",
+        "default",
+        t(dataTypes.map, [text, t(dataTypes.list, int)]),
+        () => ({ a: [] }),
+    ],
+    [
+        "map key empty list",
+        "setMap",
+        t(dataTypes.map, [t(dataTypes.list, int), int]),
+        () => new Map([[[], 1]]),
+    ],
+    [
+        "map Map object with option",
+        "setMap",
+        t(dataTypes.map, [text, int]),
+        () => new Map([["k", 5]]),
+    ],
+    [
+        "map Map object null key",
+        "setMap",
+        t(dataTypes.map, [text, int]),
+        () => new Map([[null, 5]]),
+    ],
+    [
+        "map Map object unset value",
+        "setMap",
+        t(dataTypes.map, [text, int]),
+        () => new Map([["k", types.unset]]),
+    ],
 ];
 
 /**

@@ -236,5 +236,101 @@
             "TypeError",
             "Not a valid Inet, expected InetAddress/Buffer, obtained 5"
         ]
+    },
+    "list int": { "hex": "0000000200000004000000010000000400000002" },
+    "list empty": { "hex": "00000000" },
+    "list text": { "hex": "000000020000000161000000026262" },
+    "list mixed": { "hex": "0000000200000004000000010000000400000002" },
+    "list of lists": {
+        "hex": "000000020000000c000000010000000400000001000000140000000200000004000000020000000400000003"
+    },
+    "list null item": {
+        "error": [
+            "TypeError",
+            "A collection can't contain null or unset values"
+        ]
+    },
+    "list undefined item": {
+        "error": [
+            "TypeError",
+            "A collection can't contain null or unset values"
+        ]
+    },
+    "list unset item": {
+        "error": [
+            "TypeError",
+            "A collection can't contain null or unset values"
+        ]
+    },
+    "list Buffer item": { "hex": "000000010000000100" },
+    "list bad item": {
+        "error": ["TypeError", "Expected Number, obtained 'x'"]
+    },
+    "list not array": {
+        "error": [
+            "TypeError",
+            "Not a valid list value, expected Array obtained 'abc'"
+        ]
+    },
+    "set int": { "hex": "0000000200000004000000030000000400000004" },
+    "set empty": { "hex": "00000000" },
+    "set Set object": {
+        "error": [
+            "TypeError",
+            "Not a valid list value, expected Array obtained Set(1) { 1 }"
+        ]
+    },
+    "map text int": {
+        "hex": "000000020000000161000000040000000100000001620000000400000002"
+    },
+    "map empty": { "hex": "00000000" },
+    "map Map object": { "hex": "00000000" },
+    "map int keys": { "hex": "00000000" },
+    "map nested": { "hex": "00000001000000016b00000009000000010000000178" },
+    "map null value": {
+        "error": ["TypeError", "A map can't contain null or unset values"]
+    },
+    "map unset value": {
+        "error": ["TypeError", "A map can't contain null or unset values"]
+    },
+    "map undefined value": {
+        "error": ["TypeError", "A map can't contain null or unset values"]
+    },
+    "map Buffer value": { "hex": "0000000100000001610000000100" },
+    "map bad value": {
+        "error": ["TypeError", "Expected Number, obtained 'x'"]
+    },
+    "map inherited key": { "hex": "00000001000000036f776e0000000400000002" },
+    "map null prototype": { "hex": "0000000100000001610000000400000001" },
+    "list no subtype": { "hex": "00000002000000083ff00000000000000000000178" },
+    "list sparse": {
+        "error": [
+            "TypeError",
+            "A collection can't contain null or unset values"
+        ]
+    },
+    "list of empty list": { "hex": "000000010000000400000000" },
+    "set of empty set": { "hex": "000000010000000400000000" },
+    "list no subtype of empty list": { "hex": "000000010000000400000000" },
+    "set Set object with option": {
+        "hex": "0000000200000004000000050000000400000006"
+    },
+    "set Set object null item": {
+        "error": [
+            "TypeError",
+            "A collection can't contain null or unset values"
+        ]
+    },
+    "map no subtypes": { "hex": "000000010000000161000000083ff0000000000000" },
+    "map value empty list": { "hex": "0000000100000001610000000400000000" },
+    "map key empty list": { "hex": "0000000100000004000000000000000400000001" },
+    "map Map object with option": {
+        "hex": "00000001000000016b0000000400000005"
+    },
+    "map Map object null key": {
+        "error": ["TypeError", "A map can't contain null or unset keys"]
+    },
+    "map Map object unset value": {
+        "error": ["TypeError", "A map can't contain null or unset values"]
     }
 }
