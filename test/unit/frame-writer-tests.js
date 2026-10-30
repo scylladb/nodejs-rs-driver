@@ -153,9 +153,9 @@ describe("FrameWriter", function () {
     it("rejects a nested frame on the same writer", function () {
         const writer = new FrameWriter();
         const nesting = {
-            encode: () => {
+            encodeInto: () => {
                 writer.params([int], [1], encoder);
-                return null;
+                return 0;
             },
         };
         assert.throws(

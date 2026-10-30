@@ -1,6 +1,7 @@
 /** @module types */
 
 import utils = require("../utils");
+import type { GrowableBuffer } from "../growable-buffer";
 
 /**
  * The internal representation of an integer is an array of 32-bit signed
@@ -179,53 +180,94 @@ class Integer {
      * For example: 0x00000001 -> '01', 0xFFFFFFFF -> 'FF', 0xFFFFFF01 -> 'FF01'
      */
     static toBuffer(value: Integer): Buffer {
-        let sign = value.#sign;
-        let bits = value.#bits;
+        const buf = utils.allocBufferUnsafe(Integer.byteLength(value));
+        Integer.writeUnchecked(value, buf, 0);
+        return buf;
+    }
+
+    /**
+     * Writes the big endian bytes representation of an Integer at `start` in `out`.
+     * @returns The offset after the bytes.
+     * @internal
+     */
+    static appendTo(
+        value: Integer,
+        out: GrowableBuffer,
+        start: number,
+    ): number {
+        out.ensure(start, Integer.byteLength(value));
+        return Integer.writeUnchecked(value, out.buffer, start);
+    }
+
+    /**
+     * Gets the number of bytes of the big endian bytes representation of an Integer.
+     * @internal
+     */
+    static byteLength(value: Integer): number {
+        const bits = value.#bits;
+        if (bits.length === 0) {
+            return 1;
+        }
+        const highBits = Integer.#highBits(value);
+        return Integer.#highLength(highBits) + (bits.length - 1) * 4;
+    }
+
+    /**
+     * Writes the big endian bytes representation of an Integer at `offset` in `buf`.
+     * It does not make room: `buf` must have room for {@link byteLength} bytes after `offset`.
+     * If it does not, some bytes are lost without an error, or Node throws a RangeError.
+     * @returns The offset after the bytes.
+     * @internal
+     */
+    static writeUnchecked(value: Integer, buf: Buffer, offset: number): number {
+        const sign = value.#sign;
+        const bits = value.#bits;
         if (bits.length === 0) {
             // [0] or [0xffffffff]
-            return utils.allocBufferFromArray([value.#sign]);
+            buf[offset] = sign;
+            return offset + 1;
         }
-        // the high bits might need to be represented in less than 4 bytes
-        let highBits = bits[bits.length - 1];
-        if (sign === -1) {
-            highBits = ~highBits;
+        const highBits = Integer.#highBits(value);
+        for (let j = Integer.#highLength(highBits) - 1; j >= 0; j--) {
+            // A fifth byte only keeps the sign bit.
+            const b = j < 4 ? (highBits >>> (j * 8)) & 0xff : 0;
+            buf[offset++] = sign === -1 ? ~b : b;
         }
-        let high: Array<number> = [];
+        for (let i = bits.length - 2; i >= 0; i--) {
+            buf.writeInt32BE(bits[i], offset);
+            offset += 4;
+        }
+        return offset;
+    }
+
+    /**
+     * Gets the bits of the highest group, negated for a negative value.
+     * They might need to be represented in less than 4 bytes.
+     */
+    static #highBits(value: Integer): number {
+        const highBits = value.#bits[value.#bits.length - 1];
+        return value.#sign === -1 ? ~highBits : highBits;
+    }
+
+    /**
+     * Gets the number of bytes for the high bits of {@link #highBits}: the bytes up to
+     * the highest byte that is not 0, and one more byte when that byte has its top bit set.
+     */
+    static #highLength(highBits: number): number {
+        let length = 1;
         if (highBits >>> 24 > 0) {
-            high.push((highBits >> 24) & 0xff);
+            length = 4;
+        } else if (highBits >>> 16 > 0) {
+            length = 3;
+        } else if (highBits >>> 8 > 0) {
+            length = 2;
         }
-        if (highBits >>> 16 > 0) {
-            high.push((highBits >> 16) & 0xff);
+        if ((highBits >>> ((length - 1) * 8)) & 0x80) {
+            // The byte containing the sign bit got removed:
+            // a positive value lost it, and a negative value is going to be negated.
+            length++;
         }
-        if (highBits >>> 8 > 0) {
-            high.push((highBits >> 8) & 0xff);
-        }
-        high.push(highBits & 0xff);
-        if (sign === -1) {
-            // The byte containing the sign bit got removed
-            if (high[0] >> 7 !== 0) {
-                // it is going to be negated
-                high.unshift(0);
-            }
-        } else if (high[0] >> 7 !== 0) {
-            // its positive but it lost the byte containing the sign bit
-            high.unshift(0);
-        }
-        let buf = utils.allocBufferUnsafe(high.length + (bits.length - 1) * 4);
-        for (let j = 0; j < high.length; j++) {
-            let b = high[j];
-            if (sign === -1) {
-                buf[j] = ~b;
-            } else {
-                buf[j] = b;
-            }
-        }
-        for (let i = 0; i < bits.length - 1; i++) {
-            let group = bits[bits.length - 2 - i];
-            let offset = high.length + i * 4;
-            buf.writeInt32BE(group, offset);
-        }
-        return buf;
+        return length;
     }
     /**
      * Carries any overflow from the given index into later entries.

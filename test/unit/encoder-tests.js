@@ -2557,6 +2557,21 @@ describe("encoder", function () {
     });
 });
 
+describe("Encoder.writeCell", function () {
+    const { GrowableBuffer } = require("../../lib/growable-buffer");
+
+    it("writes null, unset and bytes as cells", function () {
+        const out = new GrowableBuffer(2);
+        let end = Encoder.writeCell(out, 0, null);
+        end = Encoder.writeCell(out, end, undefined);
+        end = Encoder.writeCell(out, end, new Uint8Array([5, 6]));
+        assert.strictEqual(
+            out.buffer.subarray(0, end).toString("hex"),
+            "ffffffff" + "fffffffe" + "00000002" + "0506",
+        );
+    });
+});
+
 function getExecOptions(options) {
     const result = ExecutionOptions.empty();
     let routingKey = options.routingKey;

@@ -1,6 +1,7 @@
 "use strict";
 import Long = require("long");
 import utils = require("../utils");
+import type { GrowableBuffer } from "../growable-buffer";
 import {
     bigintToLong,
     ensure32SignedInteger,
@@ -15,6 +16,8 @@ const reusableBuffers = {
     days: utils.allocBuffer(9),
     nanoseconds: utils.allocBuffer(9),
 };
+/** The lengths of the vints in {@link reusableBuffers}. */
+const reusableLengths = { months: 0, days: 0, nanoseconds: 0 };
 
 const maxInt32 = 0x7fffffff;
 const _zero = BigInt(0);
@@ -147,27 +150,63 @@ class Duration {
      * Serializes the duration and returns the representation of the value in bytes.
      */
     toBuffer(): Buffer {
-        const lengthMonths = utils.VIntCoding.writeVInt(
+        const buffer = utils.allocBufferUnsafe(this.#writeVInts());
+        Duration.#writeUnchecked(buffer, 0);
+        return buffer;
+    }
+
+    /**
+     * Serializes the duration at `start` in `out`.
+     * @returns The offset after the bytes.
+     * @internal
+     */
+    appendTo(out: GrowableBuffer, start: number): number {
+        out.ensure(start, this.#writeVInts());
+        return Duration.#writeUnchecked(out.buffer, start);
+    }
+
+    /**
+     * Writes the months, the days and the nanoseconds as vints into the reusable buffers.
+     * @returns The number of bytes of the three vints.
+     */
+    #writeVInts(): number {
+        reusableLengths.months = utils.VIntCoding.writeVInt(
             BigInt(this.#months),
             reusableBuffers.months,
         );
-        const lengthDays = utils.VIntCoding.writeVInt(
+        reusableLengths.days = utils.VIntCoding.writeVInt(
             BigInt(this.#days),
             reusableBuffers.days,
         );
-        const lengthNanoseconds = utils.VIntCoding.writeVInt(
+        reusableLengths.nanoseconds = utils.VIntCoding.writeVInt(
             this.#nanoseconds,
             reusableBuffers.nanoseconds,
         );
-        const buffer = utils.allocBufferUnsafe(
-            lengthMonths + lengthDays + lengthNanoseconds,
+        return (
+            reusableLengths.months +
+            reusableLengths.days +
+            reusableLengths.nanoseconds
         );
-        reusableBuffers.months.copy(buffer, 0, 0, lengthMonths);
-        let offset = lengthMonths;
-        reusableBuffers.days.copy(buffer, offset, 0, lengthDays);
-        offset += lengthDays;
-        reusableBuffers.nanoseconds.copy(buffer, offset, 0, lengthNanoseconds);
-        return buffer;
+    }
+
+    /**
+     * Copies the vints from the reusable buffers to `offset` in `buffer`.
+     * It does not make room: `buffer` must have room for them after `offset`.
+     * If it does not, the bytes that do not fit are lost without an error.
+     * @returns The offset after the vints.
+     */
+    static #writeUnchecked(buffer: Buffer, offset: number): number {
+        reusableBuffers.months.copy(buffer, offset, 0, reusableLengths.months);
+        offset += reusableLengths.months;
+        reusableBuffers.days.copy(buffer, offset, 0, reusableLengths.days);
+        offset += reusableLengths.days;
+        reusableBuffers.nanoseconds.copy(
+            buffer,
+            offset,
+            0,
+            reusableLengths.nanoseconds,
+        );
+        return offset + reusableLengths.nanoseconds;
     }
 
     /**
