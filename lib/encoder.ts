@@ -283,13 +283,7 @@ class EncoderMembers {
     decoders: {
         [code: number]: (bytes: Buffer, columnInfo: ColumnInfo) => any;
     };
-    legacyEncoders: {
-        [code: number]: (value: any, columnInfo: ColumnInfo) => Buffer | null;
-    };
-    /**
-     * Writes values straight into a buffer, for the types that have an encoder.
-     * A type has an encoder or an entry in {@link legacyEncoders}, never both.
-     */
+    /** Writes values straight into a buffer, for each type. */
     encoders: { [code: number]: ValueEncoder };
 
     /** Selected from the protocol version by {@link setProtocolVersion}. */
@@ -359,8 +353,6 @@ class EncoderMembers {
             [dataTypes.udt]: this.decodeUdt,
             [dataTypes.tuple]: this.decodeTuple,
         };
-
-        this.legacyEncoders = {};
 
         this.encoders = {
             [dataTypes.ascii]: this.encodeAsciiString,
@@ -2166,11 +2158,7 @@ class Encoder extends EncoderMembers {
             return value;
         }
         const type = this.#resolveType(value, typeInfo);
-        const encoder = this.encoders[type.code];
-        if (encoder) {
-            return writeToNewBuffer(this, encoder, value, type);
-        }
-        return this.#legacyEncoderFor(type).call(this, value, type);
+        return writeToNewBuffer(this, this.#encoderFor(type), value, type);
     }
 
     /**
@@ -2222,8 +2210,7 @@ class Encoder extends EncoderMembers {
     /**
      * Writes the bytes of a value that is not null or unset, at `start` in `out`.
      * A Buffer is written as it is.
-     * Another value is written by the encoder of its type,
-     * or encoded by the encoding function of its type and copied.
+     * Another value is written by the encoder of its type.
      * @returns The offset after the bytes.
      */
     #writeBytes(
@@ -2238,18 +2225,7 @@ class Encoder extends EncoderMembers {
             return start + value.length;
         }
         const type = this.#resolveType(value, typeInfo);
-        const encoder = this.encoders[type.code];
-        if (encoder) {
-            return encoder.call(this, out, start, value, type);
-        }
-        const bytes = this.#legacyEncoderFor(type).call(
-            this,
-            value,
-            type,
-        ) as Buffer;
-        out.ensure(start, bytes.length);
-        out.buffer.set(bytes, start);
-        return start + bytes.length;
+        return this.#encoderFor(type).call(this, out, start, value, type);
     }
 
     /**
@@ -2650,8 +2626,8 @@ class Encoder extends EncoderMembers {
     /**
      * @throws {Error} When the type is not supported
      */
-    #legacyEncoderFor(type: any): (value: any, type: any) => any {
-        const encoder = this.legacyEncoders[type.code];
+    #encoderFor(type: any): ValueEncoder {
+        const encoder = this.encoders[type.code];
         if (!encoder) {
             throw new Error("Type not supported " + type.code);
         }
