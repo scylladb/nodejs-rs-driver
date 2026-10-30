@@ -230,7 +230,7 @@ class EncoderMembers {
 
     /** Selected from the encoding options, once, in the constructor. */
     decodeBigInt: (bytes: Buffer) => types.Long | bigint;
-    decodeVarint: (bytes: Buffer) => types.Integer | bigint;
+    decodeVarint: (bytes: Buffer) => types.Integer | bigint | null;
     encodeBigInt: (value: any) => Buffer;
     encodeVarint: (value: any) => Buffer;
 
@@ -493,21 +493,24 @@ class EncoderMembers {
     /**
      * @private
      */
-    #decodeVarintAsBigInt(bytes: Buffer): bigint {
-        let result = bigIntZero;
-        if (bytes[0] <= 0x7f) {
-            for (let i = 0; i < bytes.length; i++) {
-                const b = BigInt(bytes[bytes.length - 1 - i]);
-                result = result | (b << BigInt(i * 8));
-            }
-        } else {
-            for (let i = 0; i < bytes.length; i++) {
-                const b = BigInt(bytes[bytes.length - 1 - i]);
-                result = result | ((~b & bigInt8BitsOn) << BigInt(i * 8));
-            }
-            result = ~result;
+    #decodeVarintAsBigInt(bytes: Buffer): bigint | null {
+        // An operation on a BigInt costs much more than on a number.
+        // Thus, read the bytes as numbers of up to 32 bits,
+        // and make one BigInt from each of them.
+        const length = bytes.length;
+        // The empty value is not a number. decode also gives null for it.
+        if (length === 0) {
+            return null;
         }
-
+        // The first 1 to 4 bytes hold the sign: read them as a signed number.
+        // The shifts and the ORs keep this sign.
+        let offset = length % 4 || 4;
+        let result = BigInt(bytes.readIntBE(0, offset));
+        for (; offset < length; offset += 4) {
+            result =
+                (result << bigIntThirtyTwo) |
+                BigInt(bytes.readUInt32BE(offset));
+        }
         return result;
     }
 

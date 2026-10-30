@@ -70,6 +70,12 @@ describe("Encoder decoding varint as BigInt", function () {
         assert.strictEqual(decode(Buffer.from("ffffff80", "hex")), -128n);
     });
 
+    // The empty value is not a number. decode gives null for it before it calls the decoder.
+    it("decodes an empty buffer as null, like decode", function () {
+        assert.isNull(encoder.decodeVarint(Buffer.alloc(0)));
+        assert.isNull(decode(Buffer.alloc(0)));
+    });
+
     it("decodes a value that is a part of a larger buffer", function () {
         const buffer = Buffer.from("aa" + "ffffffff00000001" + "bb", "hex");
         assert.strictEqual(decode(buffer.subarray(1, 9)), -(2n ** 32n) + 1n);
