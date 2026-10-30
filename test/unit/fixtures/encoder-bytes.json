@@ -665,5 +665,33 @@
             "TypeError",
             "Not a valid varint, expected BigDecimal/Number/String/Buffer, obtained 5n"
         ]
+    },
+    "duration zero": { "hex": "000000" },
+    "duration 1 2 3": { "hex": "020406" },
+    "duration negative": { "hex": "010305" },
+    "duration 1-byte and 2-byte vints": { "hex": "7e80807f" },
+    "duration max": { "hex": "f0fffffffef0fffffffefffffffffffffffffe" },
+    "duration min": { "hex": "f0fffffffff0ffffffffffffffffffffffffff" },
+    "duration Long nanoseconds": { "hex": "0000fa3ee3f60996" },
+    "duration from string": { "hex": "1c32fc2168cdf9d664" },
+    "duration string": {
+        "error": [
+            "TypeError",
+            "Not a valid duration, expected Duration/Buffer obtained '1h'"
+        ]
+    },
+    "duration number": {
+        "error": [
+            "TypeError",
+            "Not a valid duration, expected Duration/Buffer obtained 5"
+        ]
+    },
+    "custom duration negative": { "hex": "010305" },
+    "custom duration max": { "hex": "f0fffffffef0fffffffefffffffffffffffffe" },
+    "custom duration string": {
+        "error": [
+            "TypeError",
+            "Not a valid duration, expected Duration/Buffer obtained '1h'"
+        ]
     }
 }

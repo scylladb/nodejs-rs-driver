@@ -975,6 +975,79 @@ const cases = [
     // TODO: decimal rejects a BigInt, and the message names varint. Accept
     // a BigInt.
     ["decimal BigInt", "default", t(dataTypes.decimal), () => 5n],
+
+    // duration
+    [
+        "duration zero",
+        "default",
+        t(dataTypes.duration),
+        () => new types.Duration(0, 0, 0),
+    ],
+    [
+        "duration 1 2 3",
+        "default",
+        t(dataTypes.duration),
+        () => new types.Duration(1, 2, 3),
+    ],
+    [
+        "duration negative",
+        "default",
+        t(dataTypes.duration),
+        () => new types.Duration(-1, -2, -3n),
+    ],
+    [
+        "duration 1-byte and 2-byte vints",
+        "default",
+        t(dataTypes.duration),
+        () => new types.Duration(63, 64, -64),
+    ],
+    [
+        "duration max",
+        "default",
+        t(dataTypes.duration),
+        () => new types.Duration(2147483647, 2147483647, 2n ** 63n - 1n),
+    ],
+    [
+        "duration min",
+        "default",
+        t(dataTypes.duration),
+        () => new types.Duration(-2147483648, -2147483648, -(2n ** 63n)),
+    ],
+    [
+        "duration Long nanoseconds",
+        "default",
+        t(dataTypes.duration),
+        () => new types.Duration(0, 0, Long.fromString("1234567890123")),
+    ],
+    [
+        "duration from string",
+        "default",
+        t(dataTypes.duration),
+        () => types.Duration.fromString("1y2mo3w4d5h6m7s8ms9us10ns"),
+    ],
+    // TODO: a string is rejected, but Duration.fromString can read "1h".
+    // Accept a string.
+    ["duration string", "default", t(dataTypes.duration), () => "1h"],
+    ["duration number", "default", t(dataTypes.duration), () => 5],
+    [
+        "custom duration negative",
+        "default",
+        t(dataTypes.custom, "org.apache.cassandra.db.marshal.DurationType"),
+        () => new types.Duration(-1, -2, -3n),
+    ],
+    [
+        "custom duration max",
+        "default",
+        t(dataTypes.custom, "org.apache.cassandra.db.marshal.DurationType"),
+        () => new types.Duration(2147483647, 2147483647, 2n ** 63n - 1n),
+    ],
+    // TODO: a string is rejected. See "duration string".
+    [
+        "custom duration string",
+        "default",
+        t(dataTypes.custom, "org.apache.cassandra.db.marshal.DurationType"),
+        () => "1h",
+    ],
 ];
 
 /**
