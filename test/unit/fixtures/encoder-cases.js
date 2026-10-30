@@ -45,6 +45,7 @@ function makeEncoders() {
         undefinedAsUnset: new Encoder(4, {
             encoding: { useUndefinedAsUnset: true },
         }),
+        bigintVarint: new Encoder(4, { encoding: { useBigIntAsVarint: true } }),
     };
 }
 
@@ -777,6 +778,203 @@ const cases = [
     ["time number", "default", t(dataTypes.time), () => 5],
     ["time Date", "default", t(dataTypes.time), () => new Date(0)],
     ["time Long", "default", t(dataTypes.time), () => Long.fromNumber(5)],
+
+    // varint and decimal
+    ["varint 0", "default", t(dataTypes.varint), () => 0],
+    ["varint -1", "default", t(dataTypes.varint), () => -1],
+    ["varint 127", "default", t(dataTypes.varint), () => 127],
+    ["varint 128", "default", t(dataTypes.varint), () => 128],
+    ["varint -128", "default", t(dataTypes.varint), () => -128],
+    ["varint -129", "default", t(dataTypes.varint), () => -129],
+    ["varint 255", "default", t(dataTypes.varint), () => 255],
+    ["varint 256", "default", t(dataTypes.varint), () => 256],
+    ["varint 2^31", "default", t(dataTypes.varint), () => 2147483648],
+    ["varint 2^32 - 1", "default", t(dataTypes.varint), () => 4294967295],
+    ["varint 2^32", "default", t(dataTypes.varint), () => 4294967296],
+    ["varint -(2^32)", "default", t(dataTypes.varint), () => -4294967296],
+    ["varint -(2^32) - 1", "default", t(dataTypes.varint), () => -4294967297],
+    [
+        "varint max safe integer",
+        "default",
+        t(dataTypes.varint),
+        () => Number.MAX_SAFE_INTEGER,
+    ],
+    // TODO: the fraction is dropped, so 1.5 becomes 1.
+    // Reject a number that is not an integer.
+    ["varint fraction", "default", t(dataTypes.varint), () => 1.5],
+    // TODO: NaN becomes 0. Reject it.
+    ["varint NaN", "default", t(dataTypes.varint), () => NaN],
+    [
+        "varint Integer",
+        "default",
+        t(dataTypes.varint),
+        () => types.Integer.fromString("123456789012345678901234567890"),
+    ],
+    [
+        "varint negative Integer",
+        "default",
+        t(dataTypes.varint),
+        () => types.Integer.fromString("-123456789012345678901234567890"),
+    ],
+    [
+        "varint Integer from bits",
+        "default",
+        t(dataTypes.varint),
+        () => types.Integer.fromBits([0, -1, 0x7f]),
+    ],
+    [
+        "varint numeric string",
+        "default",
+        t(dataTypes.varint),
+        () => "-12345678901234567890",
+    ],
+    ["varint empty string", "default", t(dataTypes.varint), () => ""],
+    // TODO: a string that is not a number becomes 0. Reject it.
+    ["varint bad string", "default", t(dataTypes.varint), () => "abc"],
+    [
+        "varint Buffer",
+        "default",
+        t(dataTypes.varint),
+        () => Buffer.from([1, 2]),
+    ],
+    ["varint boolean", "default", t(dataTypes.varint), () => true],
+    // TODO: Integer mode rejects a BigInt. Accept a BigInt in all modes.
+    ["varint BigInt", "default", t(dataTypes.varint), () => 5n],
+    ["varint BigInt mode 0", "bigintVarint", t(dataTypes.varint), () => 0n],
+    ["varint BigInt mode -1", "bigintVarint", t(dataTypes.varint), () => -1n],
+    ["varint BigInt mode 127", "bigintVarint", t(dataTypes.varint), () => 127n],
+    ["varint BigInt mode 128", "bigintVarint", t(dataTypes.varint), () => 128n],
+    [
+        "varint BigInt mode -128",
+        "bigintVarint",
+        t(dataTypes.varint),
+        () => -128n,
+    ],
+    [
+        "varint BigInt mode -129",
+        "bigintVarint",
+        t(dataTypes.varint),
+        () => -129n,
+    ],
+    ["varint BigInt mode 255", "bigintVarint", t(dataTypes.varint), () => 255n],
+    ["varint BigInt mode 256", "bigintVarint", t(dataTypes.varint), () => 256n],
+    [
+        "varint BigInt mode -256",
+        "bigintVarint",
+        t(dataTypes.varint),
+        () => -256n,
+    ],
+    [
+        "varint BigInt mode 2^64",
+        "bigintVarint",
+        t(dataTypes.varint),
+        () => 2n ** 64n,
+    ],
+    [
+        "varint BigInt mode -(2^64)",
+        "bigintVarint",
+        t(dataTypes.varint),
+        () => -(2n ** 64n),
+    ],
+    [
+        "varint BigInt mode 2^64 - 1",
+        "bigintVarint",
+        t(dataTypes.varint),
+        () => 2n ** 64n - 1n,
+    ],
+    [
+        "varint BigInt mode large",
+        "bigintVarint",
+        t(dataTypes.varint),
+        () => 123456789012345678901234567890n,
+    ],
+    [
+        "varint BigInt mode negative large",
+        "bigintVarint",
+        t(dataTypes.varint),
+        () => -123456789012345678901234567890n,
+    ],
+    [
+        "varint BigInt mode numeric string",
+        "bigintVarint",
+        t(dataTypes.varint),
+        () => "-123",
+    ],
+    // TODO: a SyntaxError. Throw a TypeError.
+    [
+        "varint BigInt mode bad string",
+        "bigintVarint",
+        t(dataTypes.varint),
+        () => "abc",
+    ],
+    // TODO: BigInt mode rejects a number, also 5. Accept a safe integer in
+    // all modes.
+    ["varint BigInt mode number", "bigintVarint", t(dataTypes.varint), () => 5],
+    // TODO: BigInt mode rejects an Integer. Decide if it accepts one.
+    [
+        "varint BigInt mode Integer",
+        "bigintVarint",
+        t(dataTypes.varint),
+        () => types.Integer.fromNumber(5),
+    ],
+    [
+        "decimal BigDecimal",
+        "default",
+        t(dataTypes.decimal),
+        () => types.BigDecimal.fromString("12345.6789"),
+    ],
+    ["decimal negative", "default", t(dataTypes.decimal), () => "-0.001"],
+    ["decimal zero", "default", t(dataTypes.decimal), () => 0],
+    ["decimal number fraction", "default", t(dataTypes.decimal), () => 1.25],
+    // TODO: the scale is 20, because the number goes through toFixed(20).
+    // The value is correct. A fix of "decimal number 1e21" can change the
+    // scale to 7.
+    [
+        "decimal number with exponent",
+        "default",
+        t(dataTypes.decimal),
+        () => 1e-7,
+    ],
+    // TODO: 1e21 becomes 1, because toFixed gives exponent notation for
+    // 1e21 and more. Read the exponent.
+    ["decimal number 1e21", "default", t(dataTypes.decimal), () => 1e21],
+    // TODO: NaN becomes 0. Reject it.
+    ["decimal NaN", "default", t(dataTypes.decimal), () => NaN],
+    [
+        "decimal large",
+        "default",
+        t(dataTypes.decimal),
+        () => "123456789012345678901234567890.123",
+    ],
+    [
+        "decimal negative large",
+        "default",
+        t(dataTypes.decimal),
+        () => "-98765432109876543210.5",
+    ],
+    [
+        "decimal negative scale",
+        "default",
+        t(dataTypes.decimal),
+        () => new types.BigDecimal(types.Integer.fromNumber(5), -3),
+    ],
+    // TODO: the spaces are ignored. Decide if they are valid, with one
+    // parser for the numeric strings of all types.
+    [
+        "decimal string with spaces",
+        "default",
+        t(dataTypes.decimal),
+        () => " 1.5 ",
+    ],
+    // TODO: the message is about null or undefined, not the empty string.
+    ["decimal empty string", "default", t(dataTypes.decimal), () => ""],
+    // TODO: a string that is not a number becomes 0. Reject it.
+    ["decimal bad string", "default", t(dataTypes.decimal), () => "abc"],
+    // TODO: the message names varint, not decimal.
+    ["decimal boolean", "default", t(dataTypes.decimal), () => true],
+    // TODO: decimal rejects a BigInt, and the message names varint. Accept
+    // a BigInt.
+    ["decimal BigInt", "default", t(dataTypes.decimal), () => 5n],
 ];
 
 /**
