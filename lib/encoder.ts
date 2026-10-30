@@ -251,7 +251,7 @@ class EncoderMembers {
     decoders: {
         [code: number]: (bytes: Buffer, columnInfo: ColumnInfo) => any;
     };
-    encoders: {
+    legacyEncoders: {
         [code: number]: (value: any, columnInfo: ColumnInfo) => Buffer | null;
     };
 
@@ -319,7 +319,7 @@ class EncoderMembers {
             [dataTypes.tuple]: this.decodeTuple,
         };
 
-        this.encoders = {
+        this.legacyEncoders = {
             [dataTypes.custom]: this.encodeCustom,
             [dataTypes.ascii]: this.encodeAsciiString,
             [dataTypes.bigint]: this.encodeBigInt,
@@ -2360,7 +2360,7 @@ class Encoder extends EncoderMembers {
             }
         }
 
-        const encoder = this.encoders[type.code];
+        const encoder = this.legacyEncoders[type.code];
 
         if (!encoder) {
             throw new Error("Type not supported " + type.code);
