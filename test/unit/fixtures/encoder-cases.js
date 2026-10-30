@@ -689,6 +689,94 @@ const cases = [
         () => new types.Duration(1, 2, Long.fromNumber(3)),
     ],
     ["custom unknown", "default", t(dataTypes.custom, "no.such.Type"), () => 1],
+
+    // date and time
+    [
+        "date LocalDate",
+        "default",
+        t(dataTypes.date),
+        () => new types.LocalDate(2020, 1, 15),
+    ],
+    ["date epoch", "default", t(dataTypes.date), () => new types.LocalDate(0)],
+    [
+        "date before epoch",
+        "default",
+        t(dataTypes.date),
+        () => new types.LocalDate(-1),
+    ],
+    // Days out of the range of Date: LocalDate keeps the number of days.
+    [
+        "date max days",
+        "default",
+        t(dataTypes.date),
+        () => new types.LocalDate(2147483647),
+    ],
+    [
+        "date min days",
+        "default",
+        t(dataTypes.date),
+        () => new types.LocalDate(-2147483648),
+    ],
+    ["date string", "default", t(dataTypes.date), () => "2020-01-15"],
+    [
+        "date negative year string",
+        "default",
+        t(dataTypes.date),
+        () => "-0001-03-04",
+    ],
+    // TODO: a string of digits is a number of days, so "2020" is
+    // 1975-07-14. In CQL, an integer date is unsigned, with the epoch at
+    // 2^31. Decide if such strings are valid.
+    ["date days string", "default", t(dataTypes.date), () => "-5"],
+    // A Date at local midnight, because LocalDate.fromDate uses the local time zone.
+    // TODO: the date depends on the time zone of the process. Decide
+    // between UTC and local time. With UTC, this case must use midnight UTC.
+    ["date Date", "default", t(dataTypes.date), () => new Date(2020, 0, 15)],
+    // TODO, for the next 3 cases: the message holds the text of another
+    // error. Use one format for the messages.
+    ["date invalid Date", "default", t(dataTypes.date), () => new Date(NaN)],
+    ["date bad month", "default", t(dataTypes.date), () => "2020-13-01"],
+    ["date bad string", "default", t(dataTypes.date), () => "not a date"],
+    ["date number", "default", t(dataTypes.date), () => 5],
+    [
+        "time zero",
+        "default",
+        t(dataTypes.time),
+        () => new types.LocalTime(Long.ZERO),
+    ],
+    [
+        "time max",
+        "default",
+        t(dataTypes.time),
+        () => new types.LocalTime(Long.fromString("86399999999999")),
+    ],
+    [
+        "time LocalTime",
+        "default",
+        t(dataTypes.time),
+        () => types.LocalTime.fromString("13:45:30.123456789"),
+    ],
+    ["time string", "default", t(dataTypes.time), () => "13:45:30.123456789"],
+    [
+        "time string without seconds",
+        "default",
+        t(dataTypes.time),
+        () => "01:02",
+    ],
+    // TODO, for the next 2 cases: the message holds the text of another
+    // error. Use one format for the messages.
+    ["time bad hour", "default", t(dataTypes.time), () => "25:00"],
+    [
+        "time below nanoseconds",
+        "default",
+        t(dataTypes.time),
+        () => "00:00:00.1234567890",
+    ],
+    // TODO, for the next 3 cases: time rejects a number, a Date and a Long.
+    // Decide which of them to accept.
+    ["time number", "default", t(dataTypes.time), () => 5],
+    ["time Date", "default", t(dataTypes.time), () => new Date(0)],
+    ["time Long", "default", t(dataTypes.time), () => Long.fromNumber(5)],
 ];
 
 /**

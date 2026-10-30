@@ -507,5 +507,67 @@
             "TypeError",
             "No encoding handler found for type { code: 0, info: 'no.such.Type' }"
         ]
+    },
+    "date LocalDate": { "hex": "80004764" },
+    "date epoch": { "hex": "80000000" },
+    "date before epoch": { "hex": "7fffffff" },
+    "date max days": { "hex": "ffffffff" },
+    "date min days": { "hex": "00000000" },
+    "date string": { "hex": "80004764" },
+    "date negative year string": { "hex": "7ff50429" },
+    "date days string": { "hex": "7ffffffb" },
+    "date Date": { "hex": "80004764" },
+    "date invalid Date": {
+        "error": [
+            "TypeError",
+            "LocalDate could not be parsed TypeError: Invalid date: Invalid Date"
+        ]
+    },
+    "date bad month": {
+        "error": [
+            "TypeError",
+            "LocalDate could not be parsed Error: Month should be value between 1 and 12, got 13."
+        ]
+    },
+    "date bad string": {
+        "error": [
+            "TypeError",
+            "LocalDate could not be parsed Error: Invalid input 'not a date'."
+        ]
+    },
+    "date number": {
+        "error": ["TypeError", "Expected Date/String/LocalDate, obtained 5"]
+    },
+    "time zero": { "hex": "0000000000000000" },
+    "time max": { "hex": "00004e94914effff" },
+    "time LocalTime": { "hex": "00002d0c216a1115" },
+    "time string": { "hex": "00002d0c216a1115" },
+    "time string without seconds": { "hex": "0000036221475000" },
+    "time bad hour": {
+        "error": [
+            "TypeError",
+            "LocalTime could not be parsed TypeError: Invalid hour. Expected value between 0 and 23, got 25"
+        ]
+    },
+    "time below nanoseconds": {
+        "error": [
+            "TypeError",
+            "LocalTime could not be parsed TypeError: Invalid format for local time constructor. Cannot have sub nanosecond precision."
+        ]
+    },
+    "time number": {
+        "error": ["TypeError", "Expected String/LocalTime, obtained 5"]
+    },
+    "time Date": {
+        "error": [
+            "TypeError",
+            "Expected String/LocalTime, obtained 1970-01-01T00:00:00.000Z"
+        ]
+    },
+    "time Long": {
+        "error": [
+            "TypeError",
+            "Expected String/LocalTime, obtained Long { low: 5, high: 0, unsigned: false }"
+        ]
     }
 }
