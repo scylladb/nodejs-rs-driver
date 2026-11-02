@@ -67,6 +67,29 @@ describe("Decoding of varint and decimal values", function () {
                 "The scale of a decimal value needs 4 bytes, got 0",
             );
         });
+
+        it("rejects a scale without an unscaled value", function () {
+            const message = "The unscaled value of a decimal value is empty";
+            // The scale 2, and no unscaled value.
+            const scaleOnly = hex("00000002");
+            assert.throws(
+                () => BigDecimal.fromBuffer(scaleOnly),
+                TypeError,
+                message,
+            );
+            assert.throws(
+                () => bigIntEncoder.decode(scaleOnly, decimal),
+                TypeError,
+                message,
+            );
+            // One row with this decimal value.
+            const page = hex("00000004" + "00000002");
+            assert.throws(
+                () => bigIntEncoder.decodeRows(page, 1, ["d"], [decimal]),
+                TypeError,
+                message,
+            );
+        });
     });
 
     // A leading byte is redundant when it only repeats the sign of the next byte:
