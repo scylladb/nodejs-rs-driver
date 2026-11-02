@@ -42,8 +42,14 @@ class BigDecimal {
 
     /**
      * Returns the BigDecimal representation of a buffer composed of the scale (int32BE) and the unsigned value (varint BE)
+     * @throws {TypeError} When the buffer is too short for the scale.
      */
     static fromBuffer(buf: Buffer): BigDecimal {
+        if (buf.length < 4) {
+            throw new TypeError(
+                `The scale of a decimal value needs 4 bytes, got ${buf.length}`,
+            );
+        }
         const scale = buf.readInt32BE(0);
         const unscaledValue = Integer.fromBuffer(buf.slice(4));
         return new BigDecimal(unscaledValue, scale);

@@ -45,6 +45,30 @@ describe("Decoding of varint and decimal values", function () {
         });
     });
 
+    describe("malformed decimal values", function () {
+        it("rejects a value that is too short for the scale", function () {
+            for (const bytes of ["00", "0000", "000002"]) {
+                const message = `The scale of a decimal value needs 4 bytes, got ${bytes.length / 2}`;
+                assert.throws(
+                    () => BigDecimal.fromBuffer(hex(bytes)),
+                    TypeError,
+                    message,
+                );
+                assert.throws(
+                    () => bigIntEncoder.decode(hex(bytes), decimal),
+                    TypeError,
+                    message,
+                );
+            }
+            // decode gives null for an empty value. Only a direct call gets the error.
+            assert.throws(
+                () => BigDecimal.fromBuffer(hex("")),
+                TypeError,
+                "The scale of a decimal value needs 4 bytes, got 0",
+            );
+        });
+    });
+
     // A leading byte is redundant when it only repeats the sign of the next byte:
     // 0x00 before a byte with the top bit clear, or 0xff before a byte with the top bit set.
     describe("redundant sign bytes", function () {
