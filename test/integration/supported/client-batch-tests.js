@@ -16,6 +16,7 @@ describe("Client @SERVER_API", function () {
         const keyspace = helper.getRandomName("ks");
         const table1 = `${keyspace}.${helper.getRandomName("tblA")}`;
         const table2 = `${keyspace}.${helper.getRandomName("tblB")}`;
+        const counterTable = `${keyspace}.${helper.getRandomName("cnt")}`;
         before(function (done) {
             const client = newInstance();
             utils.series(
@@ -27,6 +28,10 @@ describe("Client @SERVER_API", function () {
                     ),
                     helper.toDdlTask(client, helper.createTableCql(table1)),
                     helper.toDdlTask(client, helper.createTableCql(table2)),
+                    helper.toDdlTask(
+                        client,
+                        createCounterTableCql(counterTable),
+                    ),
                 ],
                 done,
             );
@@ -500,6 +505,76 @@ describe("Client @SERVER_API", function () {
                 done,
             );
         });
+        it("should execute a counter batch when counter is true", async function () {
+            const client = newInstance();
+            const id1 = types.Uuid.random();
+            const id2 = types.Uuid.random();
+            await client.batch(
+                [
+                    `UPDATE ${counterTable} SET n = n + 1 WHERE id = ${id1}`,
+                    `UPDATE ${counterTable} SET n = n + 2 WHERE id = ${id2}`,
+                ],
+                { counter: true },
+            );
+            assert.strictEqual(
+                await readCounter(client, counterTable, id1),
+                1n,
+            );
+            assert.strictEqual(
+                await readCounter(client, counterTable, id2),
+                2n,
+            );
+            await client.shutdown();
+        });
+        describe("with traceQuery: true", function () {
+            before(function () {
+                // The tests look for the batchlog events in the traces of ScyllaDB.
+                if (!helper.getServerInfo().isScylla) {
+                    this.skip();
+                }
+            });
+
+            // The server skips the batchlog for a batch of one partition,
+            // also when the batch is logged. Thus, each batch writes to 2 partitions.
+            async function tracedInsertBatch(client, options) {
+                const ids = [types.Uuid.random(), types.Uuid.random()];
+                const result = await client.batch(
+                    ids.map(
+                        (id) =>
+                            `INSERT INTO ${table1} (id, text_sample) VALUES (${id}, 'traced')`,
+                    ),
+                    { ...options, traceQuery: true },
+                );
+                for (const id of ids) {
+                    const rs = await client.execute(
+                        `SELECT text_sample FROM ${table1} WHERE id = ${id}`,
+                    );
+                    assert.strictEqual(rs.first().text_sample, "traced");
+                }
+                return getPersistedTrace(client, result);
+            }
+
+            it("should write a logged batch to the batchlog by default", async function () {
+                const client = newInstance();
+                const trace = await tracedInsertBatch(client, {});
+                assert.ok(
+                    hasBatchlogEvent(trace),
+                    `No batchlog event in the trace:\n${describeEvents(trace)}`,
+                );
+                await client.shutdown();
+            });
+            it("should not write the batch to the batchlog when logged is false", async function () {
+                const client = newInstance();
+                const trace = await tracedInsertBatch(client, {
+                    logged: false,
+                });
+                assert.ok(
+                    !hasBatchlogEvent(trace),
+                    `A batchlog event in the trace:\n${describeEvents(trace)}`,
+                );
+                await client.shutdown();
+            });
+        });
         describe("with no callback specified", function () {
             vit(
                 "2.0",
@@ -552,6 +627,7 @@ describe("Client @SERVER_API", function () {
         const table1Short = helper.getRandomName("tblA");
         const table1 = keyspace + "." + table1Short;
         const table2 = keyspace + "." + helper.getRandomName("tblB");
+        const counterTable = `${keyspace}.${helper.getRandomName("cnt")}`;
         before(function (done) {
             const client = newInstance();
             const createTableCql =
@@ -581,6 +657,10 @@ describe("Client @SERVER_API", function () {
                     helper.toDdlTask(
                         client,
                         util.format(createTableCql, table2),
+                    ),
+                    helper.toDdlTask(
+                        client,
+                        createCounterTableCql(counterTable),
                     ),
                 ],
                 done,
@@ -1091,6 +1171,23 @@ describe("Client @SERVER_API", function () {
             await client.shutdown();
         });
 
+        it("should execute a prepared counter batch when counter is true", async function () {
+            const client = newInstance({
+                queryOptions: { consistency: types.consistencies.quorum },
+            });
+            const id = types.Uuid.random();
+            const update = `UPDATE ${counterTable} SET n = n + ? WHERE id = ?`;
+            await client.batch(
+                [
+                    { query: update, params: [1n, id] },
+                    { query: update, params: [2n, id] },
+                ],
+                { prepare: true, counter: true },
+            );
+            assert.strictEqual(await readCounter(client, counterTable, id), 3n);
+            await client.shutdown();
+        });
+
         it("should not use keyspace if set on options for lower protocol versions", function () {
             const client = newInstance({});
             const insertQuery =
@@ -1125,4 +1222,47 @@ describe("Client @SERVER_API", function () {
  */
 function newInstance(options) {
     return new Client(utils.deepExtend({}, helper.baseOptions, options));
+}
+
+function createCounterTableCql(table) {
+    return `CREATE TABLE ${table} (id uuid PRIMARY KEY, n counter)`;
+}
+
+/**
+ * @returns {Promise<bigint>} The counter of the row with the given id.
+ */
+async function readCounter(client, table, id) {
+    const rs = await client.execute(
+        `SELECT n FROM ${table} WHERE id = ?`,
+        [id],
+        { prepare: true },
+    );
+    return rs.first().n;
+}
+
+/**
+ * Gets the trace of a traced request, after the server stores its session.
+ * @returns {Promise<QueryTrace>}
+ */
+async function getPersistedTrace(client, result) {
+    const traceId = result.info.traceId;
+    assert.ok(traceId instanceof types.Uuid);
+    await helper.wait.until(async () => {
+        const rs = await client.execute(
+            "SELECT duration FROM system_traces.sessions WHERE session_id = ?",
+            [traceId],
+            { consistency: types.consistencies.one },
+        );
+        const row = rs.first();
+        return row && typeof row["duration"] === "number";
+    });
+    return client.metadata.getTrace(traceId);
+}
+
+function hasBatchlogEvent(trace) {
+    return trace.events.some((event) => /batchlog/i.test(event.activity));
+}
+
+function describeEvents(trace) {
+    return trace.events.map((event) => event.activity).join("\n");
 }

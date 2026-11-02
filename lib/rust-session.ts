@@ -143,12 +143,14 @@ export class RustSession {
         types: Array<Array<ColumnInfo | null>>,
         params: Array<Array<CqlValue>>,
         options: RustQueryOptions,
+        batchKind: rust.BatchKind,
     ): Promise<rust.ExternalObject<rust.QueryResultWrapper>> {
         return rust.sessionBatch(
             this.#inner,
             statements,
             this.#frameWriter.batch(types, params, this.#encoder),
             ...options,
+            batchKind,
         );
     }
 
@@ -161,12 +163,14 @@ export class RustSession {
         types: Array<Array<ColumnInfo | null>>,
         params: Array<Array<CqlValue>>,
         options: RustQueryOptions,
+        batchKind: rust.BatchKind,
     ): Promise<rust.ExternalObject<rust.QueryResultWrapper>> {
         return rust.sessionBatchPrepared(
             this.#inner,
             statements,
             this.#frameWriter.batch(types, params, this.#encoder),
             ...options,
+            batchKind,
         );
     }
 

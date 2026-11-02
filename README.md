@@ -2,6 +2,7 @@
 
 ![test workflow](https://github.com/scylladb-zpp-2024-javascript-driver/scylladb-javascript-driver/actions/workflows/integration-tests.yml/badge.svg?branch=main)
 ![quality workflow](https://github.com/scylladb-zpp-2024-javascript-driver/scylladb-javascript-driver/actions/workflows/check-docs.yml/badge.svg?branch=main)
+[![coverage](https://codecov.io/gh/scylladb/nodejs-rs-driver/branch/main/graph/badge.svg)](https://codecov.io/gh/scylladb/nodejs-rs-driver)
 
 This is a client-side driver for [ScyllaDB](https://www.scylladb.com/) written in Node.js and Rust.
 This driver is an overlay over the [ScyllaDB Rust Driver](https://github.com/scylladb/scylla-rust-driver),

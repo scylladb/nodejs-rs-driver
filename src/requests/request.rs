@@ -1,4 +1,5 @@
 use napi::bindgen_prelude::BigInt;
+use scylla::statement::batch::BatchType;
 use scylla::statement::prepared::PreparedStatement;
 
 use std::sync::Arc;
@@ -59,6 +60,27 @@ impl QueryOptionsObj {
             serial_consistency,
             timestamp,
             trace_query,
+        }
+    }
+}
+
+/// The type of a batch, from the `counter` and `logged` options of `Client#batch()`.
+///
+/// JS gets it as a `const enum`. Thus, JS passes it as a number,
+/// and napi reads it with one `napi_get_value_int32` call.
+#[napi]
+pub enum BatchKind {
+    Logged,
+    Unlogged,
+    Counter,
+}
+
+impl From<BatchKind> for BatchType {
+    fn from(kind: BatchKind) -> Self {
+        match kind {
+            BatchKind::Logged => BatchType::Logged,
+            BatchKind::Unlogged => BatchType::Unlogged,
+            BatchKind::Counter => BatchType::Counter,
         }
     }
 }
