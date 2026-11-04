@@ -37,6 +37,12 @@ const bigIntZero = BigInt(0);
 const bigIntMinusOne = BigInt(-1);
 const bigIntEight = BigInt(8);
 const bigIntThirtyTwo = BigInt(32);
+/**
+ * The decoder of varint values as BigInt reads a value of up to this length, in bytes, in one loop.
+ * The loop copies the whole result at each step of 4 bytes.
+ * For 64 bytes, the loop has at most 16 steps. Thus, the copies cost little.
+ */
+const varintLoopMaxLength = 64;
 
 const complexTypeNames = Object.freeze({
     list: "org.apache.cassandra.db.marshal.ListType",
@@ -229,9 +235,9 @@ class EncoderMembers {
     protocolVersion!: number;
 
     /** Selected from the encoding options, once, in the constructor. */
-    decodeLong: (bytes: Buffer) => types.Long | bigint;
-    decodeVarint: (bytes: Buffer) => types.Integer | bigint;
-    encodeLong: (value: any) => Buffer;
+    decodeBigInt: (bytes: Buffer) => types.Long | bigint;
+    decodeVarint: (bytes: Buffer) => types.Integer | bigint | null;
+    encodeBigInt: (value: any) => Buffer;
     encodeVarint: (value: any) => Buffer;
 
     decoders: {
@@ -264,7 +270,7 @@ class EncoderMembers {
         }
         this.encodingOptions = encodingOptions;
 
-        this.decodeLong = encodingOptions.useBigIntAsLong
+        this.decodeBigInt = encodingOptions.useBigIntAsLong
             ? this.#decodeCqlLongAsBigInt
             : this.#decodeCqlLongAsLong;
 
@@ -272,7 +278,7 @@ class EncoderMembers {
             ? this.#decodeVarintAsBigInt
             : this.#decodeVarintAsInteger;
 
-        this.encodeLong = encodingOptions.useBigIntAsLong
+        this.encodeBigInt = encodingOptions.useBigIntAsLong
             ? this.#encodeBigIntFromBigInt
             : this.#encodeBigIntFromLong;
 
@@ -283,10 +289,10 @@ class EncoderMembers {
         this.decoders = {
             [dataTypes.custom]: this.decodeCustom,
             [dataTypes.ascii]: this.decodeAsciiString,
-            [dataTypes.bigint]: this.decodeLong,
+            [dataTypes.bigint]: this.decodeBigInt,
             [dataTypes.blob]: this.decodeBlob,
             [dataTypes.boolean]: this.decodeBoolean,
-            [dataTypes.counter]: this.decodeLong,
+            [dataTypes.counter]: this.decodeBigInt,
             [dataTypes.decimal]: this.decodeDecimal,
             [dataTypes.double]: this.decodeDouble,
             [dataTypes.float]: this.decodeFloat,
@@ -313,10 +319,10 @@ class EncoderMembers {
         this.encoders = {
             [dataTypes.custom]: this.encodeCustom,
             [dataTypes.ascii]: this.encodeAsciiString,
-            [dataTypes.bigint]: this.encodeLong,
+            [dataTypes.bigint]: this.encodeBigInt,
             [dataTypes.blob]: this.encodeBlob,
             [dataTypes.boolean]: this.encodeBoolean,
-            [dataTypes.counter]: this.encodeLong,
+            [dataTypes.counter]: this.encodeBigInt,
             [dataTypes.decimal]: this.encodeDecimal,
             [dataTypes.double]: this.encodeDouble,
             [dataTypes.float]: this.encodeFloat,
@@ -493,21 +499,27 @@ class EncoderMembers {
     /**
      * @private
      */
-    #decodeVarintAsBigInt(bytes: Buffer): bigint {
-        let result = bigIntZero;
-        if (bytes[0] <= 0x7f) {
-            for (let i = 0; i < bytes.length; i++) {
-                const b = BigInt(bytes[bytes.length - 1 - i]);
-                result = result | (b << BigInt(i * 8));
-            }
-        } else {
-            for (let i = 0; i < bytes.length; i++) {
-                const b = BigInt(bytes[bytes.length - 1 - i]);
-                result = result | ((~b & bigInt8BitsOn) << BigInt(i * 8));
-            }
-            result = ~result;
+    #decodeVarintAsBigInt(bytes: Buffer): bigint | null {
+        // An operation on a BigInt costs much more than on a number.
+        // Thus, read the bytes as numbers of up to 32 bits,
+        // and make one BigInt from each of them.
+        const length = bytes.length;
+        // The empty value is not a number. decode also gives null for it.
+        if (length === 0) {
+            return null;
         }
-
+        if (length > varintLoopMaxLength) {
+            return decodeVarintPartAsBigInt(bytes, 0, length, true);
+        }
+        // The first 1 to 4 bytes hold the sign: read them as a signed number.
+        // The shifts and the ORs keep this sign.
+        let offset = length % 4 || 4;
+        let result = BigInt(bytes.readIntBE(0, offset));
+        for (; offset < length; offset += 4) {
+            result =
+                (result << bigIntThirtyTwo) |
+                BigInt(bytes.readUInt32BE(offset));
+        }
         return result;
     }
 
@@ -772,7 +784,7 @@ class EncoderMembers {
         if (this.encodingOptions.useBigIntAsLong) {
             value = BigInt(value);
         }
-        return this.encodeLong(value);
+        return this.encodeBigInt(value);
     }
 
     /**
@@ -2448,6 +2460,53 @@ function decodeCollectionLengthV3(bytes: Buffer, offset: number): number {
  */
 function decodeCollectionLengthV2(bytes: Buffer, offset: number): number {
     return bytes.readUInt16BE(offset);
+}
+
+/**
+ * Decodes the bytes from start to end of a varint value as a BigInt.
+ *
+ * A loop that adds 4 bytes at each step copies the whole result at each step.
+ * Thus, for a long value, its time grows with the square of the length.
+ * This function decodes the two halves of the bytes separately,
+ * and then joins them with one shift and one OR.
+ * Each level of halves copies all the bytes one time,
+ * and there are about log2(length / 64) levels.
+ * @param bytes
+ * @param start
+ * @param end
+ * @param signed true for the first part of a value, which holds the sign.
+ * The other parts are unsigned.
+ * @private
+ */
+function decodeVarintPartAsBigInt(
+    bytes: Buffer,
+    start: number,
+    end: number,
+    signed: boolean,
+): bigint {
+    const length = end - start;
+    if (length <= varintLoopMaxLength) {
+        // The same loop as in #decodeVarintAsBigInt, for a part of the bytes.
+        const headLength = length % 4 || 4;
+        let result = BigInt(
+            signed
+                ? bytes.readIntBE(start, headLength)
+                : bytes.readUIntBE(start, headLength),
+        );
+        for (let offset = start + headLength; offset < end; offset += 4) {
+            result =
+                (result << bigIntThirtyTwo) |
+                BigInt(bytes.readUInt32BE(offset));
+        }
+        return result;
+    }
+    // Only the high half can hold the sign.
+    // The low half is unsigned, and the shift leaves zero bits for it.
+    const lowLength = Math.floor(length / 2);
+    const middle = end - lowLength;
+    const high = decodeVarintPartAsBigInt(bytes, start, middle, signed);
+    const low = decodeVarintPartAsBigInt(bytes, middle, end, false);
+    return (high << BigInt(lowLength * 8)) | low;
 }
 
 function decodeDuration(bytes: Buffer): types.Duration {
