@@ -918,9 +918,6 @@ class EncoderMembers {
             value = Integer.fromString(value);
         }
         let buf: Buffer | null = null;
-        if (value instanceof Buffer) {
-            buf = value;
-        }
         if (value instanceof Integer) {
             buf = Integer.toBuffer(value);
         }
@@ -1030,16 +1027,15 @@ class EncoderMembers {
     }
 
     /**
+     * Rejects a blob value, because it is not a Buffer.
+     * A Buffer never gets to an encoder: {@link encode} returns a Buffer as
+     * it is, for each type.
      * @private
      */
     encodeBlob(value: any): Buffer {
-        if (!(value instanceof Buffer)) {
-            throw new TypeError(
-                "Not a valid blob, expected Buffer obtained " +
-                    util.inspect(value),
-            );
-        }
-        return value;
+        throw new TypeError(
+            "Not a valid blob, expected Buffer obtained " + util.inspect(value),
+        );
     }
 
     encodeCustom(value: any, columnInfo: ColumnInfo): Buffer {
