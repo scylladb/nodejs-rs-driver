@@ -24,7 +24,6 @@ const uuidRegex =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const buffers = {
-    int16Zero: utils.allocBufferFromArray([0, 0]),
     int32Zero: utils.allocBufferFromArray([0, 0, 0, 0]),
     int8Zero: utils.allocBufferFromArray([0]),
     int8One: utils.allocBufferFromArray([1]),
@@ -247,7 +246,7 @@ class EncoderMembers {
         [code: number]: (value: any, columnInfo: ColumnInfo) => Buffer | null;
     };
 
-    /** Selected from the protocol version by {@link setProtocolVersion}. */
+    /** Set by {@link setProtocolVersion}. */
     decodeCollectionLength!: (bytes: Buffer, offset: number) => number;
     getLengthBuffer!: (value: any) => Buffer;
     collectionLengthSize!: number;
@@ -348,25 +347,15 @@ class EncoderMembers {
     }
 
     /**
-     * Sets the protocol version and the encoding/decoding methods depending on the protocol version
+     * Sets the protocol version and the encoding/decoding methods for collection lengths
      * @ignore
      * @internal
      */
     setProtocolVersion(value: number): void {
         this.protocolVersion = value;
-        // Set the collection serialization based on the protocol version
         this.decodeCollectionLength = decodeCollectionLengthV3;
         this.getLengthBuffer = getLengthBufferV3;
         this.collectionLengthSize = 4;
-        if (
-            !types.protocolVersion.uses4BytesCollectionLength(
-                this.protocolVersion,
-            )
-        ) {
-            this.decodeCollectionLength = decodeCollectionLengthV2;
-            this.getLengthBuffer = getLengthBufferV2;
-            this.collectionLengthSize = 2;
-        }
     }
 
     /* Stub for decode method. Proper decode will be provided by the Encoder. */
@@ -2394,23 +2383,6 @@ class Encoder extends EncoderMembers {
 }
 
 /**
- * Gets a buffer containing with the bytes (BE) representing the collection length for protocol v2 and below
- * @private
- */
-function getLengthBufferV2(value: any): Buffer {
-    if (!value) {
-        return buffers.int16Zero;
-    }
-    const lengthBuffer = utils.allocBufferUnsafe(2);
-    if (typeof value === "number") {
-        lengthBuffer.writeUInt16BE(value, 0);
-    } else {
-        lengthBuffer.writeUInt16BE(value.length, 0);
-    }
-    return lengthBuffer;
-}
-
-/**
  * Gets a buffer containing with the bytes (BE) representing the collection length for protocol v3 and above
  * @private
  */
@@ -2451,15 +2423,6 @@ function handleBufferRef(buffer: Buffer): Buffer {
  */
 function decodeCollectionLengthV3(bytes: Buffer, offset: number): number {
     return bytes.readInt32BE(offset);
-}
-/**
- * Decodes collection length for protocol v2 and below
- * @param bytes
- * @param offset
- * @private
- */
-function decodeCollectionLengthV2(bytes: Buffer, offset: number): number {
-    return bytes.readUInt16BE(offset);
 }
 
 /**
