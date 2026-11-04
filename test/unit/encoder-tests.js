@@ -402,7 +402,7 @@ describe("encoder", function () {
             assert.ok(!decoded.equals(decoded2));
         });
 
-        [2, 3].forEach(function (version) {
+        [4].forEach(function (version) {
             const encoder = new Encoder(version, {});
             it(
                 util.format(
@@ -848,12 +848,10 @@ describe("encoder", function () {
                     });
                     let m = new Es6Set(["k1", "k2", "k3"]);
                     let encoded = encoder.encode(m, "set<text>");
-                    if (version === 2) {
-                        assert.strictEqual(
-                            encoded.toString("hex"),
-                            "000300026b3100026b3200026b33",
-                        );
-                    }
+                    assert.strictEqual(
+                        encoded.toString("hex"),
+                        "00000003000000026b31000000026b32000000026b33",
+                    );
                     let decoded = encoder.decode(encoded, {
                         code: dataTypes.set,
                         info: { code: dataTypes.text },
@@ -863,12 +861,10 @@ describe("encoder", function () {
 
                     m = new Es6Set([1, 2, 1000]);
                     encoded = encoder.encode(m, "set<int>");
-                    if (version === 2) {
-                        assert.strictEqual(
-                            encoded.toString("hex"),
-                            "00030004000000010004000000020004000003e8",
-                        );
-                    }
+                    assert.strictEqual(
+                        encoded.toString("hex"),
+                        "000000030000000400000001000000040000000200000004000003e8",
+                    );
                     decoded = encoder.decode(encoded, {
                         code: dataTypes.set,
                         info: { code: dataTypes.text },
@@ -890,12 +886,10 @@ describe("encoder", function () {
                     m.set("k1", "v1");
                     m.set("k2", "v2");
                     let encoded = encoder.encode(m, "map<text,text>");
-                    if (version === 2) {
-                        assert.strictEqual(
-                            encoded.toString("hex"),
-                            "000200026b310002763100026b3200027632",
-                        );
-                    }
+                    assert.strictEqual(
+                        encoded.toString("hex"),
+                        "00000002000000026b31000000027631000000026b32000000027632",
+                    );
                     let decoded = encoder.decode(encoded, {
                         code: dataTypes.map,
                         info: [
@@ -914,12 +908,10 @@ describe("encoder", function () {
                     m.set("k2", 2);
                     m.set("k3", 3);
                     encoded = encoder.encode(m, "map<text,int>");
-                    if (version === 2) {
-                        assert.strictEqual(
-                            encoded.toString("hex"),
-                            "000300026b3100040000000100026b3200040000000200026b33000400000003",
-                        );
-                    }
+                    assert.strictEqual(
+                        encoded.toString("hex"),
+                        "00000003000000026b310000000400000001000000026b320000000400000002000000026b330000000400000003",
+                    );
                     decoded = encoder.decode(encoded, {
                         code: dataTypes.map,
                         info: [
@@ -956,12 +948,10 @@ describe("encoder", function () {
                     m.set("k1", "v1");
                     m.set("k2", "v2");
                     let encoded = encoder.encode(m, "map<text,text>");
-                    if (version === 2) {
-                        assert.strictEqual(
-                            encoded.toString("hex"),
-                            "000200026b310002763100026b3200027632",
-                        );
-                    }
+                    assert.strictEqual(
+                        encoded.toString("hex"),
+                        "00000002000000026b31000000027631000000026b32000000027632",
+                    );
                     let decoded = encoder.decode(encoded, {
                         code: dataTypes.map,
                         info: [
@@ -977,12 +967,10 @@ describe("encoder", function () {
                     m.set("k2", 2);
                     m.set("k3", 3);
                     encoded = encoder.encode(m, "map<text,int>");
-                    if (version === 2) {
-                        assert.strictEqual(
-                            encoded.toString("hex"),
-                            "000300026b3100040000000100026b3200040000000200026b33000400000003",
-                        );
-                    }
+                    assert.strictEqual(
+                        encoded.toString("hex"),
+                        "00000003000000026b310000000400000001000000026b320000000400000002000000026b330000000400000003",
+                    );
                     decoded = encoder.decode(encoded, {
                         code: dataTypes.map,
                         info: [
@@ -1018,12 +1006,10 @@ describe("encoder", function () {
                     });
                     let m = new helper.Set(["k1", "k2", "k3"]);
                     let encoded = encoder.encode(m, "set<text>");
-                    if (version === 2) {
-                        assert.strictEqual(
-                            encoded.toString("hex"),
-                            "000300026b3100026b3200026b33",
-                        );
-                    }
+                    assert.strictEqual(
+                        encoded.toString("hex"),
+                        "00000003000000026b31000000026b32000000026b33",
+                    );
                     let decoded = encoder.decode(encoded, {
                         code: dataTypes.set,
                         info: { code: dataTypes.text },
@@ -1033,12 +1019,10 @@ describe("encoder", function () {
 
                     m = new helper.Set([1, 2, 1000]);
                     encoded = encoder.encode(m, "set<int>");
-                    if (version === 2) {
-                        assert.strictEqual(
-                            encoded.toString("hex"),
-                            "00030004000000010004000000020004000003e8",
-                        );
-                    }
+                    assert.strictEqual(
+                        encoded.toString("hex"),
+                        "000000030000000400000001000000040000000200000004000003e8",
+                    );
                     decoded = encoder.decode(encoded, {
                         code: dataTypes.set,
                         info: { code: dataTypes.int },
@@ -1401,7 +1385,7 @@ describe("encoder", function () {
 
         it("should decode 0-length map values of supported types into 0-length values", function () {
             const input = { key1: Buffer.from([]) };
-            [2, 3].forEach((v) => {
+            [4].forEach((v) => {
                 const encoder = new Encoder(v, {});
                 const buffer = encoder.encode(input, dataTypes.map);
                 Array.from(zeroLengthTypesSupported).forEach(function (t) {
@@ -1421,7 +1405,7 @@ describe("encoder", function () {
             // For some unperceivable reason the server can give us an empty buffer as a map value for any type.
             // We must be able to handle this behaviour.
             const input = { key1: Buffer.from([]) };
-            [2, 3].forEach((v) => {
+            [4].forEach((v) => {
                 const encoder = new Encoder(v, {});
                 const buffer = encoder.encode(input, dataTypes.map);
 
