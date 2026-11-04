@@ -23,6 +23,9 @@ import type { ExecutionOptions } from "./execution-options";
 const uuidRegex =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** The size in bytes of the length of a collection, and of the length of each item */
+const collectionLengthSize = 4;
+
 const buffers = {
     int32Zero: utils.allocBufferFromArray([0, 0, 0, 0]),
     int8Zero: utils.allocBufferFromArray([0]),
@@ -246,11 +249,6 @@ class EncoderMembers {
         [code: number]: (value: any, columnInfo: ColumnInfo) => Buffer | null;
     };
 
-    /** Set by {@link setProtocolVersion}. */
-    decodeCollectionLength!: (bytes: Buffer, offset: number) => number;
-    getLengthBuffer!: (value: any) => Buffer;
-    collectionLengthSize!: number;
-
     /** Selected from the encoding options by the {@link Encoder} constructor. */
     handleBuffer!: (buffer: Buffer) => Buffer;
 
@@ -347,15 +345,12 @@ class EncoderMembers {
     }
 
     /**
-     * Sets the protocol version and the encoding/decoding methods for collection lengths
+     * Sets the protocol version
      * @ignore
      * @internal
      */
     setProtocolVersion(value: number): void {
         this.protocolVersion = value;
-        this.decodeCollectionLength = decodeCollectionLengthV3;
-        this.getLengthBuffer = getLengthBufferV3;
-        this.collectionLengthSize = 4;
     }
 
     /* Stub for decode method. Proper decode will be provided by the Encoder. */
@@ -546,13 +541,13 @@ class EncoderMembers {
      */
     decodeList(bytes: Buffer, columnInfo: ColumnInfo): Array<any> {
         const subtype = columnInfo.info as ColumnInfo;
-        const totalItems = this.decodeCollectionLength(bytes, 0);
-        let offset = this.collectionLengthSize;
+        const totalItems = decodeCollectionLength(bytes, 0);
+        let offset = collectionLengthSize;
         const list = new Array(totalItems);
         for (let i = 0; i < totalItems; i++) {
             // bytes length of the item
-            const length = this.decodeCollectionLength(bytes, offset);
-            offset += this.collectionLengthSize;
+            const length = decodeCollectionLength(bytes, offset);
+            offset += collectionLengthSize;
             // slice it
             list[i] = this.decode(
                 bytes.slice(offset, offset + length),
@@ -583,22 +578,22 @@ class EncoderMembers {
     decodeMap(bytes: Buffer, columnInfo: ColumnInfo): any {
         const subtypes = columnInfo.info as [ColumnInfo, ColumnInfo];
         let map: any;
-        const totalItems = this.decodeCollectionLength(bytes, 0);
-        let offset = this.collectionLengthSize;
+        const totalItems = decodeCollectionLength(bytes, 0);
+        let offset = collectionLengthSize;
         const readValues = (
             callback: (key: any, value: any) => void,
             thisArg?: any,
         ) => {
             for (let i = 0; i < totalItems; i++) {
-                const keyLength = this.decodeCollectionLength(bytes, offset);
-                offset += this.collectionLengthSize;
+                const keyLength = decodeCollectionLength(bytes, offset);
+                offset += collectionLengthSize;
                 const key = this.decode(
                     bytes.slice(offset, offset + keyLength),
                     subtypes[0],
                 );
                 offset += keyLength;
-                const valueLength = this.decodeCollectionLength(bytes, offset);
-                offset += this.collectionLengthSize;
+                const valueLength = decodeCollectionLength(bytes, offset);
+                offset += collectionLengthSize;
                 if (valueLength < 0) {
                     callback.call(thisArg, key, null);
                     continue;
@@ -1133,7 +1128,7 @@ class EncoderMembers {
             );
         }
         const parts: Array<Buffer> = [];
-        parts.push(this.getLengthBuffer(value));
+        parts.push(getLengthBuffer(value));
         for (let i = 0; i < value.length; i++) {
             const val = value[i];
             if (
@@ -1147,7 +1142,7 @@ class EncoderMembers {
             }
             const bytes = this.encode(val, subtype) as Buffer;
             // include item byte length
-            parts.push(this.getLengthBuffer(bytes));
+            parts.push(getLengthBuffer(bytes));
             // include item
             parts.push(bytes);
         }
@@ -1206,13 +1201,13 @@ class EncoderMembers {
             }
             const keyBuffer = this.encode(key, keySubtype) as Buffer;
             // include item byte length
-            parts.push(this.getLengthBuffer(keyBuffer));
+            parts.push(getLengthBuffer(keyBuffer));
             // include item
             parts.push(keyBuffer);
             // value
             const valueBuffer = this.encode(val, valueSubtype) as Buffer;
             // include item byte length
-            parts.push(this.getLengthBuffer(valueBuffer));
+            parts.push(getLengthBuffer(valueBuffer));
             // include item
             if (valueBuffer !== null) {
                 parts.push(valueBuffer);
@@ -1236,7 +1231,7 @@ class EncoderMembers {
             }
         }
 
-        parts.unshift(this.getLengthBuffer(propCounter));
+        parts.unshift(getLengthBuffer(propCounter));
         return Buffer.concat(parts);
     }
 
@@ -2383,10 +2378,10 @@ class Encoder extends EncoderMembers {
 }
 
 /**
- * Gets a buffer containing with the bytes (BE) representing the collection length for protocol v3 and above
+ * Gets a buffer with the bytes (BE) of a collection length, or of the length of an item
  * @private
  */
-function getLengthBufferV3(value: any): Buffer {
+function getLengthBuffer(value: any): Buffer {
     if (!value) {
         return buffers.int32Zero;
     }
@@ -2416,12 +2411,12 @@ function handleBufferRef(buffer: Buffer): Buffer {
     return buffer;
 }
 /**
- * Decodes collection length for protocol v3 and above
+ * Decodes collection length
  * @param bytes
  * @param offset
  * @private
  */
-function decodeCollectionLengthV3(bytes: Buffer, offset: number): number {
+function decodeCollectionLength(bytes: Buffer, offset: number): number {
     return bytes.readInt32BE(offset);
 }
 
