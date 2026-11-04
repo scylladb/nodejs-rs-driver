@@ -274,7 +274,8 @@ export interface ClientOptions {
         /**
          * When set, it limits the maximum protocol version used to connect to
          * the nodes.
-         * Useful for using the driver against a cluster that contains nodes with different major/minor versions of Cassandra.
+         * The driver supports only protocol v4. Thus, the only valid value is
+         * `types.protocolVersion.v4`. Other values cause a `TypeError`.
          * [TODO: Add support for this field]
          */
         maxVersion?: number;

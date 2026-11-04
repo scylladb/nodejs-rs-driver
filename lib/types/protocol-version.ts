@@ -19,11 +19,20 @@ const v600 = VersionNumber.parse("6.0.0")!;
  * @alias module:types~protocolVersion
  */
 enum protocolVersion {
-    /** Cassandra protocol v1, supported in Apache Cassandra 1.2-->2.2. */
+    /**
+     * Cassandra protocol v1, supported in Apache Cassandra 1.2-->2.2.
+     * Not supported by the driver.
+     */
     v1 = 0x01,
-    /** Cassandra protocol v2, supported in Apache Cassandra 2.0-->2.2. */
+    /**
+     * Cassandra protocol v2, supported in Apache Cassandra 2.0-->2.2.
+     * Not supported by the driver.
+     */
     v2 = 0x02,
-    /** Cassandra protocol v3, supported in Apache Cassandra 2.1-->3.x. */
+    /**
+     * Cassandra protocol v3, supported in Apache Cassandra 2.1-->3.x.
+     * Not supported by the driver.
+     */
     v3 = 0x03,
     /** Cassandra protocol v4, supported in Apache Cassandra 2.2-->3.x. */
     v4 = 0x04,
