@@ -171,7 +171,7 @@ describe("Client", function () {
                 assert.ok(client.options.pooling.coreConnectionsPerHost);
                 helper.assertValueEqual(
                     client.options.pooling.coreConnectionsPerHost,
-                    clientOptions.coreConnectionsPerHostV3,
+                    clientOptions.defaultCoreConnectionsPerHost,
                 );
                 utils.times(
                     10,
@@ -203,7 +203,7 @@ describe("Client", function () {
             client.connect(function (err) {
                 assert.ifError(err);
                 assert.ok(client.options.pooling.coreConnectionsPerHost);
-                const defaults = clientOptions.coreConnectionsPerHostV3;
+                const defaults = clientOptions.defaultCoreConnectionsPerHost;
                 assert.ok(
                     client.options.pooling.coreConnectionsPerHost[
                         types.distance.local
@@ -471,9 +471,9 @@ describe("Client", function () {
                     pooling: {
                         warmup: true,
                         heartBeatInterval: 0,
-                        // Use just 1 connection per host for all protocol versions in this test
+                        // Use just 1 connection per host in this test
                         coreConnectionsPerHost:
-                            clientOptions.coreConnectionsPerHostV3,
+                            clientOptions.defaultCoreConnectionsPerHost,
                     },
                 });
                 utils.series(

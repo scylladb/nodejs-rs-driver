@@ -637,15 +637,15 @@ class SslOptions {
     rejectUnauthorized?: boolean;
 }
 
-/** Core connections per host for protocol version 3 and above */
-const coreConnectionsPerHostV3: { [distance: number]: number } = {
+/** Default core connections per host, for each host distance */
+const defaultCoreConnectionsPerHost: { [distance: number]: number } = {
     [types.distance.local]: 1,
     [types.distance.remote]: 1,
     [types.distance.ignored]: 0,
 };
 
-/** Default maxRequestsPerConnection value for protocol v3+ */
-const maxRequestsPerConnectionV3 = 2048;
+/** Default maxRequestsPerConnection value */
+const defaultMaxRequestsPerConnection = 2048;
 
 const continuousPageUnitBytes = "bytes";
 const continuousPageDefaultSize = 5000;
@@ -1196,9 +1196,6 @@ function normalizeSslOptions(
  * Sets the default options that depend on the metadata.
  */
 function setMetadataDependent(client: any): void {
-    const coreConnectionsPerHost = coreConnectionsPerHostV3;
-    const maxRequestsPerConnection = maxRequestsPerConnectionV3;
-
     if (client.options.queryOptions.consistency === undefined) {
         client.options.queryOptions.consistency = client.metadata.isDbaas()
             ? types.consistencies.localQuorum
@@ -1207,7 +1204,10 @@ function setMetadataDependent(client: any): void {
 
     client.options.pooling = utils.deepExtend(
         {},
-        { coreConnectionsPerHost, maxRequestsPerConnection },
+        {
+            coreConnectionsPerHost: defaultCoreConnectionsPerHost,
+            maxRequestsPerConnection: defaultMaxRequestsPerConnection,
+        },
         client.options.pooling,
     );
 }
@@ -1381,8 +1381,8 @@ export {
     extend,
     setRustOptions,
     defaultOptions,
-    coreConnectionsPerHostV3,
-    maxRequestsPerConnectionV3,
+    defaultCoreConnectionsPerHost,
+    defaultMaxRequestsPerConnection,
     setMetadataDependent,
     continuousPageUnitBytes,
     continuousPageDefaultSize,

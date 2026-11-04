@@ -13,7 +13,7 @@ const types = require("../../lib/types");
 const clientOptions = require("../../lib/client-options");
 const defaultOptions = clientOptions.defaultOptions();
 defaultOptions.pooling.coreConnectionsPerHost =
-    clientOptions.coreConnectionsPerHostV3;
+    clientOptions.defaultCoreConnectionsPerHost;
 const utils = require("../../lib/utils.js");
 const policies = require("../../lib/policies");
 const helper = require("../test-helper");
