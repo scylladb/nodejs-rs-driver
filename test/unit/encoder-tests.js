@@ -1149,20 +1149,6 @@ describe("encoder", function () {
             assert.strictEqual(encoder.encode(undefined), undefined);
         });
 
-        it("should throw TypeError when value is unset with low protocol version", function () {
-            const encoder = new Encoder(2, {});
-            assert.throws(function () {
-                encoder.encode(types.unset);
-            }, TypeError);
-        });
-
-        it("should return null when value is undefined and flag set with low protocol version", function () {
-            const encoder = new Encoder(2, {
-                encoding: { useUndefinedAsUnset: true },
-            });
-            assert.strictEqual(encoder.encode(undefined), null);
-        });
-
         it("should decode 0-length map values of supported types into 0-length values", function () {
             const input = { key1: Buffer.from([]) };
             const encoder = new Encoder(4, {});

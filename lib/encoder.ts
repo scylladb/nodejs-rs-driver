@@ -2326,23 +2326,14 @@ class Encoder extends EncoderMembers {
         // - undefined which depending on the options, we change into one of the above values
         // - a regular value
         if (value === undefined) {
-            value =
-                this.encodingOptions.useUndefinedAsUnset &&
-                this.protocolVersion >= 4
-                    ? types.unset
-                    : null;
+            value = this.encodingOptions.useUndefinedAsUnset
+                ? types.unset
+                : null;
         }
 
         // And here, for the the internal representation, we change the types.unset into undefined
         // This is only internal convention and it does not interfere with the meaning of the value provided by the user
         if (value === types.unset) {
-            if (!types.protocolVersion.supportsUnset(this.protocolVersion)) {
-                throw new TypeError(
-                    "Unset value can not be used for this version of Cassandra, protocol version: " +
-                        this.protocolVersion,
-                );
-            }
-
             return undefined;
         }
 
