@@ -157,7 +157,7 @@ describe("encoder", function () {
     });
 
     describe("#encode() and #decode()", function () {
-        const typeEncoder = new Encoder(2, {});
+        const typeEncoder = new Encoder(4, {});
         it("should encode and decode a guessed double", function () {
             const value = 1111.1;
             const encoded = typeEncoder.encode(value);
@@ -239,7 +239,7 @@ describe("encoder", function () {
         });
 
         it("should encode Long/Date/Number/String as timestamps", function () {
-            const encoder = new Encoder(2, {});
+            const encoder = new Encoder(4, {});
             let buffer = encoder.encode(
                 types.Long.fromBits(0x00fafafa, 0x07090909),
                 dataTypes.timestamp,
@@ -277,7 +277,7 @@ describe("encoder", function () {
         });
 
         it("should encode String/Number (not NaN) as int", function () {
-            const encoder = new Encoder(2, {});
+            const encoder = new Encoder(4, {});
             let buffer = encoder.encode(0x071272ab, dataTypes.int);
             assert.strictEqual(buffer.toString("hex"), "071272ab");
             buffer = encoder.encode("0x071272ab", dataTypes.int);
@@ -296,7 +296,7 @@ describe("encoder", function () {
         });
 
         it("should encode String/Long/Number as bigint", function () {
-            const encoder = new Encoder(2, {});
+            const encoder = new Encoder(4, {});
             let buffer = encoder.encode(
                 types.Long.fromString("506946367331695353"),
                 dataTypes.bigint,
@@ -311,7 +311,7 @@ describe("encoder", function () {
         });
 
         it("should encode String/Integer/Number as varint", function () {
-            const encoder = new Encoder(2, {});
+            const encoder = new Encoder(4, {});
             let buffer = encoder.encode(
                 types.Integer.fromString("33554433"),
                 dataTypes.varint,
@@ -328,7 +328,7 @@ describe("encoder", function () {
         });
 
         it("should encode String/BigDecimal/Number as decimal", function () {
-            const encoder = new Encoder(2, {});
+            const encoder = new Encoder(4, {});
             let buffer = encoder.encode(
                 types.BigDecimal.fromString("0.00256"),
                 dataTypes.decimal,
@@ -346,7 +346,7 @@ describe("encoder", function () {
 
         it("should encode/decode InetAddress/Buffer as inet", function () {
             const InetAddress = types.InetAddress;
-            const encoder = new Encoder(2, {});
+            const encoder = new Encoder(4, {});
             let val1 = new InetAddress(
                 utils.allocBufferFromArray([15, 15, 15, 1]),
             );
@@ -1049,7 +1049,7 @@ describe("encoder", function () {
         });
 
         it("should encode/decode udts", function () {
-            const encoder = new Encoder(3, {});
+            const encoder = new Encoder(4, {});
             const type = {
                 code: dataTypes.udt,
                 info: {
@@ -1066,7 +1066,7 @@ describe("encoder", function () {
         });
 
         it("should encode/decode nested collections", function () {
-            const encoder = new Encoder(3, {});
+            const encoder = new Encoder(4, {});
             const type = {
                 code: dataTypes.map,
                 info: [
@@ -1090,7 +1090,7 @@ describe("encoder", function () {
         });
 
         it("should encode/decode tuples", function () {
-            const encoder = new Encoder(3, {});
+            const encoder = new Encoder(4, {});
             const type = {
                 code: dataTypes.tuple,
                 info: [{ code: dataTypes.text }, { code: dataTypes.timestamp }],
@@ -1216,7 +1216,7 @@ describe("encoder", function () {
         });
 
         it("should encode/decode LocalTime as time", function () {
-            const encoder = new Encoder(3, {});
+            const encoder = new Encoder(4, {});
             const type = { code: dataTypes.time };
             /* eslint-disable no-multi-spaces */
             [
@@ -1364,7 +1364,7 @@ describe("encoder", function () {
 
     describe("#encode()", function () {
         it("should return null when value is null", function () {
-            const encoder = new Encoder(2, {});
+            const encoder = new Encoder(4, {});
             assert.strictEqual(encoder.encode(null), null);
         });
 
@@ -1374,7 +1374,7 @@ describe("encoder", function () {
         });
 
         it("should return null when value is undefined", function () {
-            const encoder = new Encoder(2, {});
+            const encoder = new Encoder(4, {});
             assert.strictEqual(encoder.encode(undefined), null);
         });
 
@@ -1494,7 +1494,7 @@ describe("encoder", function () {
         it("should decode null map values", function () {
             // technically this should not be possible as nulls are not allowed in collections.
             // at a protocol level this is only possible with v3+ as v2 uses unsigned short for collection element size.
-            const encoder = new Encoder(3, {});
+            const encoder = new Encoder(4, {});
             const buffer = utils.allocBufferFromString(
                 "00000001000000046b657931FFFFFFFF",
                 "hex",
@@ -1512,7 +1512,7 @@ describe("encoder", function () {
         });
 
         it("should return the raw buffer when a buffer is provided", () => {
-            const encoder = new Encoder(3, {});
+            const encoder = new Encoder(4, {});
             const buffer = utils.allocBufferFromArray([0, 1, 2, 3]);
 
             Object.keys(dataTypes).forEach((typeName) => {
@@ -1561,7 +1561,7 @@ describe("encoder", function () {
     });
 
     describe("#setRoutingKeyFromUser()", function () {
-        const encoder = new Encoder(2, {});
+        const encoder = new Encoder(4, {});
         it("should concat Array of buffers in the correct format", function () {
             let options = getExecOptions({
                 // Its an array of 3 values
@@ -1741,7 +1741,7 @@ describe("encoder", function () {
 
     describe("#parseFqTypeName()", function () {
         it("should parse single type names", function () {
-            const encoder = new Encoder(2, {});
+            const encoder = new Encoder(4, {});
             let type = encoder.parseFqTypeName(
                 "org.apache.cassandra.db.marshal.Int32Type",
             );
@@ -1809,7 +1809,7 @@ describe("encoder", function () {
         });
 
         it("should parse complex type names", function () {
-            const encoder = new Encoder(2, {});
+            const encoder = new Encoder(4, {});
             let type = encoder.parseFqTypeName(
                 "org.apache.cassandra.db.marshal.ListType(org.apache.cassandra.db.marshal.Int32Type)",
             );
@@ -1857,7 +1857,7 @@ describe("encoder", function () {
         });
 
         it("should parse frozen types", function () {
-            const encoder = new Encoder(2, {});
+            const encoder = new Encoder(4, {});
             let type = encoder.parseFqTypeName(
                 "org.apache.cassandra.db.marshal.FrozenType(org.apache.cassandra.db.marshal.ListType(org.apache.cassandra.db.marshal.TimeUUIDType))",
             );
@@ -1878,7 +1878,7 @@ describe("encoder", function () {
         });
 
         it("should parse udt types", function () {
-            const encoder = new Encoder(2, {});
+            const encoder = new Encoder(4, {});
             const typeText =
                 "org.apache.cassandra.db.marshal.UserType(" +
                 "tester,70686f6e65,616c696173:org.apache.cassandra.db.marshal.UTF8Type,6e756d626572:org.apache.cassandra.db.marshal.UTF8Type" +
@@ -1902,7 +1902,7 @@ describe("encoder", function () {
         });
 
         it("should parse nested udt types", function () {
-            const encoder = new Encoder(2, {});
+            const encoder = new Encoder(4, {});
             const typeText =
                 "org.apache.cassandra.db.marshal.UserType(" +
                 "tester," +
@@ -2510,7 +2510,7 @@ describe("encoder", function () {
     });
 
     describe("#parseKeyTypes", function () {
-        const encoder = new Encoder(1, {});
+        const encoder = new Encoder(4, {});
         it("should parse single type", function () {
             let value = "org.apache.cassandra.db.marshal.UTF8Type";
             let result = encoder.parseKeyTypes(value);
