@@ -34,7 +34,7 @@ enum protocolVersion {
      * Not supported by the driver.
      */
     v3 = 0x03,
-    /** Cassandra protocol v4, supported in Apache Cassandra 2.2-->3.x. */
+    /** Cassandra protocol v4, supported in Apache Cassandra 2.2-->3.x and ScyllaDB. */
     v4 = 0x04,
     /**
      * Cassandra protocol v5, in beta from Apache Cassandra 3.x+. Currently not supported by the
