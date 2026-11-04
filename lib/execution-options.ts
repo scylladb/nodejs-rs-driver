@@ -573,12 +573,7 @@ class DefaultExecutionOptions extends ExecutionOptions {
             const generator =
                 this.#client.options.policies!.timestampGeneration;
 
-            if (
-                types.protocolVersion.supportsTimestamp(
-                    this.#client.controlConnection.protocolVersion,
-                ) &&
-                generator
-            ) {
+            if (generator) {
                 result = generator.next(this.#client);
             } else {
                 result = null;
