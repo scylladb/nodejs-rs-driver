@@ -222,11 +222,7 @@ export interface ClientOptions {
          */
         coreConnectionsPerHost?: { [key: string]: any };
         /**
-         * The maximum number of requests per connection. The default
-         * value is:
-         * - For modern protocol versions (v3 and above): 2048
-         * - For older protocol versions (v1 and v2): 128
-         *
+         * The maximum number of requests per connection. Default: 2048.
          * [TODO: Add support for this field]
          */
         maxRequestsPerConnection?: number;
@@ -641,22 +637,12 @@ class SslOptions {
     rejectUnauthorized?: boolean;
 }
 
-/** Core connections per host for protocol versions 1 and 2 */
-const coreConnectionsPerHostV2: { [distance: number]: number } = {
-    [types.distance.local]: 2,
-    [types.distance.remote]: 1,
-    [types.distance.ignored]: 0,
-};
-
 /** Core connections per host for protocol version 3 and above */
 const coreConnectionsPerHostV3: { [distance: number]: number } = {
     [types.distance.local]: 1,
     [types.distance.remote]: 1,
     [types.distance.ignored]: 0,
 };
-
-/** Default maxRequestsPerConnection value for protocol v1 and v2 */
-const maxRequestsPerConnectionV2 = 128;
 
 /** Default maxRequestsPerConnection value for protocol v3+ */
 const maxRequestsPerConnectionV3 = 2048;
@@ -1207,17 +1193,11 @@ function normalizeSslOptions(
 }
 
 /**
- * Sets the default options that depend on the protocol version and other metadata.
+ * Sets the default options that depend on the metadata.
  */
 function setMetadataDependent(client: any): void {
-    const version = client.controlConnection.protocolVersion;
-    let coreConnectionsPerHost = coreConnectionsPerHostV3;
-    let maxRequestsPerConnection = maxRequestsPerConnectionV3;
-
-    if (!types.protocolVersion.uses2BytesStreamIds(version)) {
-        coreConnectionsPerHost = coreConnectionsPerHostV2;
-        maxRequestsPerConnection = maxRequestsPerConnectionV2;
-    }
+    const coreConnectionsPerHost = coreConnectionsPerHostV3;
+    const maxRequestsPerConnection = maxRequestsPerConnectionV3;
 
     if (client.options.queryOptions.consistency === undefined) {
         client.options.queryOptions.consistency = client.metadata.isDbaas()
@@ -1401,9 +1381,7 @@ export {
     extend,
     setRustOptions,
     defaultOptions,
-    coreConnectionsPerHostV2,
     coreConnectionsPerHostV3,
-    maxRequestsPerConnectionV2,
     maxRequestsPerConnectionV3,
     setMetadataDependent,
     continuousPageUnitBytes,

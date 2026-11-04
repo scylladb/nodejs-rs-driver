@@ -164,22 +164,15 @@ describe("Client", function () {
         });
 
         // TODO: No support for polling
-        /* it("should use the default pooling options according to the protocol version", function (done) {
+        /* it("should use the default pooling options", function (done) {
             const client = newInstance();
             client.connect(function (err) {
                 assert.ifError(err);
                 assert.ok(client.options.pooling.coreConnectionsPerHost);
-                if (client.controlConnection.protocolVersion < 3) {
-                    helper.assertValueEqual(
-                        client.options.pooling.coreConnectionsPerHost,
-                        clientOptions.coreConnectionsPerHostV2,
-                    );
-                } else {
-                    helper.assertValueEqual(
-                        client.options.pooling.coreConnectionsPerHost,
-                        clientOptions.coreConnectionsPerHostV3,
-                    );
-                }
+                helper.assertValueEqual(
+                    client.options.pooling.coreConnectionsPerHost,
+                    clientOptions.coreConnectionsPerHostV3,
+                );
                 utils.times(
                     10,
                     function (n, next) {
@@ -210,10 +203,7 @@ describe("Client", function () {
             client.connect(function (err) {
                 assert.ifError(err);
                 assert.ok(client.options.pooling.coreConnectionsPerHost);
-                let defaults = clientOptions.coreConnectionsPerHostV3;
-                if (client.controlConnection.protocolVersion < 3) {
-                    defaults = clientOptions.coreConnectionsPerHostV2;
-                }
+                const defaults = clientOptions.coreConnectionsPerHostV3;
                 assert.ok(
                     client.options.pooling.coreConnectionsPerHost[
                         types.distance.local
