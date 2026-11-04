@@ -445,13 +445,11 @@ class FrameHeader {
     }
 
     /**
-     * The length of the header of the frame based on the protocol version
+     * The length of the header of the frame.
+     * It is the same for each protocol version that the driver supports.
      */
     static size(version: number): number {
-        if (protocolVersion.uses2BytesStreamIds(version)) {
-            return 9;
-        }
-        return 8;
+        return 9;
     }
 
     /**
@@ -462,18 +460,13 @@ class FrameHeader {
     }
 
     static fromBuffer(buf: Buffer, offset?: number): FrameHeader {
-        let streamId;
         if (!offset) {
             offset = 0;
         }
         const version = buf[offset++] & 0x7f;
         const flags = buf.readUInt8(offset++);
-        if (!protocolVersion.uses2BytesStreamIds(version)) {
-            streamId = buf.readInt8(offset++);
-        } else {
-            streamId = buf.readInt16BE(offset);
-            offset += 2;
-        }
+        const streamId = buf.readInt16BE(offset);
+        offset += 2;
         return new FrameHeader(
             version,
             flags,
@@ -487,15 +480,9 @@ class FrameHeader {
         const buf = utils.allocBufferUnsafe(FrameHeader.size(this.version));
         buf.writeUInt8(this.version, 0);
         buf.writeUInt8(this.flags, 1);
-        let offset = 3;
-        if (!protocolVersion.uses2BytesStreamIds(this.version)) {
-            buf.writeInt8(this.streamId, 2);
-        } else {
-            buf.writeInt16BE(this.streamId, 2);
-            offset = 4;
-        }
-        buf.writeUInt8(this.opcode, offset++);
-        buf.writeUInt32BE(this.bodyLength, offset);
+        buf.writeInt16BE(this.streamId, 2);
+        buf.writeUInt8(this.opcode, 4);
+        buf.writeUInt32BE(this.bodyLength, 5);
         return buf;
     }
 }
