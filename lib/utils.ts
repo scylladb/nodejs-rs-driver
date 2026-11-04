@@ -958,20 +958,30 @@ const VIntCoding = (function () {
         return BigInt.asIntN(64, (n >> _one) ^ -(n & _one));
     }
 
-    function writeVInt(value: bigint, buffer: Buffer): number {
-        return writeUnsignedVInt(encodeZigZag64(value), buffer);
+    /**
+     * Writes a value as a vint at `offset` in `buffer`.
+     * It does not make room: `buffer` must have room for the vint, at most 9 bytes,
+     * after `offset`. If it does not, the bytes that do not fit are lost without an error.
+     * @returns The number of bytes of the vint.
+     */
+    function writeVInt(value: bigint, buffer: Buffer, offset = 0): number {
+        return writeUnsignedVInt(encodeZigZag64(value), buffer, offset);
     }
 
     /**
      * @param value non-negative value
      */
-    function writeUnsignedVInt(value: bigint, buffer: Buffer): number {
+    function writeUnsignedVInt(
+        value: bigint,
+        buffer: Buffer,
+        offset: number,
+    ): number {
         const size = computeUnsignedVIntSize(value);
         if (size === 1) {
-            buffer[0] = Number(value);
+            buffer[offset] = Number(value);
             return 1;
         }
-        encodeVInt(value, size, buffer);
+        encodeVInt(value, size, buffer, offset);
         return size;
     }
 
@@ -983,14 +993,19 @@ const VIntCoding = (function () {
         return (639 - magnitude * 9) >> 6;
     }
 
-    function encodeVInt(value: bigint, size: number, buffer: Buffer): void {
+    function encodeVInt(
+        value: bigint,
+        size: number,
+        buffer: Buffer,
+        offset: number,
+    ): void {
         const extraBytes = size - 1;
         let v = value;
         for (let i = extraBytes; i >= 0; i--) {
-            buffer[i] = Number(v & _byteMask);
+            buffer[offset + i] = Number(v & _byteMask);
             v >>= _eight;
         }
-        buffer[0] |= encodeExtraBytesToRead(extraBytes);
+        buffer[offset] |= encodeExtraBytesToRead(extraBytes);
     }
     /**
      * Returns the number of zero bits preceding the highest-order one-bit in the binary representation of the value.
