@@ -997,7 +997,7 @@ class EncoderMembers {
         }
 
         if (value instanceof BigDecimal) {
-            let buf = BigDecimal.toBuffer(value);
+            const buf = BigDecimal.toBuffer(value);
             return buf;
         }
         throw new TypeError(
@@ -1566,7 +1566,7 @@ class EncoderMembers {
                 routingIndexes,
                 encodeParam,
             );
-        } catch (e) {
+        } catch {
             // There was an error encoding a parameter that is part of the routing key,
             // ignore now to fail afterwards
         }
@@ -1609,7 +1609,7 @@ class EncoderMembers {
                 routingIndexes,
                 encodeParam,
             );
-        } catch (e) {
+        } catch {
             // There was an error encoding a parameter that is part of the routing key,
             // ignore now to fail afterwards
         }
@@ -2231,7 +2231,7 @@ class Encoder extends EncoderMembers {
                 if (value.subtype) {
                     try {
                         subtypeColumnInfo = dataTypes.getByName(value.subtype);
-                    } catch (TypeError) {
+                    } catch {
                         // ignore
                     }
                 }
@@ -2354,7 +2354,7 @@ class Encoder extends EncoderMembers {
             return value;
         }
 
-        let type: any = null;
+        let type: any;
 
         // Only null and undefined mean "no hint". Other falsy values, such as
         // false, 0 or "", are hints too: 0 is the code of custom, and the others are not valid.

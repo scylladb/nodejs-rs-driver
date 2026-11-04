@@ -1,20 +1,54 @@
 import globals from "globals";
 import pluginJs from "@eslint/js";
-import { includeIgnoreFile } from "@eslint/compat";
+import fs from "fs";
 import path from "path";
+import tseslint from "typescript-eslint";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+const libFiles = fs.readdirSync(path.join(__dirname, "lib"), { recursive: true });
+
+// The .gitignore files in lib/ list the outputs of tsc. They also list the outputs of
+// removed .ts files. An old build can leave such outputs on disk. Do not lint them.
+// Each .gitignore file has only plain file names, with no "/", "!" or glob. A name is
+// relative to the directory of its .gitignore file. Thus, add this directory to it.
+// Example: "index.js" in lib/auth/.gitignore gives "lib/auth/index.js", not "**/index.js".
+const gitignoredFiles = libFiles
+  .filter((file) => path.basename(file) === ".gitignore")
+  .flatMap((file) => {
+    const directory = path.posix.join("lib", path.dirname(file).replaceAll(path.sep, "/"));
+    return fs
+      .readFileSync(path.join(__dirname, "lib", file), "utf8")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line !== "" && !line.startsWith("#"))
+      .map((name) => `${directory}/${name}`);
+  });
+
+// tsc emits a .js file and a .d.ts file next to each .ts source file in lib/.
+// Do not lint these outputs. Other .js and .d.ts files in lib/ are source files.
+// This list also has the outputs of a new .ts file that no .gitignore file lists yet.
+const tscOutputs = libFiles
+  .filter((file) => file.endsWith(".ts") && !file.endsWith(".d.ts"))
+  .flatMap((file) => {
+    // Example: "auth/provider.ts" gives "lib/auth/provider.js" and "lib/auth/provider.d.ts".
+    // readdirSync gives the path relative to lib/, with the separator of the OS.
+    // An ESLint pattern uses "/", and it is relative to this config file.
+    const tsFile = "lib/" + file.replaceAll(path.sep, "/");
+    const withoutExtension = tsFile.slice(0, -".ts".length);
+    return [`${withoutExtension}.js`, `${withoutExtension}.d.ts`];
+  });
+
+// Options for no-unused-vars, and for the TS version of the rule:
+// - If a value is passed to a function but not used the error is ignored
+// - Unused caught errors are reported. Use "catch {" when the error is not needed
+// - Variables whose names start with "_" are ignored. This does not apply to caught errors
+const unusedVarsOptions = { "args": "none", "caughtErrors": "all", "varsIgnorePattern": "^_" };
+
 /** @type {import('eslint').Linter.Config[]} */
 export default [
-  // Ignore JS files emitted in-place by tsc (listed in per-directory .gitignore files)
-  includeIgnoreFile(path.join(__dirname, "lib", ".gitignore")),
-  includeIgnoreFile(path.join(__dirname, "lib", "auth", ".gitignore")),
-  includeIgnoreFile(path.join(__dirname, "lib", "concurrent", ".gitignore")),
-  includeIgnoreFile(path.join(__dirname, "lib", "metadata", ".gitignore")),
-  includeIgnoreFile(path.join(__dirname, "lib", "policies", ".gitignore")),
-  includeIgnoreFile(path.join(__dirname, "lib", "types", ".gitignore")),
+  { ignores: [...gitignoredFiles, ...tscOutputs] },
   pluginJs.configs.recommended,
   {
     languageOptions: {
@@ -28,10 +62,7 @@ export default [
     },
     rules: {
       // Check if there is no unused variables
-      // If a value is passed to a function but not used the error is ignored
-      // Catched but unused errors are also ignored
-      // Values starting with "_" are also ignored
-      "no-unused-vars": ["error", { "args": "none", "caughtErrors": "none", "varsIgnorePattern": "^_" }],
+      "no-unused-vars": ["error", unusedVarsOptions],
 
       // Checks if var is not used
       "no-var": "error",
@@ -53,6 +84,33 @@ export default [
       "no-lonely-if": "error",
       "no-else-return": "error",
       "no-useless-assignment": "error",
+    }
+  },
+  // The blocks above have no "files" key. Thus, they apply to the .ts files too,
+  // because the block below matches them.
+  // This preset turns off the core rules that tsc already checks, for example
+  // no-undef, no-redeclare and no-unreachable. It also turns on prefer-const and prefer-spread.
+  // tsc reports unreachable code only because tsconfig.json sets "allowUnreachableCode": false.
+  tseslint.configs.eslintRecommended,
+  {
+    files: ["**/*.ts"],
+    languageOptions: {
+      parser: tseslint.parser,
+      sourceType: "module",
+    },
+    plugins: {
+      "@typescript-eslint": tseslint.plugin,
+    },
+    rules: {
+      // The core rule does not know about TS types. Use the TS version, with the same options.
+      "no-unused-vars": "off",
+      "@typescript-eslint/no-unused-vars": ["error", unusedVarsOptions],
+
+      // Check the order of the members in each import, but not the order of the imports
+      "sort-imports": ["error", { "ignoreDeclarationSort": true }],
+
+      // The preset turns this rule on. Keep it off, as for the JS files.
+      "prefer-rest-params": "off",
     }
   },
 ];

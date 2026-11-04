@@ -9,6 +9,8 @@
         "allowJs": true,
         "checkJs": true,
         "strict": true,
+        /* Report unreachable code as an error. By default, it is only a suggestion in the editor */
+        "allowUnreachableCode": false,
         /* Just checking */
         "noEmit": true,
         "esModuleInterop": true,

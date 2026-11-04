@@ -3,10 +3,10 @@
 import utils = require("./utils");
 import types = require("./types");
 import errors = require("./errors");
-import { queryOptionsIntoRustArgs, RustQueryOptions } from "./query-options";
+import { RustQueryOptions, queryOptionsIntoRustArgs } from "./query-options";
 import {
-    validateRequestTimeout,
     rejectUnsupportedReadTimeout,
+    validateRequestTimeout,
 } from "./new-utils";
 import type { ExecutionProfile } from "./execution-profile";
 import type { Host, QueryOptions, policies as policiesModule } from "../";

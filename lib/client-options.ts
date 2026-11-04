@@ -8,15 +8,15 @@ import tracker = require("./tracker");
 import metrics = require("./metrics");
 import auth = require("./auth");
 import {
+    rejectUnsupportedReadTimeout,
     throwNotSupported,
     validateRequestTimeout,
-    rejectUnsupportedReadTimeout,
 } from "./new-utils";
 import errors = require("./errors");
 import rust = require("../index");
 import {
-    MappingAddressTranslator,
     AddressTranslator,
+    MappingAddressTranslator,
 } from "./policies/address-resolution";
 import { ExecutionProfile } from "./execution-profile";
 import type { QueryOptions } from "./query-options";

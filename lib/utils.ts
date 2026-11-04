@@ -1,7 +1,6 @@
 "use strict";
 
 import errors = require("./errors");
-import promiseUtils = require("./promise-utils");
 import type { PreparedInfo } from "./new-utils";
 import type { ExecutionOptions } from "./execution-options";
 
@@ -209,13 +208,15 @@ function propCompare(propName: string): CompareFunction {
     };
 }
 
-function funcCompare(name: string, argArray: any[]): CompareFunction {
+function funcCompare(name: string, argArray: any[] = []): CompareFunction {
     return function (a: any, b: any) {
         if (typeof a[name] === "undefined") {
             return 0;
         }
-        const valA = a[name].apply(a, argArray);
-        const valB = b[name].apply(b, argArray);
+        // Do not use spread here. Spread gets the arguments from the iterator of argArray.
+        // Reflect.apply() gets them by index, as Function.prototype.apply() does.
+        const valA: any = Reflect.apply(a[name], a, argArray);
+        const valB: any = Reflect.apply(b[name], b, argArray);
         if (valA > valB) {
             return 1;
         }
