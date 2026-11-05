@@ -169,7 +169,6 @@ class Client extends events.EventEmitter {
 
         this.metrics = undefined;
 
-        // TODO: This field is currently hardcoded. Should be implemented properly
         this.#encoder = new Encoder(0x04, this.options);
     }
 

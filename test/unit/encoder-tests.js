@@ -157,7 +157,7 @@ describe("encoder", function () {
     });
 
     describe("#encode() and #decode()", function () {
-        const typeEncoder = new Encoder(2, {});
+        const typeEncoder = new Encoder(4, {});
         it("should encode and decode a guessed double", function () {
             const value = 1111.1;
             const encoded = typeEncoder.encode(value);
@@ -239,7 +239,7 @@ describe("encoder", function () {
         });
 
         it("should encode Long/Date/Number/String as timestamps", function () {
-            const encoder = new Encoder(2, {});
+            const encoder = new Encoder(4, {});
             let buffer = encoder.encode(
                 types.Long.fromBits(0x00fafafa, 0x07090909),
                 dataTypes.timestamp,
@@ -277,7 +277,7 @@ describe("encoder", function () {
         });
 
         it("should encode String/Number (not NaN) as int", function () {
-            const encoder = new Encoder(2, {});
+            const encoder = new Encoder(4, {});
             let buffer = encoder.encode(0x071272ab, dataTypes.int);
             assert.strictEqual(buffer.toString("hex"), "071272ab");
             buffer = encoder.encode("0x071272ab", dataTypes.int);
@@ -296,7 +296,7 @@ describe("encoder", function () {
         });
 
         it("should encode String/Long/Number as bigint", function () {
-            const encoder = new Encoder(2, {});
+            const encoder = new Encoder(4, {});
             let buffer = encoder.encode(
                 types.Long.fromString("506946367331695353"),
                 dataTypes.bigint,
@@ -311,7 +311,7 @@ describe("encoder", function () {
         });
 
         it("should encode String/Integer/Number as varint", function () {
-            const encoder = new Encoder(2, {});
+            const encoder = new Encoder(4, {});
             let buffer = encoder.encode(
                 types.Integer.fromString("33554433"),
                 dataTypes.varint,
@@ -328,7 +328,7 @@ describe("encoder", function () {
         });
 
         it("should encode String/BigDecimal/Number as decimal", function () {
-            const encoder = new Encoder(2, {});
+            const encoder = new Encoder(4, {});
             let buffer = encoder.encode(
                 types.BigDecimal.fromString("0.00256"),
                 dataTypes.decimal,
@@ -346,7 +346,7 @@ describe("encoder", function () {
 
         it("should encode/decode InetAddress/Buffer as inet", function () {
             const InetAddress = types.InetAddress;
-            const encoder = new Encoder(2, {});
+            const encoder = new Encoder(4, {});
             let val1 = new InetAddress(
                 utils.allocBufferFromArray([15, 15, 15, 1]),
             );
@@ -402,654 +402,418 @@ describe("encoder", function () {
             assert.ok(!decoded.equals(decoded2));
         });
 
-        [2, 3].forEach(function (version) {
-            const encoder = new Encoder(version, {});
-            it(
-                util.format(
-                    "should encode and decode maps for protocol v%d",
-                    version,
-                ),
-                function () {
-                    let value = { value1: "Surprise", value2: "Madafaka" };
-                    // Minimum info, guessed
-                    let encoded = encoder.encode(value, dataTypes.map);
-                    let decoded = encoder.decode(encoded, {
-                        code: dataTypes.map,
-                        info: [
-                            { code: dataTypes.text },
-                            { code: dataTypes.text },
-                        ],
-                    });
-                    assert.strictEqual(
-                        util.inspect(decoded),
-                        util.inspect(value),
-                    );
-                    // Minimum info, guessed
-                    value = { value1: 1.1, valueN: 1.2 };
-                    encoded = encoder.encode(value, dataTypes.map);
-                    decoded = encoder.decode(encoded, {
-                        code: dataTypes.map,
-                        info: [
-                            { code: dataTypes.text },
-                            { code: dataTypes.double },
-                        ],
-                    });
-                    assert.strictEqual(
-                        util.inspect(decoded),
-                        util.inspect(value),
-                    );
-                    // Minimum info string, guessed
-                    value = {
-                        value1: new Date(9999999),
-                        valueN: new Date(5555555),
-                    };
-                    encoded = encoder.encode(value, "map");
-                    decoded = encoder.decode(encoded, {
-                        code: dataTypes.map,
-                        info: [
-                            { code: dataTypes.text },
-                            { code: dataTypes.timestamp },
-                        ],
-                    });
-                    assert.strictEqual(
-                        util.inspect(decoded),
-                        util.inspect(value),
-                    );
-                    // Minimum info string, guessed
-                    value = {};
-                    value[types.Uuid.random()] = 0;
-                    value[types.Uuid.random()] = 2;
-                    encoded = encoder.encode(value, "map");
-                    decoded = encoder.decode(encoded, {
-                        code: dataTypes.map,
-                        info: [
-                            { code: dataTypes.uuid },
-                            { code: dataTypes.double },
-                        ],
-                    });
-                    assert.strictEqual(
-                        util.inspect(decoded),
-                        util.inspect(value),
-                    );
-                    // full info string
-                    value = { value1: 1, valueN: -3 };
-                    encoded = encoder.encode(value, "map<text,int>");
-                    decoded = encoder.decode(encoded, {
-                        code: dataTypes.map,
-                        info: [
-                            { code: dataTypes.text },
-                            { code: dataTypes.int },
-                        ],
-                    });
-                    assert.strictEqual(
-                        util.inspect(decoded),
-                        util.inspect(value),
-                    );
-                    // full info typeInfo
-                    value = { value1: 1, valueN: -33892 };
-                    encoded = encoder.encode(value, {
-                        code: dataTypes.map,
-                        info: [dataTypes.string, dataTypes.int],
-                    });
-                    decoded = encoder.decode(encoded, {
-                        code: dataTypes.map,
-                        info: [
-                            { code: dataTypes.text },
-                            { code: dataTypes.int },
-                        ],
-                    });
-                    assert.strictEqual(
-                        util.inspect(decoded),
-                        util.inspect(value),
-                    );
-                },
+        const encoder = new Encoder(4, {});
+        it("should encode and decode maps for protocol v4", function () {
+            let value = { value1: "Surprise", value2: "Madafaka" };
+            // Minimum info, guessed
+            let encoded = encoder.encode(value, dataTypes.map);
+            let decoded = encoder.decode(encoded, {
+                code: dataTypes.map,
+                info: [{ code: dataTypes.text }, { code: dataTypes.text }],
+            });
+            assert.strictEqual(util.inspect(decoded), util.inspect(value));
+            // Minimum info, guessed
+            value = { value1: 1.1, valueN: 1.2 };
+            encoded = encoder.encode(value, dataTypes.map);
+            decoded = encoder.decode(encoded, {
+                code: dataTypes.map,
+                info: [{ code: dataTypes.text }, { code: dataTypes.double }],
+            });
+            assert.strictEqual(util.inspect(decoded), util.inspect(value));
+            // Minimum info string, guessed
+            value = {
+                value1: new Date(9999999),
+                valueN: new Date(5555555),
+            };
+            encoded = encoder.encode(value, "map");
+            decoded = encoder.decode(encoded, {
+                code: dataTypes.map,
+                info: [{ code: dataTypes.text }, { code: dataTypes.timestamp }],
+            });
+            assert.strictEqual(util.inspect(decoded), util.inspect(value));
+            // Minimum info string, guessed
+            value = {};
+            value[types.Uuid.random()] = 0;
+            value[types.Uuid.random()] = 2;
+            encoded = encoder.encode(value, "map");
+            decoded = encoder.decode(encoded, {
+                code: dataTypes.map,
+                info: [{ code: dataTypes.uuid }, { code: dataTypes.double }],
+            });
+            assert.strictEqual(util.inspect(decoded), util.inspect(value));
+            // full info string
+            value = { value1: 1, valueN: -3 };
+            encoded = encoder.encode(value, "map<text,int>");
+            decoded = encoder.decode(encoded, {
+                code: dataTypes.map,
+                info: [{ code: dataTypes.text }, { code: dataTypes.int }],
+            });
+            assert.strictEqual(util.inspect(decoded), util.inspect(value));
+            // full info typeInfo
+            value = { value1: 1, valueN: -33892 };
+            encoded = encoder.encode(value, {
+                code: dataTypes.map,
+                info: [dataTypes.string, dataTypes.int],
+            });
+            decoded = encoder.decode(encoded, {
+                code: dataTypes.map,
+                info: [{ code: dataTypes.text }, { code: dataTypes.int }],
+            });
+            assert.strictEqual(util.inspect(decoded), util.inspect(value));
+        });
+
+        it("should encode and decode maps with stringified keys for protocol v4", function () {
+            let value = {};
+            value[new Date(1421756675488)] = "date1";
+            value[new Date(1411756633461)] = "date2";
+
+            let encoded = encoder.encode(value, {
+                code: dataTypes.map,
+                info: [{ code: dataTypes.timestamp }, { code: dataTypes.text }],
+            });
+            let decoded = encoder.decode(encoded, {
+                code: dataTypes.map,
+                info: [{ code: dataTypes.timestamp }, { code: dataTypes.text }],
+            });
+            assert.strictEqual(util.inspect(decoded), util.inspect(value));
+
+            value = {};
+            value[101] = "number1";
+            value[102] = "number2";
+            encoded = encoder.encode(value, "map<int, text>");
+            decoded = encoder.decode(encoded, {
+                code: dataTypes.map,
+                info: [{ code: dataTypes.int }, { code: dataTypes.text }],
+            });
+            assert.strictEqual(util.inspect(decoded), util.inspect(value));
+
+            value = {};
+            value[types.Long.fromBits(0x12002001, 0x7f999299)] = "bigint1";
+            value[types.Long.fromBits(0x12002000, 0x7f999299)] = "bigint2";
+            encoded = encoder.encode(value, "map<bigint, text>");
+            decoded = encoder.decode(encoded, {
+                code: dataTypes.map,
+                info: [{ code: dataTypes.bigint }, { code: dataTypes.text }],
+            });
+            assert.strictEqual(util.inspect(decoded), util.inspect(value));
+
+            value = {};
+            value["201"] = "bigint1_1";
+            value["202"] = "bigint2_1";
+            encoded = encoder.encode(value, "map<bigint, text>");
+            decoded = encoder.decode(encoded, {
+                code: dataTypes.map,
+                info: [{ code: dataTypes.bigint }, { code: dataTypes.text }],
+            });
+            assert.strictEqual(util.inspect(decoded), util.inspect(value));
+
+            value = {};
+            value["2d5db74c-c2da-4e59-b5ec-d8ad3d0aefb9"] = "uuid1";
+            value["651b5c17-5357-4764-ae2d-21c409288822"] = "uuid2";
+            encoded = encoder.encode(value, "map<uuid, text>");
+            decoded = encoder.decode(encoded, {
+                code: dataTypes.map,
+                info: [{ code: dataTypes.uuid }, { code: dataTypes.text }],
+            });
+            assert.strictEqual(util.inspect(decoded), util.inspect(value));
+
+            value = {};
+            value["1ab50440-a0ab-11e4-9d01-1dc0e727b460"] = "timeuuid1";
+            value["1820c4d0-a0ab-11e4-9d01-1dc0e727b460"] = "timeuuid2";
+            encoded = encoder.encode(value, "map<timeuuid, text>");
+            decoded = encoder.decode(encoded, {
+                code: dataTypes.map,
+                info: [{ code: dataTypes.timeuuid }, { code: dataTypes.text }],
+            });
+            assert.strictEqual(util.inspect(decoded), util.inspect(value));
+
+            value = {};
+            value["988229782938247303441911118"] = "varint1";
+            value["988229782938247303441911119"] = "varint2";
+            encoded = encoder.encode(value, "map<varint, text>");
+            decoded = encoder.decode(encoded, {
+                code: dataTypes.map,
+                info: [{ code: dataTypes.varint }, { code: dataTypes.text }],
+            });
+            assert.strictEqual(util.inspect(decoded), util.inspect(value));
+
+            value = {};
+            value["12.1"] = "decimal1";
+            value["12.90"] = "decimal2";
+            encoded = encoder.encode(value, "map<decimal, text>");
+            decoded = encoder.decode(encoded, {
+                code: dataTypes.map,
+                info: [{ code: dataTypes.decimal }, { code: dataTypes.text }],
+            });
+            assert.strictEqual(util.inspect(decoded), util.inspect(value));
+
+            value = {};
+            value["127.0.0.1"] = "inet1";
+            value["12.10.10.2"] = "inet2";
+            encoded = encoder.encode(value, "map<inet, text>");
+            decoded = encoder.decode(encoded, {
+                code: dataTypes.map,
+                info: [{ code: dataTypes.inet }, { code: dataTypes.text }],
+            });
+            assert.strictEqual(util.inspect(decoded), util.inspect(value));
+
+            value = {};
+            value["::1"] = "inet1";
+            value["::2233:0:0:b1"] = "inet2";
+            value["aabb::11:2233:4455:6677:88ff"] = "inet3";
+            encoded = encoder.encode(value, "map<inet, text>");
+            decoded = encoder.decode(encoded, {
+                code: dataTypes.map,
+                info: [{ code: dataTypes.inet }, { code: dataTypes.text }],
+            });
+            assert.strictEqual(util.inspect(decoded), util.inspect(value));
+
+            value = {};
+            value["12:59:56"] = "time1";
+            value["15:01:02.1234"] = "time2";
+            value["06:01:02.000000213"] = "time3";
+            encoded = encoder.encode(value, "map<time, text>");
+            decoded = encoder.decode(encoded, {
+                code: dataTypes.map,
+                info: [{ code: dataTypes.time }, { code: dataTypes.text }],
+            });
+            assert.strictEqual(util.inspect(decoded), util.inspect(value));
+
+            value = {};
+            value["2015-01-30"] = "date1";
+            value["1999-11-12"] = "date2";
+            value["-0001-11-12"] = "date3";
+            encoded = encoder.encode(value, "map<date, text>");
+            decoded = encoder.decode(encoded, {
+                code: dataTypes.map,
+                info: [{ code: dataTypes.date }, { code: dataTypes.text }],
+            });
+            assert.strictEqual(util.inspect(decoded), util.inspect(value));
+        });
+
+        it("should encode and decode list<int> for protocol v4", function () {
+            const value = [1, 2, 3, 4];
+            const encoded = encoder.encode(value, "list<int>");
+            const decoded = encoder.decode(encoded, {
+                code: dataTypes.list,
+                info: { code: dataTypes.int },
+            });
+            assert.strictEqual(util.inspect(decoded), util.inspect(value));
+        });
+
+        it("should encode and decode list<double> for protocol v4", function () {
+            const value = [1, 2, 3, 100];
+            const encoded = encoder.encode(value, "list<double>");
+            const decoded = encoder.decode(encoded, {
+                code: dataTypes.list,
+                info: { code: dataTypes.double },
+            });
+            assert.strictEqual(util.inspect(decoded), util.inspect(value));
+        });
+
+        it("should encode and decode list<double> without hint for protocol v4", function () {
+            const value = [1, 2, 3, 100.1];
+            const encoded = encoder.encode(value);
+            const decoded = encoder.decode(encoded, {
+                code: dataTypes.list,
+                info: { code: dataTypes.double },
+            });
+            assert.strictEqual(util.inspect(decoded), util.inspect(value));
+        });
+
+        it("should encode and decode set<text> for protocol v4", function () {
+            const value = ["Alex Vause", "Piper Chapman", "3", "4"];
+            let encoded = encoder.encode(value, "set<text>");
+            let decoded = encoder.decode(encoded, {
+                code: dataTypes.set,
+                info: { code: dataTypes.text },
+            });
+            assert.strictEqual(util.inspect(decoded), util.inspect(value));
+            // with type info
+            encoded = encoder.encode(value, {
+                code: dataTypes.set,
+                info: { code: dataTypes.text },
+            });
+            decoded = encoder.decode(encoded, {
+                code: dataTypes.set,
+                info: { code: dataTypes.text },
+            });
+            assert.strictEqual(util.inspect(decoded), util.inspect(value));
+        });
+
+        it("should encode and decode list<float> with typeInfo for protocol v4", function () {
+            const value = [
+                1.1122000217437744, 2.212209939956665, 3.3999900817871094,
+                4.412120819091797, -1000, 1,
+            ];
+            const encoded = encoder.encode(value, {
+                code: dataTypes.list,
+                info: { code: dataTypes.float },
+            });
+            const decoded = encoder.decode(encoded, {
+                code: dataTypes.list,
+                info: { code: dataTypes.float },
+            });
+            assert.strictEqual(util.inspect(decoded), util.inspect(value));
+        });
+
+        it("should encode/decode ES6 Set as maps for protocol v4", function () {
+            if (typeof Set !== "function") {
+                // Set not supported in Node.js runtime
+                return;
+            }
+            // eslint-disable-next-line no-undef
+            const Es6Set = Set;
+            const encoder = new Encoder(4, {
+                encoding: { set: Es6Set },
+            });
+            let m = new Es6Set(["k1", "k2", "k3"]);
+            let encoded = encoder.encode(m, "set<text>");
+            assert.strictEqual(
+                encoded.toString("hex"),
+                "00000003000000026b31000000026b32000000026b33",
             );
+            let decoded = encoder.decode(encoded, {
+                code: dataTypes.set,
+                info: { code: dataTypes.text },
+            });
+            helper.assertInstanceOf(decoded, Es6Set);
+            assert.strictEqual(decoded.toString(), m.toString());
 
-            it(
-                util.format(
-                    "should encode and decode maps with stringified keys for protocol v%d",
-                    version,
-                ),
-                function () {
-                    let value = {};
-                    value[new Date(1421756675488)] = "date1";
-                    value[new Date(1411756633461)] = "date2";
-
-                    let encoded = encoder.encode(value, {
-                        code: dataTypes.map,
-                        info: [
-                            { code: dataTypes.timestamp },
-                            { code: dataTypes.text },
-                        ],
-                    });
-                    let decoded = encoder.decode(encoded, {
-                        code: dataTypes.map,
-                        info: [
-                            { code: dataTypes.timestamp },
-                            { code: dataTypes.text },
-                        ],
-                    });
-                    assert.strictEqual(
-                        util.inspect(decoded),
-                        util.inspect(value),
-                    );
-
-                    value = {};
-                    value[101] = "number1";
-                    value[102] = "number2";
-                    encoded = encoder.encode(value, "map<int, text>");
-                    decoded = encoder.decode(encoded, {
-                        code: dataTypes.map,
-                        info: [
-                            { code: dataTypes.int },
-                            { code: dataTypes.text },
-                        ],
-                    });
-                    assert.strictEqual(
-                        util.inspect(decoded),
-                        util.inspect(value),
-                    );
-
-                    value = {};
-                    value[types.Long.fromBits(0x12002001, 0x7f999299)] =
-                        "bigint1";
-                    value[types.Long.fromBits(0x12002000, 0x7f999299)] =
-                        "bigint2";
-                    encoded = encoder.encode(value, "map<bigint, text>");
-                    decoded = encoder.decode(encoded, {
-                        code: dataTypes.map,
-                        info: [
-                            { code: dataTypes.bigint },
-                            { code: dataTypes.text },
-                        ],
-                    });
-                    assert.strictEqual(
-                        util.inspect(decoded),
-                        util.inspect(value),
-                    );
-
-                    value = {};
-                    value["201"] = "bigint1_1";
-                    value["202"] = "bigint2_1";
-                    encoded = encoder.encode(value, "map<bigint, text>");
-                    decoded = encoder.decode(encoded, {
-                        code: dataTypes.map,
-                        info: [
-                            { code: dataTypes.bigint },
-                            { code: dataTypes.text },
-                        ],
-                    });
-                    assert.strictEqual(
-                        util.inspect(decoded),
-                        util.inspect(value),
-                    );
-
-                    value = {};
-                    value["2d5db74c-c2da-4e59-b5ec-d8ad3d0aefb9"] = "uuid1";
-                    value["651b5c17-5357-4764-ae2d-21c409288822"] = "uuid2";
-                    encoded = encoder.encode(value, "map<uuid, text>");
-                    decoded = encoder.decode(encoded, {
-                        code: dataTypes.map,
-                        info: [
-                            { code: dataTypes.uuid },
-                            { code: dataTypes.text },
-                        ],
-                    });
-                    assert.strictEqual(
-                        util.inspect(decoded),
-                        util.inspect(value),
-                    );
-
-                    value = {};
-                    value["1ab50440-a0ab-11e4-9d01-1dc0e727b460"] = "timeuuid1";
-                    value["1820c4d0-a0ab-11e4-9d01-1dc0e727b460"] = "timeuuid2";
-                    encoded = encoder.encode(value, "map<timeuuid, text>");
-                    decoded = encoder.decode(encoded, {
-                        code: dataTypes.map,
-                        info: [
-                            { code: dataTypes.timeuuid },
-                            { code: dataTypes.text },
-                        ],
-                    });
-                    assert.strictEqual(
-                        util.inspect(decoded),
-                        util.inspect(value),
-                    );
-
-                    value = {};
-                    value["988229782938247303441911118"] = "varint1";
-                    value["988229782938247303441911119"] = "varint2";
-                    encoded = encoder.encode(value, "map<varint, text>");
-                    decoded = encoder.decode(encoded, {
-                        code: dataTypes.map,
-                        info: [
-                            { code: dataTypes.varint },
-                            { code: dataTypes.text },
-                        ],
-                    });
-                    assert.strictEqual(
-                        util.inspect(decoded),
-                        util.inspect(value),
-                    );
-
-                    value = {};
-                    value["12.1"] = "decimal1";
-                    value["12.90"] = "decimal2";
-                    encoded = encoder.encode(value, "map<decimal, text>");
-                    decoded = encoder.decode(encoded, {
-                        code: dataTypes.map,
-                        info: [
-                            { code: dataTypes.decimal },
-                            { code: dataTypes.text },
-                        ],
-                    });
-                    assert.strictEqual(
-                        util.inspect(decoded),
-                        util.inspect(value),
-                    );
-
-                    value = {};
-                    value["127.0.0.1"] = "inet1";
-                    value["12.10.10.2"] = "inet2";
-                    encoded = encoder.encode(value, "map<inet, text>");
-                    decoded = encoder.decode(encoded, {
-                        code: dataTypes.map,
-                        info: [
-                            { code: dataTypes.inet },
-                            { code: dataTypes.text },
-                        ],
-                    });
-                    assert.strictEqual(
-                        util.inspect(decoded),
-                        util.inspect(value),
-                    );
-
-                    value = {};
-                    value["::1"] = "inet1";
-                    value["::2233:0:0:b1"] = "inet2";
-                    value["aabb::11:2233:4455:6677:88ff"] = "inet3";
-                    encoded = encoder.encode(value, "map<inet, text>");
-                    decoded = encoder.decode(encoded, {
-                        code: dataTypes.map,
-                        info: [
-                            { code: dataTypes.inet },
-                            { code: dataTypes.text },
-                        ],
-                    });
-                    assert.strictEqual(
-                        util.inspect(decoded),
-                        util.inspect(value),
-                    );
-
-                    value = {};
-                    value["12:59:56"] = "time1";
-                    value["15:01:02.1234"] = "time2";
-                    value["06:01:02.000000213"] = "time3";
-                    encoded = encoder.encode(value, "map<time, text>");
-                    decoded = encoder.decode(encoded, {
-                        code: dataTypes.map,
-                        info: [
-                            { code: dataTypes.time },
-                            { code: dataTypes.text },
-                        ],
-                    });
-                    assert.strictEqual(
-                        util.inspect(decoded),
-                        util.inspect(value),
-                    );
-
-                    value = {};
-                    value["2015-01-30"] = "date1";
-                    value["1999-11-12"] = "date2";
-                    value["-0001-11-12"] = "date3";
-                    encoded = encoder.encode(value, "map<date, text>");
-                    decoded = encoder.decode(encoded, {
-                        code: dataTypes.map,
-                        info: [
-                            { code: dataTypes.date },
-                            { code: dataTypes.text },
-                        ],
-                    });
-                    assert.strictEqual(
-                        util.inspect(decoded),
-                        util.inspect(value),
-                    );
-                },
+            m = new Es6Set([1, 2, 1000]);
+            encoded = encoder.encode(m, "set<int>");
+            assert.strictEqual(
+                encoded.toString("hex"),
+                "000000030000000400000001000000040000000200000004000003e8",
             );
+            decoded = encoder.decode(encoded, {
+                code: dataTypes.set,
+                info: { code: dataTypes.text },
+            });
+            assert.strictEqual(decoded.toString(), m.toString());
+        });
 
-            it(
-                util.format(
-                    "should encode and decode list<int> for protocol v%d",
-                    version,
-                ),
-                function () {
-                    const value = [1, 2, 3, 4];
-                    const encoded = encoder.encode(value, "list<int>");
-                    const decoded = encoder.decode(encoded, {
-                        code: dataTypes.list,
-                        info: { code: dataTypes.int },
-                    });
-                    assert.strictEqual(
-                        util.inspect(decoded),
-                        util.inspect(value),
-                    );
-                },
+        it("should encode/decode Map polyfills as maps for protocol v4", function () {
+            const encoder = new Encoder(4, {
+                encoding: { map: helper.Map },
+            });
+            let m = new helper.Map();
+            m.set("k1", "v1");
+            m.set("k2", "v2");
+            let encoded = encoder.encode(m, "map<text,text>");
+            assert.strictEqual(
+                encoded.toString("hex"),
+                "00000002000000026b31000000027631000000026b32000000027632",
             );
+            let decoded = encoder.decode(encoded, {
+                code: dataTypes.map,
+                info: [{ code: dataTypes.text }, { code: dataTypes.text }],
+            });
+            helper.assertInstanceOf(decoded, helper.Map);
+            assert.strictEqual(decoded.arr.toString(), m.arr.toString());
 
-            it(
-                util.format(
-                    "should encode and decode list<double> for protocol v%d",
-                    version,
-                ),
-                function () {
-                    const value = [1, 2, 3, 100];
-                    const encoded = encoder.encode(value, "list<double>");
-                    const decoded = encoder.decode(encoded, {
-                        code: dataTypes.list,
-                        info: { code: dataTypes.double },
-                    });
-                    assert.strictEqual(
-                        util.inspect(decoded),
-                        util.inspect(value),
-                    );
-                },
+            m = new helper.Map();
+            m.set("k1", 1);
+            m.set("k2", 2);
+            m.set("k3", 3);
+            encoded = encoder.encode(m, "map<text,int>");
+            assert.strictEqual(
+                encoded.toString("hex"),
+                "00000003000000026b310000000400000001000000026b320000000400000002000000026b330000000400000003",
             );
+            decoded = encoder.decode(encoded, {
+                code: dataTypes.map,
+                info: [{ code: dataTypes.text }, { code: dataTypes.int }],
+            });
+            assert.strictEqual(decoded.arr.toString(), m.arr.toString());
+        });
 
-            it(
-                util.format(
-                    "should encode and decode list<double> without hint for protocol v%d",
-                    version,
-                ),
-                function () {
-                    const value = [1, 2, 3, 100.1];
-                    const encoded = encoder.encode(value);
-                    const decoded = encoder.decode(encoded, {
-                        code: dataTypes.list,
-                        info: { code: dataTypes.double },
-                    });
-                    assert.strictEqual(
-                        util.inspect(decoded),
-                        util.inspect(value),
-                    );
-                },
+        it("should encode/decode ES6 Map as maps for protocol v4", function () {
+            function getValues(m) {
+                const arr = [];
+                m.forEach(function (val, key) {
+                    arr.push([key, val]);
+                });
+                return arr.toString();
+            }
+
+            const Es6Map = Map;
+            const encoder = new Encoder(4, {
+                encoding: { map: Es6Map },
+            });
+            let m = new Es6Map();
+            m.set("k1", "v1");
+            m.set("k2", "v2");
+            let encoded = encoder.encode(m, "map<text,text>");
+            assert.strictEqual(
+                encoded.toString("hex"),
+                "00000002000000026b31000000027631000000026b32000000027632",
             );
+            let decoded = encoder.decode(encoded, {
+                code: dataTypes.map,
+                info: [{ code: dataTypes.text }, { code: dataTypes.text }],
+            });
+            helper.assertInstanceOf(decoded, Es6Map);
+            assert.strictEqual(getValues(decoded), getValues(m));
 
-            it(
-                util.format(
-                    "should encode and decode set<text> for protocol v%d",
-                    version,
-                ),
-                function () {
-                    const value = ["Alex Vause", "Piper Chapman", "3", "4"];
-                    let encoded = encoder.encode(value, "set<text>");
-                    let decoded = encoder.decode(encoded, {
-                        code: dataTypes.set,
-                        info: { code: dataTypes.text },
-                    });
-                    assert.strictEqual(
-                        util.inspect(decoded),
-                        util.inspect(value),
-                    );
-                    // with type info
-                    encoded = encoder.encode(value, {
-                        code: dataTypes.set,
-                        info: { code: dataTypes.text },
-                    });
-                    decoded = encoder.decode(encoded, {
-                        code: dataTypes.set,
-                        info: { code: dataTypes.text },
-                    });
-                    assert.strictEqual(
-                        util.inspect(decoded),
-                        util.inspect(value),
-                    );
-                },
+            m = new Es6Map();
+            m.set("k1", 1);
+            m.set("k2", 2);
+            m.set("k3", 3);
+            encoded = encoder.encode(m, "map<text,int>");
+            assert.strictEqual(
+                encoded.toString("hex"),
+                "00000003000000026b310000000400000001000000026b320000000400000002000000026b330000000400000003",
             );
+            decoded = encoder.decode(encoded, {
+                code: dataTypes.map,
+                info: [{ code: dataTypes.text }, { code: dataTypes.int }],
+            });
+            assert.strictEqual(getValues(decoded), getValues(m));
 
-            it(
-                util.format(
-                    "should encode and decode list<float> with typeInfo for protocol v%d",
-                    version,
-                ),
-                function () {
-                    const value = [
-                        1.1122000217437744, 2.212209939956665,
-                        3.3999900817871094, 4.412120819091797, -1000, 1,
-                    ];
-                    const encoded = encoder.encode(value, {
-                        code: dataTypes.list,
-                        info: { code: dataTypes.float },
-                    });
-                    const decoded = encoder.decode(encoded, {
-                        code: dataTypes.list,
-                        info: { code: dataTypes.float },
-                    });
-                    assert.strictEqual(
-                        util.inspect(decoded),
-                        util.inspect(value),
-                    );
-                },
+            m = new Es6Map();
+            m.set(new Date("2005-08-05"), 10);
+            m.set(new Date("2010-04-29"), 2);
+            encoded = encoder.encode(m, "map<timestamp,int>");
+            decoded = encoder.decode(encoded, {
+                code: dataTypes.map,
+                info: [{ code: dataTypes.timestamp }, { code: dataTypes.int }],
+            });
+            assert.strictEqual(getValues(decoded), getValues(m));
+        });
+
+        it("should encode/decode Set polyfills as maps for protocol v4", function () {
+            const encoder = new Encoder(4, {
+                encoding: { set: helper.Set },
+            });
+            let m = new helper.Set(["k1", "k2", "k3"]);
+            let encoded = encoder.encode(m, "set<text>");
+            assert.strictEqual(
+                encoded.toString("hex"),
+                "00000003000000026b31000000026b32000000026b33",
             );
+            let decoded = encoder.decode(encoded, {
+                code: dataTypes.set,
+                info: { code: dataTypes.text },
+            });
+            helper.assertInstanceOf(decoded, helper.Set);
+            assert.strictEqual(decoded.toString(), m.toString());
 
-            it(
-                util.format(
-                    "should encode/decode ES6 Set as maps for protocol v%d",
-                    version,
-                ),
-                function () {
-                    if (typeof Set !== "function") {
-                        // Set not supported in Node.js runtime
-                        return;
-                    }
-                    // eslint-disable-next-line no-undef
-                    const Es6Set = Set;
-                    const encoder = new Encoder(version, {
-                        encoding: { set: Es6Set },
-                    });
-                    let m = new Es6Set(["k1", "k2", "k3"]);
-                    let encoded = encoder.encode(m, "set<text>");
-                    if (version === 2) {
-                        assert.strictEqual(
-                            encoded.toString("hex"),
-                            "000300026b3100026b3200026b33",
-                        );
-                    }
-                    let decoded = encoder.decode(encoded, {
-                        code: dataTypes.set,
-                        info: { code: dataTypes.text },
-                    });
-                    helper.assertInstanceOf(decoded, Es6Set);
-                    assert.strictEqual(decoded.toString(), m.toString());
-
-                    m = new Es6Set([1, 2, 1000]);
-                    encoded = encoder.encode(m, "set<int>");
-                    if (version === 2) {
-                        assert.strictEqual(
-                            encoded.toString("hex"),
-                            "00030004000000010004000000020004000003e8",
-                        );
-                    }
-                    decoded = encoder.decode(encoded, {
-                        code: dataTypes.set,
-                        info: { code: dataTypes.text },
-                    });
-                    assert.strictEqual(decoded.toString(), m.toString());
-                },
+            m = new helper.Set([1, 2, 1000]);
+            encoded = encoder.encode(m, "set<int>");
+            assert.strictEqual(
+                encoded.toString("hex"),
+                "000000030000000400000001000000040000000200000004000003e8",
             );
-
-            it(
-                util.format(
-                    "should encode/decode Map polyfills as maps for protocol v%d",
-                    version,
-                ),
-                function () {
-                    const encoder = new Encoder(version, {
-                        encoding: { map: helper.Map },
-                    });
-                    let m = new helper.Map();
-                    m.set("k1", "v1");
-                    m.set("k2", "v2");
-                    let encoded = encoder.encode(m, "map<text,text>");
-                    if (version === 2) {
-                        assert.strictEqual(
-                            encoded.toString("hex"),
-                            "000200026b310002763100026b3200027632",
-                        );
-                    }
-                    let decoded = encoder.decode(encoded, {
-                        code: dataTypes.map,
-                        info: [
-                            { code: dataTypes.text },
-                            { code: dataTypes.text },
-                        ],
-                    });
-                    helper.assertInstanceOf(decoded, helper.Map);
-                    assert.strictEqual(
-                        decoded.arr.toString(),
-                        m.arr.toString(),
-                    );
-
-                    m = new helper.Map();
-                    m.set("k1", 1);
-                    m.set("k2", 2);
-                    m.set("k3", 3);
-                    encoded = encoder.encode(m, "map<text,int>");
-                    if (version === 2) {
-                        assert.strictEqual(
-                            encoded.toString("hex"),
-                            "000300026b3100040000000100026b3200040000000200026b33000400000003",
-                        );
-                    }
-                    decoded = encoder.decode(encoded, {
-                        code: dataTypes.map,
-                        info: [
-                            { code: dataTypes.text },
-                            { code: dataTypes.int },
-                        ],
-                    });
-                    assert.strictEqual(
-                        decoded.arr.toString(),
-                        m.arr.toString(),
-                    );
-                },
-            );
-
-            it(
-                util.format(
-                    "should encode/decode ES6 Map as maps for protocol v%d",
-                    version,
-                ),
-                function () {
-                    function getValues(m) {
-                        const arr = [];
-                        m.forEach(function (val, key) {
-                            arr.push([key, val]);
-                        });
-                        return arr.toString();
-                    }
-
-                    const Es6Map = Map;
-                    const encoder = new Encoder(version, {
-                        encoding: { map: Es6Map },
-                    });
-                    let m = new Es6Map();
-                    m.set("k1", "v1");
-                    m.set("k2", "v2");
-                    let encoded = encoder.encode(m, "map<text,text>");
-                    if (version === 2) {
-                        assert.strictEqual(
-                            encoded.toString("hex"),
-                            "000200026b310002763100026b3200027632",
-                        );
-                    }
-                    let decoded = encoder.decode(encoded, {
-                        code: dataTypes.map,
-                        info: [
-                            { code: dataTypes.text },
-                            { code: dataTypes.text },
-                        ],
-                    });
-                    helper.assertInstanceOf(decoded, Es6Map);
-                    assert.strictEqual(getValues(decoded), getValues(m));
-
-                    m = new Es6Map();
-                    m.set("k1", 1);
-                    m.set("k2", 2);
-                    m.set("k3", 3);
-                    encoded = encoder.encode(m, "map<text,int>");
-                    if (version === 2) {
-                        assert.strictEqual(
-                            encoded.toString("hex"),
-                            "000300026b3100040000000100026b3200040000000200026b33000400000003",
-                        );
-                    }
-                    decoded = encoder.decode(encoded, {
-                        code: dataTypes.map,
-                        info: [
-                            { code: dataTypes.text },
-                            { code: dataTypes.int },
-                        ],
-                    });
-                    assert.strictEqual(getValues(decoded), getValues(m));
-
-                    m = new Es6Map();
-                    m.set(new Date("2005-08-05"), 10);
-                    m.set(new Date("2010-04-29"), 2);
-                    encoded = encoder.encode(m, "map<timestamp,int>");
-                    decoded = encoder.decode(encoded, {
-                        code: dataTypes.map,
-                        info: [
-                            { code: dataTypes.timestamp },
-                            { code: dataTypes.int },
-                        ],
-                    });
-                    assert.strictEqual(getValues(decoded), getValues(m));
-                },
-            );
-
-            it(
-                util.format(
-                    "should encode/decode Set polyfills as maps for protocol v%d",
-                    version,
-                ),
-                function () {
-                    const encoder = new Encoder(version, {
-                        encoding: { set: helper.Set },
-                    });
-                    let m = new helper.Set(["k1", "k2", "k3"]);
-                    let encoded = encoder.encode(m, "set<text>");
-                    if (version === 2) {
-                        assert.strictEqual(
-                            encoded.toString("hex"),
-                            "000300026b3100026b3200026b33",
-                        );
-                    }
-                    let decoded = encoder.decode(encoded, {
-                        code: dataTypes.set,
-                        info: { code: dataTypes.text },
-                    });
-                    helper.assertInstanceOf(decoded, helper.Set);
-                    assert.strictEqual(decoded.toString(), m.toString());
-
-                    m = new helper.Set([1, 2, 1000]);
-                    encoded = encoder.encode(m, "set<int>");
-                    if (version === 2) {
-                        assert.strictEqual(
-                            encoded.toString("hex"),
-                            "00030004000000010004000000020004000003e8",
-                        );
-                    }
-                    decoded = encoder.decode(encoded, {
-                        code: dataTypes.set,
-                        info: { code: dataTypes.int },
-                    });
-                    assert.strictEqual(decoded.toString(), m.toString());
-                },
-            );
+            decoded = encoder.decode(encoded, {
+                code: dataTypes.set,
+                info: { code: dataTypes.int },
+            });
+            assert.strictEqual(decoded.toString(), m.toString());
         });
 
         it("should encode/decode udts", function () {
-            const encoder = new Encoder(3, {});
+            const encoder = new Encoder(4, {});
             const type = {
                 code: dataTypes.udt,
                 info: {
@@ -1066,7 +830,7 @@ describe("encoder", function () {
         });
 
         it("should encode/decode nested collections", function () {
-            const encoder = new Encoder(3, {});
+            const encoder = new Encoder(4, {});
             const type = {
                 code: dataTypes.map,
                 info: [
@@ -1090,7 +854,7 @@ describe("encoder", function () {
         });
 
         it("should encode/decode tuples", function () {
-            const encoder = new Encoder(3, {});
+            const encoder = new Encoder(4, {});
             const type = {
                 code: dataTypes.tuple,
                 info: [{ code: dataTypes.text }, { code: dataTypes.timestamp }],
@@ -1216,7 +980,7 @@ describe("encoder", function () {
         });
 
         it("should encode/decode LocalTime as time", function () {
-            const encoder = new Encoder(3, {});
+            const encoder = new Encoder(4, {});
             const type = { code: dataTypes.time };
             /* eslint-disable no-multi-spaces */
             [
@@ -1364,7 +1128,7 @@ describe("encoder", function () {
 
     describe("#encode()", function () {
         it("should return null when value is null", function () {
-            const encoder = new Encoder(2, {});
+            const encoder = new Encoder(4, {});
             assert.strictEqual(encoder.encode(null), null);
         });
 
@@ -1374,7 +1138,7 @@ describe("encoder", function () {
         });
 
         it("should return null when value is undefined", function () {
-            const encoder = new Encoder(2, {});
+            const encoder = new Encoder(4, {});
             assert.strictEqual(encoder.encode(undefined), null);
         });
 
@@ -1385,35 +1149,19 @@ describe("encoder", function () {
             assert.strictEqual(encoder.encode(undefined), undefined);
         });
 
-        it("should throw TypeError when value is unset with low protocol version", function () {
-            const encoder = new Encoder(2, {});
-            assert.throws(function () {
-                encoder.encode(types.unset);
-            }, TypeError);
-        });
-
-        it("should return null when value is undefined and flag set with low protocol version", function () {
-            const encoder = new Encoder(2, {
-                encoding: { useUndefinedAsUnset: true },
-            });
-            assert.strictEqual(encoder.encode(undefined), null);
-        });
-
         it("should decode 0-length map values of supported types into 0-length values", function () {
             const input = { key1: Buffer.from([]) };
-            [2, 3].forEach((v) => {
-                const encoder = new Encoder(v, {});
-                const buffer = encoder.encode(input, dataTypes.map);
-                Array.from(zeroLengthTypesSupported).forEach(function (t) {
-                    const type = {
-                        code: types.dataTypes.map,
-                        info: [{ code: types.dataTypes.text }, { code: t }],
-                    };
-                    const value = encoder.decode(buffer, type);
-                    assert.ok(value);
-                    assert.deepEqual(Object.keys(value), Object.keys(input));
-                    assert.strictEqual(value["key1"].length, 0);
-                });
+            const encoder = new Encoder(4, {});
+            const buffer = encoder.encode(input, dataTypes.map);
+            Array.from(zeroLengthTypesSupported).forEach(function (t) {
+                const type = {
+                    code: types.dataTypes.map,
+                    info: [{ code: types.dataTypes.text }, { code: t }],
+                };
+                const value = encoder.decode(buffer, type);
+                assert.ok(value);
+                assert.deepEqual(Object.keys(value), Object.keys(input));
+                assert.strictEqual(value["key1"].length, 0);
             });
         });
 
@@ -1421,31 +1169,26 @@ describe("encoder", function () {
             // For some unperceivable reason the server can give us an empty buffer as a map value for any type.
             // We must be able to handle this behaviour.
             const input = { key1: Buffer.from([]) };
-            [2, 3].forEach((v) => {
-                const encoder = new Encoder(v, {});
-                const buffer = encoder.encode(input, dataTypes.map);
+            const encoder = new Encoder(4, {});
+            const buffer = encoder.encode(input, dataTypes.map);
 
-                utils
-                    .objectValues(types.dataTypes)
-                    .filter(
-                        (t) =>
-                            typeof t === "number" &&
-                            !zeroLengthTypesSupported.has(t),
-                    )
-                    .forEach((t) => {
-                        const type = {
-                            code: types.dataTypes.map,
-                            info: [{ code: types.dataTypes.text }, { code: t }],
-                        };
-                        const value = encoder.decode(buffer, type);
-                        assert.ok(value);
-                        assert.deepEqual(
-                            Object.keys(value),
-                            Object.keys(input),
-                        );
-                        assert.strictEqual(value["key1"], null);
-                    });
-            });
+            utils
+                .objectValues(types.dataTypes)
+                .filter(
+                    (t) =>
+                        typeof t === "number" &&
+                        !zeroLengthTypesSupported.has(t),
+                )
+                .forEach((t) => {
+                    const type = {
+                        code: types.dataTypes.map,
+                        info: [{ code: types.dataTypes.text }, { code: t }],
+                    };
+                    const value = encoder.decode(buffer, type);
+                    assert.ok(value);
+                    assert.deepEqual(Object.keys(value), Object.keys(input));
+                    assert.strictEqual(value["key1"], null);
+                });
         });
 
         it("should decode empty buffers as nulls for most types", () => {
@@ -1494,7 +1237,7 @@ describe("encoder", function () {
         it("should decode null map values", function () {
             // technically this should not be possible as nulls are not allowed in collections.
             // at a protocol level this is only possible with v3+ as v2 uses unsigned short for collection element size.
-            const encoder = new Encoder(3, {});
+            const encoder = new Encoder(4, {});
             const buffer = utils.allocBufferFromString(
                 "00000001000000046b657931FFFFFFFF",
                 "hex",
@@ -1512,7 +1255,7 @@ describe("encoder", function () {
         });
 
         it("should return the raw buffer when a buffer is provided", () => {
-            const encoder = new Encoder(3, {});
+            const encoder = new Encoder(4, {});
             const buffer = utils.allocBufferFromArray([0, 1, 2, 3]);
 
             Object.keys(dataTypes).forEach((typeName) => {
@@ -1561,7 +1304,7 @@ describe("encoder", function () {
     });
 
     describe("#setRoutingKeyFromUser()", function () {
-        const encoder = new Encoder(2, {});
+        const encoder = new Encoder(4, {});
         it("should concat Array of buffers in the correct format", function () {
             let options = getExecOptions({
                 // Its an array of 3 values
@@ -1741,7 +1484,7 @@ describe("encoder", function () {
 
     describe("#parseFqTypeName()", function () {
         it("should parse single type names", function () {
-            const encoder = new Encoder(2, {});
+            const encoder = new Encoder(4, {});
             let type = encoder.parseFqTypeName(
                 "org.apache.cassandra.db.marshal.Int32Type",
             );
@@ -1809,7 +1552,7 @@ describe("encoder", function () {
         });
 
         it("should parse complex type names", function () {
-            const encoder = new Encoder(2, {});
+            const encoder = new Encoder(4, {});
             let type = encoder.parseFqTypeName(
                 "org.apache.cassandra.db.marshal.ListType(org.apache.cassandra.db.marshal.Int32Type)",
             );
@@ -1857,7 +1600,7 @@ describe("encoder", function () {
         });
 
         it("should parse frozen types", function () {
-            const encoder = new Encoder(2, {});
+            const encoder = new Encoder(4, {});
             let type = encoder.parseFqTypeName(
                 "org.apache.cassandra.db.marshal.FrozenType(org.apache.cassandra.db.marshal.ListType(org.apache.cassandra.db.marshal.TimeUUIDType))",
             );
@@ -1878,7 +1621,7 @@ describe("encoder", function () {
         });
 
         it("should parse udt types", function () {
-            const encoder = new Encoder(2, {});
+            const encoder = new Encoder(4, {});
             const typeText =
                 "org.apache.cassandra.db.marshal.UserType(" +
                 "tester,70686f6e65,616c696173:org.apache.cassandra.db.marshal.UTF8Type,6e756d626572:org.apache.cassandra.db.marshal.UTF8Type" +
@@ -1902,7 +1645,7 @@ describe("encoder", function () {
         });
 
         it("should parse nested udt types", function () {
-            const encoder = new Encoder(2, {});
+            const encoder = new Encoder(4, {});
             const typeText =
                 "org.apache.cassandra.db.marshal.UserType(" +
                 "tester," +
@@ -2510,7 +2253,7 @@ describe("encoder", function () {
     });
 
     describe("#parseKeyTypes", function () {
-        const encoder = new Encoder(1, {});
+        const encoder = new Encoder(4, {});
         it("should parse single type", function () {
             let value = "org.apache.cassandra.db.marshal.UTF8Type";
             let result = encoder.parseKeyTypes(value);

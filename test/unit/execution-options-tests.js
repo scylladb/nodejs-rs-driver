@@ -370,6 +370,5 @@ function getClientFake(executionProfile, clientOptions) {
                 executionProfile || new ExecutionProfile(x || "default"),
         },
         options: clientOptions || defaultOptions(),
-        controlConnection: { protocolVersion: 4 },
     };
 }
