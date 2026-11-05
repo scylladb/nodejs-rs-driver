@@ -1,0 +1,697 @@
+{
+    "int 0": { "hex": "00000000" },
+    "int -1": { "hex": "ffffffff" },
+    "int max": { "hex": "7fffffff" },
+    "int min": { "hex": "80000000" },
+    "int fraction": { "hex": "00000001" },
+    "int numeric string": { "hex": "0000000c" },
+    "int true": { "hex": "00000001" },
+    "int too large": {
+        "error": [
+            "RangeError",
+            "The value of \"value\" is out of range. It must be >= -2147483648 and <= 2147483647. Received 2147483648"
+        ]
+    },
+    "int NaN": { "error": ["TypeError", "Expected Number, obtained NaN"] },
+    "int bad string": {
+        "error": ["TypeError", "Expected Number, obtained 'x'"]
+    },
+    "int object": { "error": ["TypeError", "Expected Number, obtained {}"] },
+    "int null": { "hex": null },
+    "int unset": { "unset": true },
+    "int undefined as unset": { "unset": true },
+    "double 1.5": { "hex": "3ff8000000000000" },
+    "double -0": { "hex": "8000000000000000" },
+    "double NaN": { "hex": "7ff8000000000000" },
+    "double Infinity": { "hex": "7ff0000000000000" },
+    "double numeric string": { "hex": "4004000000000000" },
+    "double bad string": {
+        "error": [
+            "TypeError",
+            "Expected string representation of a number, obtained NaN"
+        ]
+    },
+    "double boolean": {
+        "error": ["TypeError", "Expected Number, obtained true"]
+    },
+    "boolean true": { "hex": "01" },
+    "boolean false": { "hex": "00" },
+    "boolean 0": { "hex": "00" },
+    "boolean string": { "hex": "01" },
+    "boolean empty string": { "hex": "00" },
+    "boolean object": { "hex": "01" },
+    "text plain": { "hex": "706c61696e" },
+    "text empty": { "hex": "" },
+    "text non-ASCII": { "hex": "7a61c5bcc3b3c582c48720f09f98802000" },
+    "text lone surrogate": { "hex": "61efbfbd62" },
+    "text long": {
+        "hex": "c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582c582"
+    },
+    "text number": {
+        "error": [
+            "TypeError",
+            "Not a valid text value, expected String obtained 5"
+        ]
+    },
+    "text object": {
+        "error": [
+            "TypeError",
+            "Not a valid text value, expected String obtained {}"
+        ]
+    },
+    "varchar plain": { "hex": "76" },
+    "ascii plain": { "hex": "616263" },
+    "ascii non-ASCII": { "hex": "7a617c" },
+    "ascii long": {
+        "hex": "616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161"
+    },
+    "ascii number": {
+        "error": [
+            "TypeError",
+            "Not a valid text value, expected String obtained 5"
+        ]
+    },
+    "blob Buffer": { "hex": "010203" },
+    "blob empty Buffer": { "hex": "" },
+    "blob Uint8Array": {
+        "error": [
+            "TypeError",
+            "Not a valid blob, expected Buffer obtained Uint8Array(2) [ 1, 2 ]"
+        ]
+    },
+    "blob string": {
+        "error": [
+            "TypeError",
+            "Not a valid blob, expected Buffer obtained 'abc'"
+        ]
+    },
+    "blob number": {
+        "error": ["TypeError", "Not a valid blob, expected Buffer obtained 5"]
+    },
+    "blob array": {
+        "error": [
+            "TypeError",
+            "Not a valid blob, expected Buffer obtained [ 1, 2 ]"
+        ]
+    },
+    "list of blobs": { "hex": "00000002000000010100000000" },
+    "list with a bad blob": {
+        "error": [
+            "TypeError",
+            "Not a valid blob, expected Buffer obtained 'abc'"
+        ]
+    },
+    "unknown type code": { "error": ["Error", "Type not supported 999"] },
+    "bigint Long 0": { "hex": "0000000000000000" },
+    "bigint Long -1": { "hex": "ffffffffffffffff" },
+    "bigint Long max": { "hex": "7fffffffffffffff" },
+    "bigint Long min": { "hex": "8000000000000000" },
+    "bigint Long number": { "hex": "0000000000000007" },
+    "bigint Long negative number": { "hex": "fffffffffffffff9" },
+    "bigint Long string": { "hex": "000000000000007b" },
+    "bigint Long bad string": { "hex": "0000000000000000" },
+    "bigint Long exponent string": { "hex": "0000000000000001" },
+    "bigint Long empty string": { "error": ["Error", "empty string"] },
+    "bigint Long BigInt": {
+        "error": [
+            "TypeError",
+            "Not a valid bigint, expected Long/Number/String/Buffer, obtained 5n"
+        ]
+    },
+    "bigint Long object": {
+        "error": [
+            "TypeError",
+            "Not a valid bigint, expected Long/Number/String/Buffer, obtained {}"
+        ]
+    },
+    "counter Long": { "hex": "0000000000000005" },
+    "bigint BigInt 0": { "hex": "0000000000000000" },
+    "bigint BigInt -1": { "hex": "ffffffffffffffff" },
+    "bigint BigInt max": { "hex": "7fffffffffffffff" },
+    "bigint BigInt min": { "hex": "8000000000000000" },
+    "bigint BigInt too large": { "hex": "0000000000000005" },
+    "bigint BigInt string": { "hex": "0000000000000007" },
+    "bigint BigInt bad string": {
+        "error": ["SyntaxError", "Cannot convert abc to a BigInt"]
+    },
+    "bigint BigInt number": {
+        "error": ["TypeError", "Not a valid BigInt value, obtained 5"]
+    },
+    "bigint BigInt Long": {
+        "error": [
+            "TypeError",
+            "Not a valid BigInt value, obtained Long { low: 1, high: 0, unsigned: false }"
+        ]
+    },
+    "counter BigInt": { "hex": "0000000000000005" },
+    "timestamp epoch": { "hex": "0000000000000000" },
+    "timestamp -1": { "hex": "ffffffffffffffff" },
+    "timestamp recent": { "hex": "0000018bcfe5687b" },
+    "timestamp max": { "hex": "001eb208c2dc0000" },
+    "timestamp min": { "hex": "ffe14df73d240000" },
+    "timestamp number": { "hex": "00000000000004d2" },
+    "timestamp string": { "hex": "0000016f5e66e800" },
+    "timestamp Long": { "hex": "0000000000000063" },
+    "timestamp invalid Date": {
+        "error": ["TypeError", "Invalid date: Invalid Date"]
+    },
+    "timestamp bad string": {
+        "error": ["TypeError", "Invalid date: not a date"]
+    },
+    "timestamp object": {
+        "error": [
+            "TypeError",
+            "Not a valid bigint, expected Long/Number/String/Buffer, obtained {}"
+        ]
+    },
+    "timestamp BigInt mode Date": { "hex": "fffffffffffffffb" },
+    "timestamp BigInt mode number": { "hex": "000000000000007b" },
+    "timestamp BigInt mode BigInt": { "hex": "000000000000004d" },
+    "timestamp BigInt mode fraction": {
+        "error": [
+            "RangeError",
+            "The number 1.5 cannot be converted to a BigInt because it is not an integer"
+        ]
+    },
+    "uuid Uuid": { "hex": "a3e4c8b21c2d4e5f8a9b0c1d2e3f4a5b" },
+    "uuid string": { "hex": "a3e4c8b21c2d4e5f8a9b0c1d2e3f4a5b" },
+    "uuid bad string": {
+        "error": [
+            "TypeError",
+            "Invalid string representation of Uuid, it should be in the 00000000-0000-0000-0000-000000000000 format"
+        ]
+    },
+    "uuid number": {
+        "error": [
+            "TypeError",
+            "Not a valid Uuid, expected Uuid/String/Buffer, obtained 5"
+        ]
+    },
+    "timeuuid TimeUuid": { "hex": "138140001dd211b2a162616263646566" },
+    "timeuuid string": { "hex": "a3e4c8b21c2d4e5f8a9b0c1d2e3f4a5b" },
+    "float 1.5": { "hex": "3fc00000" },
+    "float rounded": { "hex": "3dcccccd" },
+    "float NaN": { "hex": "7fc00000" },
+    "float numeric string": { "hex": "40200000" },
+    "float bad string": {
+        "error": [
+            "TypeError",
+            "Expected string representation of a number, obtained NaN"
+        ]
+    },
+    "float boolean": {
+        "error": ["TypeError", "Expected Number, obtained true"]
+    },
+    "smallint -1": { "hex": "ffff" },
+    "smallint numeric string": { "hex": "000c" },
+    "smallint too large": {
+        "error": [
+            "RangeError",
+            "The value of \"value\" is out of range. It must be >= -32768 and <= 32767. Received 40000"
+        ]
+    },
+    "smallint NaN": { "error": ["TypeError", "Expected Number, obtained NaN"] },
+    "tinyint -1": { "hex": "ff" },
+    "tinyint fraction": { "hex": "01" },
+    "tinyint too large": {
+        "error": [
+            "RangeError",
+            "The value of \"value\" is out of range. It must be >= -128 and <= 127. Received 200"
+        ]
+    },
+    "tinyint bad string": {
+        "error": ["TypeError", "Expected Number, obtained 'x'"]
+    },
+    "inet IPv4": { "hex": "0a000001" },
+    "inet IPv6": { "hex": "00000000000000000000000000000001" },
+    "inet string": { "hex": "c0a80102" },
+    "inet bad string": {
+        "error": [
+            "TypeError",
+            "Value could not be parsed as InetAddress: not an address"
+        ]
+    },
+    "inet number": {
+        "error": [
+            "TypeError",
+            "Not a valid Inet, expected InetAddress/Buffer, obtained 5"
+        ]
+    },
+    "list int": { "hex": "0000000200000004000000010000000400000002" },
+    "list empty": { "hex": "00000000" },
+    "list text": { "hex": "000000020000000161000000026262" },
+    "list mixed": { "hex": "0000000200000004000000010000000400000002" },
+    "list of lists": {
+        "hex": "000000020000000c000000010000000400000001000000140000000200000004000000020000000400000003"
+    },
+    "list null item": {
+        "error": [
+            "TypeError",
+            "A collection can't contain null or unset values"
+        ]
+    },
+    "list undefined item": {
+        "error": [
+            "TypeError",
+            "A collection can't contain null or unset values"
+        ]
+    },
+    "list unset item": {
+        "error": [
+            "TypeError",
+            "A collection can't contain null or unset values"
+        ]
+    },
+    "list Buffer item": { "hex": "000000010000000100" },
+    "list bad item": {
+        "error": ["TypeError", "Expected Number, obtained 'x'"]
+    },
+    "list not array": {
+        "error": [
+            "TypeError",
+            "Not a valid list value, expected Array obtained 'abc'"
+        ]
+    },
+    "set int": { "hex": "0000000200000004000000030000000400000004" },
+    "set empty": { "hex": "00000000" },
+    "set Set object": {
+        "error": [
+            "TypeError",
+            "Not a valid list value, expected Array obtained Set(1) { 1 }"
+        ]
+    },
+    "map text int": {
+        "hex": "000000020000000161000000040000000100000001620000000400000002"
+    },
+    "map empty": { "hex": "00000000" },
+    "map Map object": { "hex": "00000000" },
+    "map int keys": { "hex": "00000000" },
+    "map nested": { "hex": "00000001000000016b00000009000000010000000178" },
+    "map null value": {
+        "error": ["TypeError", "A map can't contain null or unset values"]
+    },
+    "map unset value": {
+        "error": ["TypeError", "A map can't contain null or unset values"]
+    },
+    "map undefined value": {
+        "error": ["TypeError", "A map can't contain null or unset values"]
+    },
+    "map Buffer value": { "hex": "0000000100000001610000000100" },
+    "map bad value": {
+        "error": ["TypeError", "Expected Number, obtained 'x'"]
+    },
+    "map inherited key": { "hex": "00000001000000036f776e0000000400000002" },
+    "map null prototype": { "hex": "0000000100000001610000000400000001" },
+    "list no subtype": { "hex": "00000002000000083ff00000000000000000000178" },
+    "list sparse": {
+        "error": [
+            "TypeError",
+            "A collection can't contain null or unset values"
+        ]
+    },
+    "list of empty list": { "hex": "000000010000000400000000" },
+    "set of empty set": { "hex": "000000010000000400000000" },
+    "list no subtype of empty list": { "hex": "000000010000000400000000" },
+    "set Set object with option": {
+        "hex": "0000000200000004000000050000000400000006"
+    },
+    "set Set object null item": {
+        "error": [
+            "TypeError",
+            "A collection can't contain null or unset values"
+        ]
+    },
+    "map no subtypes": { "hex": "000000010000000161000000083ff0000000000000" },
+    "map value empty list": { "hex": "0000000100000001610000000400000000" },
+    "map key empty list": { "hex": "0000000100000004000000000000000400000001" },
+    "map Map object with option": {
+        "hex": "00000001000000016b0000000400000005"
+    },
+    "map Map object null key": {
+        "error": ["TypeError", "A map can't contain null or unset keys"]
+    },
+    "map Map object unset value": {
+        "error": ["TypeError", "A map can't contain null or unset values"]
+    },
+    "udt fields": { "hex": "00000004000000010000000178" },
+    "udt missing field": { "hex": "0000000400000001ffffffff" },
+    "udt extra field": { "hex": "00000004000000010000000178" },
+    "udt null field": { "hex": "ffffffff0000000178" },
+    "udt unset field": { "hex": "ffffffff0000000178" },
+    "udt undefined field as unset": { "hex": "ffffffff0000000178" },
+    "udt Buffer field": { "hex": "000000040000000700000000" },
+    "udt empty list field": { "hex": "0000000400000000" },
+    "udt nested": { "hex": "0000000d00000004000000020000000179" },
+    "udt bad field": {
+        "error": ["TypeError", "Expected Number, obtained 'x'"]
+    },
+    "udt not an object": {
+        "error": [
+            "TypeError",
+            "Not a valid udt value, expected Object obtained 5"
+        ]
+    },
+    "udt JSON string": {
+        "error": [
+            "TypeError",
+            "Not a valid udt value, expected Object obtained '{\"a\":1}'"
+        ]
+    },
+    "udt array": {
+        "error": [
+            "TypeError",
+            "Not a valid udt value, expected Object obtained [ 1, 'x' ]"
+        ]
+    },
+    "udt Map": {
+        "error": [
+            "TypeError",
+            "Not a valid udt value, expected Object obtained Map(1) { 'a' => 1 }"
+        ]
+    },
+    "udt class instance": { "hex": "00000004000000010000000178" },
+    "tuple values": { "hex": "00000004000000010000000178" },
+    "tuple shorter value": { "hex": "0000000400000001" },
+    "tuple longer value": { "hex": "00000004000000010000000178" },
+    "tuple null item": { "hex": "ffffffff0000000178" },
+    "tuple unset item": { "hex": "ffffffff0000000178" },
+    "tuple bad item": {
+        "error": ["TypeError", "Expected Number, obtained 'x'"]
+    },
+    "tuple in list": { "hex": "000000010000000d00000004000000010000000161" },
+    "tuple from array": {
+        "error": [
+            "TypeError",
+            "Not a valid tuple, expected Tuple obtained [ 1, 'x' ]"
+        ]
+    },
+    "tuple from number": {
+        "error": ["TypeError", "Not a valid tuple, expected Tuple obtained 5"]
+    },
+    "tuple-like object": { "hex": "00000004000000010000000178" },
+    "tuple without item types": {
+        "error": [
+            "TypeError",
+            "Type information not valid, a tuple type needs the types of its items"
+        ]
+    },
+    "udt without fields": {
+        "error": [
+            "TypeError",
+            "Type information not valid, a UDT type needs its fields"
+        ]
+    },
+    "udt field without type": {
+        "error": [
+            "TypeError",
+            "Type information not valid, a UDT type needs the type of each field"
+        ]
+    },
+    "udt field hole": {
+        "error": [
+            "TypeError",
+            "Type information not valid, a UDT type needs the type of each field"
+        ]
+    },
+    "udt field null": {
+        "error": [
+            "TypeError",
+            "Type information not valid, a UDT type needs the type of each field"
+        ]
+    },
+    "tuple sparse item types": {
+        "error": [
+            "TypeError",
+            "Type information not valid, a tuple type needs the types of its items"
+        ]
+    },
+    "udt field type by name": { "hex": "0000000400000001" },
+    "tuple with no item types": {
+        "error": [
+            "TypeError",
+            "Type information not valid, a tuple type needs the types of its items"
+        ]
+    },
+    "tuple item without type": {
+        "error": [
+            "TypeError",
+            "Type information not valid, a tuple type needs the types of its items"
+        ]
+    },
+    "vector float": { "hex": "3fc00000c0000000" },
+    "vector double": { "hex": "3ff8000000000000c000000000000000" },
+    "vector int": { "hex": "00000001fffffffe00000003" },
+    "vector bigint": { "hex": "0000000000000001" },
+    "vector text": { "hex": "0161026262" },
+    "vector of lists": {
+        "hex": "0c000000010000000400000001140000000200000004000000020000000400000003"
+    },
+    "vector type name": { "hex": "3f80000040000000" },
+    "vector Buffer item": { "hex": "00000009" },
+    "vector null item": {
+        "error": ["TypeError", "A vector can't contain null or unset values"]
+    },
+    "vector null item variable": {
+        "error": ["TypeError", "A vector can't contain null or unset values"]
+    },
+    "vector bad item": {
+        "error": ["TypeError", "Expected Number, obtained 'x'"]
+    },
+    "vector wrong dimension": {
+        "error": [
+            "TypeError",
+            "Expected vector with 3 dimensions, observed size of 2"
+        ]
+    },
+    "vector not a Vector": {
+        "error": [
+            "TypeError",
+            "Driver only supports Vector type when encoding a vector"
+        ]
+    },
+    "vector empty list element": {
+        "hex": "0c0000000100000004000000010400000000"
+    },
+    "vector element type by name": { "hex": "0000000100000002" },
+    "vector element type by code": { "hex": "0000000100000002" },
+    "vector unknown element type name": {
+        "error": ["TypeError", "Data type with name no_such_type not valid"]
+    },
+    "vector without element type": {
+        "error": [
+            "TypeError",
+            "Type information not valid, a vector type needs its element type and a positive dimension"
+        ]
+    },
+    "vector dimension as string": {
+        "error": [
+            "TypeError",
+            "Type information not valid, a vector type needs its element type and a positive dimension"
+        ]
+    },
+    "vector dimension 0": {
+        "error": [
+            "TypeError",
+            "Type information not valid, a vector type needs its element type and a positive dimension"
+        ]
+    },
+    "vector without type information": {
+        "error": [
+            "TypeError",
+            "Type information not valid, a vector type needs its element type and a positive dimension"
+        ]
+    },
+    "custom duration": { "hex": "020406" },
+    "custom unknown": {
+        "error": [
+            "TypeError",
+            "No encoding handler found for type { code: 0, info: 'no.such.Type' }"
+        ]
+    },
+    "date LocalDate": { "hex": "80004764" },
+    "date epoch": { "hex": "80000000" },
+    "date before epoch": { "hex": "7fffffff" },
+    "date max days": { "hex": "ffffffff" },
+    "date min days": { "hex": "00000000" },
+    "date string": { "hex": "80004764" },
+    "date negative year string": { "hex": "7ff50429" },
+    "date days string": { "hex": "7ffffffb" },
+    "date Date": { "hex": "80004764" },
+    "date invalid Date": {
+        "error": [
+            "TypeError",
+            "LocalDate could not be parsed TypeError: Invalid date: Invalid Date"
+        ]
+    },
+    "date bad month": {
+        "error": [
+            "TypeError",
+            "LocalDate could not be parsed Error: Month should be value between 1 and 12, got 13."
+        ]
+    },
+    "date bad string": {
+        "error": [
+            "TypeError",
+            "LocalDate could not be parsed Error: Invalid input 'not a date'."
+        ]
+    },
+    "date number": {
+        "error": ["TypeError", "Expected Date/String/LocalDate, obtained 5"]
+    },
+    "time zero": { "hex": "0000000000000000" },
+    "time max": { "hex": "00004e94914effff" },
+    "time LocalTime": { "hex": "00002d0c216a1115" },
+    "time string": { "hex": "00002d0c216a1115" },
+    "time string without seconds": { "hex": "0000036221475000" },
+    "time bad hour": {
+        "error": [
+            "TypeError",
+            "LocalTime could not be parsed TypeError: Invalid hour. Expected value between 0 and 23, got 25"
+        ]
+    },
+    "time below nanoseconds": {
+        "error": [
+            "TypeError",
+            "LocalTime could not be parsed TypeError: Invalid format for local time constructor. Cannot have sub nanosecond precision."
+        ]
+    },
+    "time number": {
+        "error": ["TypeError", "Expected String/LocalTime, obtained 5"]
+    },
+    "time Date": {
+        "error": [
+            "TypeError",
+            "Expected String/LocalTime, obtained 1970-01-01T00:00:00.000Z"
+        ]
+    },
+    "time Long": {
+        "error": [
+            "TypeError",
+            "Expected String/LocalTime, obtained Long { low: 5, high: 0, unsigned: false }"
+        ]
+    },
+    "varint 0": { "hex": "00" },
+    "varint -1": { "hex": "ff" },
+    "varint 127": { "hex": "7f" },
+    "varint 128": { "hex": "0080" },
+    "varint -128": { "hex": "80" },
+    "varint -129": { "hex": "ff7f" },
+    "varint 255": { "hex": "00ff" },
+    "varint 256": { "hex": "0100" },
+    "varint 2^31": { "hex": "0080000000" },
+    "varint 2^32 - 1": { "hex": "00ffffffff" },
+    "varint 2^32": { "hex": "0100000000" },
+    "varint -(2^32)": { "hex": "ff00000000" },
+    "varint -(2^32) - 1": { "hex": "feffffffff" },
+    "varint max safe integer": { "hex": "1fffffffffffff" },
+    "varint fraction": { "hex": "01" },
+    "varint NaN": { "hex": "00" },
+    "varint Integer": { "hex": "018ee90ff6c373e0ee4e3f0ad2" },
+    "varint negative Integer": { "hex": "fe7116f0093c8c1f11b1c0f52e" },
+    "varint Integer from bits": { "hex": "7fffffffff00000000" },
+    "varint numeric string": { "hex": "ff54ab567314e0f52e" },
+    "varint empty string": {
+        "error": ["TypeError", "number format error: empty string"]
+    },
+    "varint bad string": { "hex": "00" },
+    "varint Buffer": { "hex": "0102" },
+    "varint boolean": {
+        "error": [
+            "TypeError",
+            "Not a valid varint, expected Integer/Number/String/Buffer, obtained true"
+        ]
+    },
+    "varint BigInt": {
+        "error": [
+            "TypeError",
+            "Not a valid varint, expected Integer/Number/String/Buffer, obtained 5n"
+        ]
+    },
+    "varint BigInt mode 0": { "hex": "00" },
+    "varint BigInt mode -1": { "hex": "ff" },
+    "varint BigInt mode 127": { "hex": "7f" },
+    "varint BigInt mode 128": { "hex": "0080" },
+    "varint BigInt mode -128": { "hex": "80" },
+    "varint BigInt mode -129": { "hex": "ff7f" },
+    "varint BigInt mode 255": { "hex": "00ff" },
+    "varint BigInt mode 256": { "hex": "0100" },
+    "varint BigInt mode -256": { "hex": "ff00" },
+    "varint BigInt mode 2^64": { "hex": "010000000000000000" },
+    "varint BigInt mode -(2^64)": { "hex": "ff0000000000000000" },
+    "varint BigInt mode 2^64 - 1": { "hex": "00ffffffffffffffff" },
+    "varint BigInt mode large": { "hex": "018ee90ff6c373e0ee4e3f0ad2" },
+    "varint BigInt mode negative large": {
+        "hex": "fe7116f0093c8c1f11b1c0f52e"
+    },
+    "varint BigInt mode numeric string": { "hex": "85" },
+    "varint BigInt mode bad string": {
+        "error": ["SyntaxError", "Cannot convert abc to a BigInt"]
+    },
+    "varint BigInt mode number": {
+        "error": [
+            "TypeError",
+            "Not a valid varint, expected BigInt, obtained 5"
+        ]
+    },
+    "varint BigInt mode Integer": {
+        "error": [
+            "TypeError",
+            "Not a valid varint, expected BigInt, obtained Integer {}"
+        ]
+    },
+    "decimal BigDecimal": { "hex": "00000004075bcd15" },
+    "decimal negative": { "hex": "00000003ff" },
+    "decimal zero": { "hex": "0000000000" },
+    "decimal number fraction": { "hex": "000000027d" },
+    "decimal number with exponent": { "hex": "0000001409184e72a000" },
+    "decimal number 1e21": { "hex": "0000000001" },
+    "decimal NaN": { "hex": "0000000000" },
+    "decimal large": { "hex": "0000000306163e665beb7ca6a2e1a64244cb" },
+    "decimal negative large": { "hex": "00000001ca758afbc70c7f0ad7" },
+    "decimal negative scale": { "hex": "fffffffd05" },
+    "decimal string with spaces": { "hex": "000000010f" },
+    "decimal empty string": {
+        "error": ["TypeError", "Invalid null or undefined value"]
+    },
+    "decimal bad string": { "hex": "0000000000" },
+    "decimal boolean": {
+        "error": [
+            "TypeError",
+            "Not a valid varint, expected BigDecimal/Number/String/Buffer, obtained true"
+        ]
+    },
+    "decimal BigInt": {
+        "error": [
+            "TypeError",
+            "Not a valid varint, expected BigDecimal/Number/String/Buffer, obtained 5n"
+        ]
+    },
+    "duration zero": { "hex": "000000" },
+    "duration 1 2 3": { "hex": "020406" },
+    "duration negative": { "hex": "010305" },
+    "duration 1-byte and 2-byte vints": { "hex": "7e80807f" },
+    "duration max": { "hex": "f0fffffffef0fffffffefffffffffffffffffe" },
+    "duration min": { "hex": "f0fffffffff0ffffffffffffffffffffffffff" },
+    "duration Long nanoseconds": { "hex": "0000fa3ee3f60996" },
+    "duration from string": { "hex": "1c32fc2168cdf9d664" },
+    "duration string": {
+        "error": [
+            "TypeError",
+            "Not a valid duration, expected Duration/Buffer obtained '1h'"
+        ]
+    },
+    "duration number": {
+        "error": [
+            "TypeError",
+            "Not a valid duration, expected Duration/Buffer obtained 5"
+        ]
+    },
+    "custom duration negative": { "hex": "010305" },
+    "custom duration max": { "hex": "f0fffffffef0fffffffefffffffffffffffffe" },
+    "custom duration string": {
+        "error": [
+            "TypeError",
+            "Not a valid duration, expected Duration/Buffer obtained '1h'"
+        ]
+    }
+}
