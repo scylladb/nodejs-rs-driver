@@ -25,6 +25,7 @@ Support for some optional driver features is planned for upcoming releases.
    policies/index
    connecting/authentication
    connecting/client-routes
+   connecting/compression
    shutdown/shutdown
    migration-guide/migration-guide
    api/index
@@ -47,6 +48,7 @@ Contents
 - :doc:`Policies <policies/index>` - Load balancing and retry policies
 - :doc:`Authentication <connecting/authentication>` - Connecting with credentials or SSL
 - :doc:`Client Routes <connecting/client-routes>` - Connecting over private networking
+- :doc:`Compression <connecting/compression>` - Compressing frames exchanged with the nodes
 - :doc:`Shutdown <shutdown/shutdown>` - How the driver manages connection lifecycle
 - :doc:`Migration Guide <migration-guide/migration-guide>` - Migrating from the Apache ``cassandra-driver``
 - :doc:`API Reference <api/index>` - Full API documentation

@@ -110,6 +110,10 @@ The following option is new, with no `cassandra-driver` equivalent:
   fetch of a metadata query, guarding against a node that stops responding without closing the
   connection. Defaults to `protocolOptions.metadataRequestServersideTimeoutSecs` + 1, or `30` if that
   is not set either.
+- `protocolOptions.compression`: the compression algorithm (`"lz4"` or `"snappy"`)
+  requested for frames exchanged with the nodes. No compression is used when it is not set. If a node
+  does not support the requested algorithm, the driver falls back to no compression for connections
+  to that node.
 
 ## Client internal members
 
