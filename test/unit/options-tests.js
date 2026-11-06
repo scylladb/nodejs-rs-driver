@@ -66,6 +66,7 @@ const options = {
     },
     protocolOptions: {
         maxSchemaAgreementWaitSeconds: 5,
+        compression: "lz4",
         autoAwaitSchemaAgreement: false,
         metadataRequestServersideTimeoutSecs: 7,
         metadataRequestClientsideTimeoutSecs: 9,
@@ -81,6 +82,7 @@ const optionsV2 = {
         "Unique username v2",
         "Unique password v2",
     ),
+    protocolOptions: { compression: "snappy" },
 };
 
 describe("Client options", function () {
@@ -564,6 +566,28 @@ describe("Client options", function () {
                     extend({
                         contactPoints: ["127.0.0.1"],
                         protocolOptions: { port: "9042" },
+                    }),
+                TypeError,
+            );
+        });
+    });
+
+    describe("protocolOptions.compression", function () {
+        for (const compression of ["lz4", "snappy"]) {
+            it(`should accept ${compression}`, function () {
+                extend({
+                    contactPoints: ["127.0.0.1"],
+                    protocolOptions: { compression },
+                });
+            });
+        }
+
+        it("should reject an unknown compression algorithm", function () {
+            assert.throws(
+                () =>
+                    extend({
+                        contactPoints: ["127.0.0.1"],
+                        protocolOptions: { compression: "gzip" },
                     }),
                 TypeError,
             );

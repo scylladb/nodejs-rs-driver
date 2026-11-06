@@ -11,7 +11,6 @@ use openssl::ssl::{
 };
 use openssl::x509::X509;
 use openssl::x509::store::X509StoreBuilder;
-use scylla::client::SelfIdentity;
 use scylla::client::client_routes::{
     ClientRoutesConfig as ScyllaClientRoutesConfig, ClientRoutesProxy,
 };
@@ -21,6 +20,7 @@ use scylla::client::session_builder::{
     ClientRoutesSessionBuilder, GenericSessionBuilder, SessionBuilder,
     SessionBuilderKindSupportsKnownNodes,
 };
+use scylla::client::{Compression, SelfIdentity};
 use scylla::policies::host_filter::AllowListHostFilter;
 use scylla::policies::load_balancing::{self, LoadBalancingPolicy};
 use scylla::policies::retry::{DefaultRetryPolicy, FallthroughRetryPolicy, RetryPolicy};
@@ -74,6 +74,17 @@ pub struct LoadBalancingConfig {
 
 #[derive(Debug, PartialEq, Eq)]
 #[napi]
+/// Compression algorithm used for the frames exchanged with the nodes.
+/// Mirrors `scylla::client::Compression`.
+pub enum CompressionKind {
+    /// LZ4 compression.
+    Lz4,
+    /// Snappy compression.
+    Snappy,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+#[napi]
 pub enum RetryPolicyKind {
     Default,
     Fallthrough,
@@ -121,6 +132,7 @@ pub struct SessionOptions {
     ssl_options, sslOptions: SslOptions,
     load_balancing_config, loadBalancingConfig: LoadBalancingConfig,
     retry_policy, retryPolicy: RetryPolicyKind,
+    compression, compression: CompressionKind,
     address_translator_config, addressTranslatorConfig: FixedAddressTranslatorConfig,
     client_routes_config, clientRoutesConfig: ClientRoutesConfig,
 });
@@ -350,6 +362,13 @@ fn apply_common_options<K: SessionBuilderKindSupportsKnownNodes>(
                 "There is a check in JS Client constructor that should have prevented only one credential passed"
             )
         }
+    }
+
+    if let Some(compression) = &options.compression {
+        builder = builder.compression(Some(match compression {
+            CompressionKind::Lz4 => Compression::Lz4,
+            CompressionKind::Snappy => Compression::Snappy,
+        }));
     }
 
     if let Some(schema_agreement_timeout_secs) = options.schema_agreement_timeout_secs {
