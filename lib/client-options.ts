@@ -246,6 +246,13 @@ export interface ClientOptions {
          */
         maxSchemaAgreementWaitSeconds?: number;
         /**
+         * Compression algorithm used for the frames exchanged with the nodes.
+         * Supported values are `"lz4"` and `"snappy"`. When omitted, no compression is used.
+         * If a node does not support the selected algorithm, the driver logs a warning and
+         * falls back to no compression for connections to that node.
+         */
+        compression?: "lz4" | "snappy";
+        /**
          * Determines whether the driver automatically waits
          * for schema agreement after a DDL statement, retrying for up to `maxSchemaAgreementWaitSeconds`. When `false`, DDL
          * queries return as soon as the coordinator acknowledges them, without waiting for the rest of the cluster to
@@ -920,6 +927,16 @@ function validateProtocolOptions(
             "protocolOptions.maxSchemaAgreementWaitSeconds must be an integer between 0 and 4294967295",
         );
     }
+    const compression = protocolOptions.compression;
+    if (
+        compression !== undefined &&
+        compression !== "lz4" &&
+        compression !== "snappy"
+    ) {
+        throw new TypeError(
+            'protocolOptions.compression must be either "lz4" or "snappy"',
+        );
+    }
     const autoAwaitSchema = protocolOptions.autoAwaitSchemaAgreement;
     if (autoAwaitSchema !== undefined && typeof autoAwaitSchema !== "boolean") {
         throw new TypeError(
@@ -1345,6 +1362,12 @@ function setRustOptions(options: ClientOptions): rust.SessionOptions {
         ) {
             undeclared.schemaAgreementTimeoutSecs =
                 options.protocolOptions.maxSchemaAgreementWaitSeconds;
+        }
+        if (options.protocolOptions.compression !== undefined) {
+            undeclared.compression =
+                options.protocolOptions.compression === "lz4"
+                    ? rust.CompressionKind.Lz4
+                    : rust.CompressionKind.Snappy;
         }
         if (options.protocolOptions.autoAwaitSchemaAgreement !== undefined) {
             undeclared.autoAwaitSchemaAgreement =

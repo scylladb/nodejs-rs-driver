@@ -1,7 +1,7 @@
 use crate::{
     session::config::{
-        FixedAddressTranslatorConfig, LoadBalancingConfig, RetryPolicyKind, SessionOptions,
-        SslOptions, TlsVersion,
+        CompressionKind, FixedAddressTranslatorConfig, LoadBalancingConfig, RetryPolicyKind,
+        SessionOptions, SslOptions, TlsVersion,
     },
     types::type_helpers::SocketAddrWrapper,
 };
@@ -67,6 +67,7 @@ pub fn tests_check_client_option(options: SessionOptions, test_case: i32) {
                             }
                         )])
                     }),
+                    compression: Some(CompressionKind::Lz4),
                     client_routes_config: None
                 }
             )
@@ -92,6 +93,7 @@ pub fn tests_check_client_option(options: SessionOptions, test_case: i32) {
                     load_balancing_config: None,
                     retry_policy: None,
                     address_translator_config: None,
+                    compression: None,
                     client_routes_config: None
                 }
             )
@@ -117,6 +119,7 @@ pub fn tests_check_client_option(options: SessionOptions, test_case: i32) {
                     load_balancing_config: None,
                     retry_policy: None,
                     address_translator_config: None,
+                    compression: Some(CompressionKind::Snappy),
                     client_routes_config: None
                 }
             )

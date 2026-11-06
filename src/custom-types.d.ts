@@ -105,6 +105,7 @@ export interface SessionOptions {
   sslOptions?: SslOptions
   loadBalancingConfig?: LoadBalancingConfig
   retryPolicy?: RetryPolicyKind
+  compression?: CompressionKind
   clientRoutesConfig?: ClientRoutesConfig
 }
 
