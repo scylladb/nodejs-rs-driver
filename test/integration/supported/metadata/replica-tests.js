@@ -288,7 +288,7 @@ describe("Metadata replicas", function () {
         });
 
         describe("when passed incorrect parameters", function () {
-            it("should fallback to simple strategy for incorrect keyspace", async function () {
+            it("should return no replicas for incorrect keyspace", async function () {
                 const metadata = setupInfo.client.metadata;
                 const token = metadata.newToken(
                     Buffer.from(partitionKey, "utf8"),
@@ -300,7 +300,7 @@ describe("Metadata replicas", function () {
                     table,
                     token,
                 );
-                assert.lengthOf(replicas, 1);
+                assert.lengthOf(replicas, 0);
             });
         });
     });
