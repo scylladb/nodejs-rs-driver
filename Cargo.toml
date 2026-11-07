@@ -35,7 +35,7 @@ scylla-proxy = { version = "0.0.6", optional = true }
 tests = ["scylla-proxy"]
 
 [lints.rust]
-unsafe-op-in-unsafe-fn = "warn"
+unsafe_op_in_unsafe_fn = "warn"
 
 [build-dependencies]
 napi-build = "2.1.5"
