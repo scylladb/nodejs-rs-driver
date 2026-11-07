@@ -95,7 +95,8 @@ impl ClusterSnapshot {
     /// The replicas of `token` of the given table: each the shard of a node the partition lives
     /// on, paired with the very same JS `Host` object this snapshot's `HostMap` holds.
     ///
-    /// If passed keyspace is unknown, this returns no replicas.
+    /// If passed keyspace is unknown, this fails with
+    /// [`scylla::errors::ClusterStateTokenError`].
     ///
     /// If keyspace exists and uses tablets, but the table doesn't exist, this uses keyspace's real
     /// replication strategy over the vnode ring (tablets aren't considered since they can't be
@@ -108,8 +109,7 @@ impl ClusterSnapshot {
         token: Token,
     ) -> ConvertedResult<Vec<JsInstance<'env, ReplicaValue>>> {
         self.inner
-            .try_get_token_endpoints(keyspace, table, token)
-            .unwrap_or_default()
+            .try_get_token_endpoints(keyspace, table, token)?
             .into_iter()
             .map(|(node, shard)| {
                 let host = self
