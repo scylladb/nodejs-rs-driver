@@ -105,7 +105,7 @@ impl SessionWrapper {
     }
 
     /// Returns the replicas of the given token of the given table: each the shard of a node the
-    /// partition lives on, paired with that node. Throws if the keyspace or the table is not found.
+    /// partition lives on, paired with that node.
     ///
     /// The hosts are the very same JS objects `get_all_hosts` hands out, so a replica's node can
     /// be compared against a host of the cluster by identity.
