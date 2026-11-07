@@ -440,6 +440,7 @@ for (const replica of replicas) {
 - The token parameter can be a `Token` or a `TokenRange`.
 - Each replica includes both the host and its shard number.
 - The replica's `host` is the same object instance as `client.hosts.get(hostId)`, so you can compare by identity.
+- For a keyspace that doesn't exist, the method throws an error. `cassandra-driver` returns `null`.
 
 ### Schema
 

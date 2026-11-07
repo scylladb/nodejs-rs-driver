@@ -1026,6 +1026,7 @@ class Client extends events.EventEmitter {
      * this field is absolutely necessary. For vnodes, the table is irrelevant, so an
      * empty string can be passed.
      * @param {Token | TokenRange} token Token or TokenRange.
+     * @throws {Error} If the driver has no metadata for the keyspace.
      */
     getReplicas(
         keyspace: string,

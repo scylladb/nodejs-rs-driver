@@ -86,6 +86,7 @@ class Metadata {
      * @param {Token | TokenRange} token Token or TokenRange. If a range is passed, the
      * replicas are calculated for its end token.
      * @returns {Replica[]} The replicas.
+     * @throws {Error} If the driver has no metadata for the keyspace.
      */
     getReplicas(
         keyspaceName: string,
