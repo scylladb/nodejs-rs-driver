@@ -71,8 +71,9 @@ async function myTest(): Promise<void> {
     }
 
     rs = await client.execute("SELECT * FROM ks1.table1");
+    const asyncRows: AsyncIterable<Row> = rs;
     // Test async iteration
-    for await (const row of rs) {
+    for await (const row of asyncRows) {
         // Check is of type Row
         const r: Row = row;
     }
