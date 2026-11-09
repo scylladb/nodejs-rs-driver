@@ -4,6 +4,30 @@ This guide describes the differences between the ScyllaDB Node.js RS Driver
 and the Apache `cassandra-driver` (formerly the DataStax `cassandra-driver`, which was transferred to Apache),
 to help you migrate existing applications.
 
+## UUID v4 callback timing
+
+The Apache `cassandra-driver` generates UUID v4 bytes asynchronously with
+`crypto.randomBytes()` when a callback is supplied. This driver also delivers
+`Uuid.random(callback)` asynchronously, using `process.nextTick` for success and
+generation errors. Use the result inside the callback; use `Uuid.random()` without
+a callback when you need an immediate return value.
+
+This driver generates UUIDs from cached random bytes synchronously. A cache refill
+calls `crypto.randomFillSync()` and can block the calling thread even when a
+callback is supplied.
+
+## TimeUUID callback timing
+
+The Apache `cassandra-driver` can invoke TimeUUID callbacks synchronously when
+both IDs are supplied, including when validation fails. This driver's
+`TimeUuid.now(callback)` and `TimeUuid.fromDate(..., callback)` always invoke the
+callback asynchronously. Paths that do not require asynchronous randomness
+deliver their result or error on `process.nextTick`.
+
+Missing IDs still use asynchronous `crypto.randomFill()`. With both IDs supplied,
+the UUID is generated before the method returns; only callback delivery is deferred.
+Use the overload without a callback when you need an immediate return value.
+
 ## Shutdown behavior
 
 In the Apache `cassandra-driver`, you can explicitly close the connection to the database using `client.shutdown()`.
