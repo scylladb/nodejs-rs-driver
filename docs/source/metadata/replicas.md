@@ -4,8 +4,7 @@ Replica placement determines which nodes replicate each partition of data in the
 `client.metadata.getReplicas(keyspaceName, tableName, token)` returns the replicas for a given
 token (partition key), which is useful for token-aware routing and understanding data distribution.
 
-**Note:** This endpoint behaves incorrectly when passed a keyspace that doesn't exist – it walks the
-global ring from token and returns the first node it finds.
+**Note:** This endpoint throws an error when passed a keyspace that doesn't exist.
 
 ## Specifying a partition
 

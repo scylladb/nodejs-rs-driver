@@ -288,19 +288,23 @@ describe("Metadata replicas", function () {
         });
 
         describe("when passed incorrect parameters", function () {
-            it("should fallback to simple strategy for incorrect keyspace", async function () {
+            it("should throw for incorrect keyspace", async function () {
                 const metadata = setupInfo.client.metadata;
                 const token = metadata.newToken(
                     Buffer.from(partitionKey, "utf8"),
                     vnodeKeyspaces.get(nodeCount),
                     table,
                 );
-                let replicas = metadata.getReplicas(
-                    "non-existent-keyspace",
-                    table,
-                    token,
+                const error = assert.throws(
+                    () =>
+                        metadata.getReplicas(
+                            "non-existent-keyspace",
+                            table,
+                            token,
+                        ),
+                    /non-existent-keyspace/,
                 );
-                assert.lengthOf(replicas, 1);
+                assert.strictEqual(error.name, "ClusterStateTokenError");
             });
         });
     });

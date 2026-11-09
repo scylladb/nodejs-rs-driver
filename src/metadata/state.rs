@@ -95,14 +95,12 @@ impl ClusterSnapshot {
     /// The replicas of `token` of the given table: each the shard of a node the partition lives
     /// on, paired with the very same JS `Host` object this snapshot's `HostMap` holds.
     ///
-    /// If passed keyspace is unknown, this falls back to Strategy::SimpleStrategy with
-    /// replication_factor = 1, walks the global ring from token and returns the first node it finds.
+    /// If passed keyspace is unknown, this fails with
+    /// [`scylla::errors::ClusterStateTokenError`].
     ///
     /// If keyspace exists and uses tablets, but the table doesn't exist, this uses keyspace's real
     /// replication strategy over the vnode ring (tablets aren't considered since they can't be
     /// looked up).
-    ///
-    /// TODO: update this comment when Rust Driver is fixed – https://github.com/scylladb/scylla-rust-driver/issues/1908.
     pub(crate) fn replicas<'env>(
         &self,
         env: &'env Env,
@@ -111,7 +109,7 @@ impl ClusterSnapshot {
         token: Token,
     ) -> ConvertedResult<Vec<JsInstance<'env, ReplicaValue>>> {
         self.inner
-            .get_token_endpoints(keyspace, table, token)
+            .try_get_token_endpoints(keyspace, table, token)?
             .into_iter()
             .map(|(node, shard)| {
                 let host = self
