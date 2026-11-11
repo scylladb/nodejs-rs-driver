@@ -41,7 +41,7 @@ class BigDecimal {
     }
 
     /**
-     * Returns the BigDecimal representation of a buffer composed of the scale (int32BE) and the unsigned value (varint BE)
+     * Returns the BigDecimal representation of a buffer composed of the scale (int32BE) and the unscaled value (signed varint BE)
      * @throws {TypeError} When the buffer is too short for the scale.
      * @throws {TypeError} When the buffer has a scale, but its unscaled value is empty.
      */
@@ -64,7 +64,7 @@ class BigDecimal {
     }
 
     /**
-     * Returns a buffer representation composed of the scale as a BE int 32 and the unsigned value as a BE varint
+     * Returns a buffer representation composed of the scale as a BE int 32 and the unscaled value as a signed BE varint
      */
     static toBuffer(value: BigDecimal): Buffer {
         const unscaledValueBuffer = Integer.toBuffer(value.#intVal);
