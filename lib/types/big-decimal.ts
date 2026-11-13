@@ -1,5 +1,6 @@
 import Integer = require("./integer");
 import utils = require("../utils");
+import type { GrowableBuffer } from "../growable-buffer";
 
 /** @module types */
 
@@ -41,7 +42,7 @@ class BigDecimal {
     }
 
     /**
-     * Returns the BigDecimal representation of a buffer composed of the scale (int32BE) and the unsigned value (varint BE)
+     * Returns the BigDecimal representation of a buffer composed of the scale (int32BE) and the unscaled value (signed varint BE)
      * @throws {TypeError} When the buffer is too short for the scale.
      * @throws {TypeError} When the buffer has a scale, but its unscaled value is empty.
      */
@@ -64,16 +65,46 @@ class BigDecimal {
     }
 
     /**
-     * Returns a buffer representation composed of the scale as a BE int 32 and the unsigned value as a BE varint
+     * Returns a buffer representation composed of the scale as a BE int 32 and the unscaled value as a signed BE varint
      */
     static toBuffer(value: BigDecimal): Buffer {
-        const unscaledValueBuffer = Integer.toBuffer(value.#intVal);
-        const scaleBuffer = utils.allocBufferUnsafe(4);
-        scaleBuffer.writeInt32BE(value.#scale, 0);
-        return Buffer.concat(
-            [scaleBuffer, unscaledValueBuffer],
-            scaleBuffer.length + unscaledValueBuffer.length,
-        );
+        const buf = utils.allocBufferUnsafe(BigDecimal.#byteLength(value));
+        BigDecimal.#writeUnchecked(value, buf, 0);
+        return buf;
+    }
+
+    /**
+     * Writes the scale as a BE int 32 and the unscaled value as a signed BE varint, at `start` in `out`.
+     * @returns The offset after the bytes.
+     * @internal
+     * @ignore
+     */
+    static appendTo(
+        value: BigDecimal,
+        out: GrowableBuffer,
+        start: number,
+    ): number {
+        out.ensure(start, BigDecimal.#byteLength(value));
+        return BigDecimal.#writeUnchecked(value, out.buffer, start);
+    }
+
+    static #byteLength(value: BigDecimal): number {
+        return 4 + Integer.byteLength(value.#intVal);
+    }
+
+    /**
+     * Writes the scale and the unscaled value at `offset` in `buf`.
+     * It does not make room: `buf` must have room for them after `offset`.
+     * If it does not, Node throws a RangeError, or some bytes are lost without an error.
+     * @returns The offset after the bytes.
+     */
+    static #writeUnchecked(
+        value: BigDecimal,
+        buf: Buffer,
+        offset: number,
+    ): number {
+        buf.writeInt32BE(value.#scale, offset);
+        return Integer.writeUnchecked(value.#intVal, buf, offset + 4);
     }
 
     /**
