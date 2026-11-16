@@ -16,6 +16,7 @@ const Uuid = types.Uuid;
 const commonKs = helper.getRandomName("ks");
 const numericTests = require("./numeric-tests");
 const pagingTests = require("./paging-tests");
+const addBindMarkerTests = require("./bind-markers-tests");
 const { arbitraryValueToBigInt } = require("../../../lib/new-utils");
 const { RustResult } = require("../../../lib/types/results-wrapper");
 
@@ -41,6 +42,8 @@ describe("Client @SERVER_API", function () {
             ],
             ccmOptions: { yaml },
         });
+
+        addBindMarkerTests(setupInfo, commonKs);
 
         it("should execute a prepared query with parameters on all hosts", function (done) {
             const client = setupInfo.client;
