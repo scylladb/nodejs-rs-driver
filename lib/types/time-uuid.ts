@@ -270,6 +270,11 @@ type TimeUuidCallback = (err: Error | null, value?: TimeUuid) => void;
  * Implements the polymorphic argument handling shared by
  * {@link TimeUuid.fromDate} and {@link TimeUuid.now}, which both accept the
  * callback in place of any of the trailing arguments.
+ * Preserve upstream Cassandra input handling: empty IDs request randomness,
+ * Buffer dates wrap existing UUID bytes, and inputs are read after any async
+ * randomness completes. Callers may rely on these behaviors even though the
+ * public types do not describe all of them. Callback delivery is deliberately
+ * always asynchronous, including when no randomness is needed.
  * @private
  */
 function fromDateInternal(
@@ -291,8 +296,8 @@ function fromDateInternal(
     }
 
     const resolvedTicks = ticks as number | null | undefined;
-    let resolvedNodeId = nodeId as string | Buffer | null | undefined;
-    let resolvedClockId = clockId as string | Buffer | null | undefined;
+    const resolvedNodeId = nodeId as string | Buffer | null | undefined;
+    const resolvedClockId = clockId as string | Buffer | null | undefined;
 
     if (!callback) {
         return new TimeUuid(
@@ -304,47 +309,81 @@ function fromDateInternal(
     }
 
     const done = callback as unknown as TimeUuidCallback;
-    let synchronous = true;
-    const complete: TimeUuidCallback = (err, value) => {
-        if (synchronous) process.nextTick(done, err, value);
-        else done(err, value);
-    };
+    const bufferDate = date instanceof Buffer;
+    const nodeIdProvided = !!resolvedNodeId;
+    const clockIdProvided = !!resolvedClockId;
+    let nodeIdBuffer: Buffer | null;
+    let clockIdBuffer: Buffer | null;
     try {
-        utils.parallel(
-            [
-                (next: (err: Error | null, value?: Buffer) => void) =>
-                    getOrGenerateRandom(resolvedNodeId, 6, (err, buffer) =>
-                        next(err, (resolvedNodeId = buffer)),
-                    ),
-                (next: (err: Error | null, value?: Buffer) => void) =>
-                    getOrGenerateRandom(resolvedClockId, 2, (err, buffer) =>
-                        next(err, (resolvedClockId = buffer)),
-                    ),
-            ],
-            (err?: Error | null) => {
-                if (err) {
-                    return complete(err);
-                }
+        // The callback API has historically treated empty-string IDs as missing.
+        // A Buffer date already holds the full UUID, so its IDs are ignored.
+        // Keep supplied Buffers for completion-time validation: their lengths
+        // can change while asynchronous randomness is pending.
+        nodeIdBuffer =
+            nodeIdProvided && !bufferDate
+                ? resolvedNodeId instanceof Buffer
+                    ? resolvedNodeId
+                    : getProvidedNodeId(resolvedNodeId)
+                : null;
+        clockIdBuffer =
+            clockIdProvided && !bufferDate
+                ? resolvedClockId instanceof Buffer
+                    ? resolvedClockId
+                    : getProvidedClockId(resolvedClockId)
+                : null;
+    } catch (e) {
+        return process.nextTick(done, e as Error);
+    }
 
-                let timeUuid;
-                try {
-                    timeUuid = new TimeUuid(
-                        date,
-                        resolvedTicks,
-                        resolvedNodeId,
-                        resolvedClockId,
-                    );
-                } catch (e) {
-                    return complete(e as Error);
-                }
+    const hasNodeId = bufferDate ? nodeIdProvided : !!nodeIdBuffer;
+    const hasClockId = bufferDate ? clockIdProvided : !!clockIdBuffer;
+    // Keep input copying and timestamp generation immediate when no randomness
+    // is needed. Only callback delivery moves to the next tick.
+    const complete: TimeUuidCallback =
+        hasNodeId && hasClockId
+            ? (err, value) => process.nextTick(done, err, value)
+            : done;
+    const buffer = utils.allocBufferUnsafe(16);
+    const finish = (err?: Error | null): void => {
+        if (err) return complete(err);
+        let timeUuid: TimeUuid;
+        try {
+            // Validate the current lengths before copying; a supplied Buffer
+            // may have grown, shrunk, or been detached during asynchronous filling.
+            getProvidedNodeId(nodeIdBuffer);
+            getProvidedClockId(clockIdBuffer);
+            // Preserve the callback API's handling of mutable supplied IDs:
+            // copy them after asynchronous randomness is ready.
+            if (clockIdBuffer) clockIdBuffer.copy(buffer, 8);
+            if (nodeIdBuffer) nodeIdBuffer.copy(buffer, 10);
+            // The constructor also accepts a Buffer at runtime. Preserve that
+            // behavior when fromDate is called with one and a callback.
+            if (bufferDate) {
+                timeUuid = new TimeUuid(date);
+            } else {
+                // For the callback API, take the time after randomness is ready.
+                writeTimeAndUuidBits(
+                    buffer,
+                    getTimeWithTicks(date, resolvedTicks),
+                );
+                timeUuid = new TimeUuid(buffer);
+            }
+        } catch (e) {
+            return complete(e as Error);
+        }
+        complete(null, timeUuid);
+    };
 
-                complete(null, timeUuid);
-            },
-        );
+    if (hasNodeId && hasClockId) return finish();
+    const randomOffset = hasClockId ? 10 : 8;
+    const randomLength = hasClockId ? 6 : hasNodeId ? 2 : 8;
+    try {
+        // A Buffer date ignores these bytes. Retain the asynchronous crypto step
+        // and its errors for upstream compatibility; nextTick alone would change
+        // when completion can run and remove those errors.
+        crypto.randomFill(buffer, randomOffset, randomLength, finish);
     } catch (e) {
         process.nextTick(done, e as Error);
-    } finally {
-        synchronous = false;
     }
 }
 
@@ -436,17 +475,6 @@ function getTimeWithTicks(
         time: date.getTime(),
         ticks: getTicks(ticks),
     };
-}
-
-function getOrGenerateRandom(
-    id: string | Buffer | null | undefined,
-    length: number,
-    callback: (err: Error | null, buffer?: Buffer) => void,
-): void {
-    if (id) {
-        return callback(null, id as Buffer);
-    }
-    crypto.randomBytes(length, callback);
 }
 
 /**
