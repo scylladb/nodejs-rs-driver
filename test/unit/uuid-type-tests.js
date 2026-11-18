@@ -55,6 +55,112 @@ function withSnapshotCallbacks(path, check) {
     }
 }
 
+describe("shared UUID entropy cache", function () {
+    it("should consume distinct entropy bytes across both UUID types", function () {
+        const fill = sinon
+            .stub(crypto, "randomFillSync")
+            .callsFake((buffer) => {
+                for (let i = 0; i < buffer.length; i++) buffer[i] = i & 0xff;
+                return buffer;
+            });
+        try {
+            withFreshModule(
+                require.resolve("../../lib/types/uuid"),
+                (CachedUuid) => {
+                    const CachedTimeUuid = require("../../lib/types/time-uuid");
+                    const first = CachedUuid.random();
+                    const timed = CachedTimeUuid.now();
+                    assert.deepStrictEqual(
+                        timed.getClockId(),
+                        Buffer.from([0x90, 17]),
+                    );
+                    assert.deepStrictEqual(
+                        timed.getNodeId(),
+                        Buffer.from([18, 19, 20, 21, 22, 23]),
+                    );
+
+                    const expected = Buffer.from(
+                        Array.from({ length: 16 }, (_, i) => 24 + i),
+                    );
+                    expected[6] = (expected[6] & 0x0f) | 0x40;
+                    expected[8] = (expected[8] & 0x3f) | 0x80;
+                    const third = CachedUuid.random();
+                    assert.deepStrictEqual(third.buffer, expected);
+                    assert.strictEqual(fill.callCount, 1);
+                    assert.strictEqual(fill.firstCall.args[0].length, 3072);
+
+                    first.buffer.fill(0);
+                    assert.deepStrictEqual(third.buffer, expected);
+                    assert.deepStrictEqual(
+                        timed.getNodeId(),
+                        Buffer.from([18, 19, 20, 21, 22, 23]),
+                    );
+                },
+            );
+        } finally {
+            fill.restore();
+        }
+    });
+
+    it("should discard a partially failed refill before either type consumes more entropy", function () {
+        const failure = new Error("partial random fill failed");
+        let fills = 0;
+        const fill = sinon
+            .stub(crypto, "randomFillSync")
+            .callsFake((buffer) => {
+                buffer.fill(++fills * 0x11);
+                if (fills === 2) throw failure;
+                return buffer;
+            });
+        try {
+            withFreshModule(
+                require.resolve("../../lib/types/uuid"),
+                (CachedUuid) => {
+                    const CachedTimeUuid = require("../../lib/types/time-uuid");
+                    const first = CachedTimeUuid.now("host01");
+                    for (let i = 0; i < 191; i++) CachedUuid.random();
+                    assert.strictEqual(fill.callCount, 1);
+                    // Fourteen bytes remain: a v4 UUID needs a refill, but a clock ID fits.
+                    assert.throws(
+                        () => CachedUuid.random(),
+                        (err) => err === failure,
+                    );
+                    const recovered = CachedTimeUuid.now("host01");
+                    assert.strictEqual(fill.callCount, 3);
+                    assert.strictEqual(recovered.getClockId()[1], 0x33);
+                    assert.strictEqual(first.getClockId()[1], 0x11);
+                },
+            );
+        } finally {
+            fill.restore();
+        }
+    });
+
+    it("should reset the shared cache once per snapshot phase for both types", function () {
+        withSnapshotCallbacks(
+            require.resolve("../../lib/types/uuid"),
+            (CachedUuid, { serialize, deserialize, fill }) => {
+                const CachedTimeUuid = require("../../lib/types/time-uuid");
+                const first = CachedUuid.random();
+                const timed = CachedTimeUuid.now();
+                const firstBytes = Buffer.from(first.buffer);
+                const timedBytes = Buffer.from(timed.buffer);
+                assert.strictEqual(fill.callCount, 1);
+                serialize.firstCall.args[0]();
+                CachedTimeUuid.now();
+                CachedUuid.random();
+                assert.strictEqual(fill.callCount, 2);
+                deserialize.firstCall.args[0]();
+                CachedUuid.random();
+                CachedTimeUuid.now();
+                assert.strictEqual(fill.callCount, 3);
+                assert.deepStrictEqual(first.buffer, firstBytes);
+                assert.deepStrictEqual(timed.buffer, timedBytes);
+            },
+        );
+    });
+});
+
 describe("Uuid", function () {
     describe("constructor", function () {
         it("should validate the Buffer length", function () {
@@ -464,6 +570,117 @@ describe("TimeUuid", function () {
             assert.throws(
                 () => new TimeUuid(null, null, "", "02"),
                 /Node identifier must have 6 bytes/,
+            );
+        });
+        it("should cache random bytes for missing IDs", function () {
+            const timeUuidPath = require.resolve("../../lib/types/time-uuid");
+            const fill = sinon.spy(crypto, "randomFillSync");
+            try {
+                withFreshModule(timeUuidPath, (CachedTimeUuid) => {
+                    const value = new CachedTimeUuid();
+                    assert.strictEqual(fill.callCount, 1);
+                    assert.strictEqual(fill.firstCall.args[0].length, 3072);
+                    assert.strictEqual(value.buffer[6] >> 4, 1);
+                    assert.strictEqual(value.buffer[8] >> 6, 2);
+
+                    const withNode = new CachedTimeUuid(null, null, "host01");
+                    assert.strictEqual(fill.callCount, 1);
+                    assert.strictEqual(withNode.getNodeIdString(), "host01");
+
+                    const withClock = new CachedTimeUuid(
+                        null,
+                        null,
+                        null,
+                        "02",
+                    );
+                    assert.strictEqual(fill.callCount, 1);
+                    assert.strictEqual(
+                        withClock.getClockId()[1],
+                        "2".charCodeAt(0),
+                    );
+
+                    new CachedTimeUuid(null, null, "host01", "02");
+                    assert.strictEqual(fill.callCount, 1);
+
+                    for (let i = 0; i < 382; i++) new CachedTimeUuid();
+                    assert.strictEqual(fill.callCount, 1);
+                    new CachedTimeUuid();
+                    assert.strictEqual(fill.callCount, 2);
+                });
+            } finally {
+                fill.restore();
+            }
+        });
+        it("should refill before an uneven cache remainder is reused", function () {
+            const timeUuidPath = require.resolve("../../lib/types/time-uuid");
+            const fill = sinon.stub(crypto, "randomFillSync");
+            fill.callsFake((buffer) =>
+                buffer.fill(fill.callCount === 1 ? 0x11 : 0x22),
+            );
+            try {
+                withFreshModule(timeUuidPath, (CachedTimeUuid) => {
+                    const clockOnly = CachedTimeUuid.now("host01");
+                    assert.strictEqual(clockOnly.getClockId()[1], 0x11);
+                    for (let i = 0; i < 383; i++) {
+                        const value = CachedTimeUuid.now();
+                        assert.deepStrictEqual(
+                            value.getNodeId(),
+                            Buffer.alloc(6, 0x11),
+                        );
+                    }
+                    assert.strictEqual(fill.callCount, 1);
+                    const afterRefill = CachedTimeUuid.now();
+                    assert.strictEqual(fill.callCount, 2);
+                    assert.deepStrictEqual(
+                        afterRefill.getNodeId(),
+                        Buffer.alloc(6, 0x22),
+                    );
+                    assert.strictEqual(afterRefill.getClockId()[1], 0x22);
+                });
+            } finally {
+                fill.restore();
+            }
+        });
+        it("should retry a failed TimeUuid cache refill", function () {
+            const timeUuidPath = require.resolve("../../lib/types/time-uuid");
+            const originalFill = crypto.randomFillSync;
+            const failure = new Error("random fill failed");
+            let fills = 0;
+            const fill = sinon
+                .stub(crypto, "randomFillSync")
+                .callsFake((buffer) => {
+                    if (fills++ === 0) throw failure;
+                    return originalFill(buffer);
+                });
+            try {
+                withFreshModule(timeUuidPath, (CachedTimeUuid) => {
+                    assert.throws(
+                        () => new CachedTimeUuid(),
+                        (err) => err === failure,
+                    );
+                    const value = new CachedTimeUuid();
+                    assert.strictEqual(fill.callCount, 2);
+                    assert.strictEqual(value.buffer[6] >> 4, 1);
+                    assert.strictEqual(value.buffer[8] >> 6, 2);
+                });
+            } finally {
+                fill.restore();
+            }
+        });
+        it("should discard TimeUuid entropy before a startup snapshot", function () {
+            const timeUuidPath = require.resolve("../../lib/types/time-uuid");
+            withSnapshotCallbacks(
+                timeUuidPath,
+                (CachedTimeUuid, { serialize, deserialize, fill }) => {
+                    CachedTimeUuid.now();
+                    assert.strictEqual(fill.callCount, 1);
+                    serialize.firstCall.args[0]();
+                    CachedTimeUuid.now();
+                    assert.strictEqual(fill.callCount, 2);
+                    deserialize.firstCall.args[0]();
+                    CachedTimeUuid.now();
+                    assert.strictEqual(fill.callCount, 3);
+                },
             );
         });
         it("should generate based on the parameters", function () {
