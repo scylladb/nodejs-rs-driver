@@ -24,7 +24,7 @@ both IDs are supplied, including when validation fails. This driver's
 callback asynchronously. Paths that do not require asynchronous randomness
 deliver their result or error on `process.nextTick`.
 
-Missing IDs still use asynchronous `crypto.randomBytes()`. With both IDs supplied,
+Missing IDs still use asynchronous `crypto.randomFill()`. With both IDs supplied,
 the UUID is generated before the method returns; only callback delivery is deferred.
 Use the overload without a callback when you need an immediate return value.
 

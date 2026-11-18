@@ -847,6 +847,32 @@ describe("TimeUuid", function () {
             it("should support callback as second parameter", (done) =>
                 TimeUuid.fromDate(date, assertTimeUuidFunction(1, done)));
 
+            it("should preserve a Buffer date with a callback", (done) => {
+                const source = TimeUuid.now().getBuffer();
+                TimeUuid.fromDate(source, (err, value) => {
+                    try {
+                        assert.ifError(err);
+                        assert.deepStrictEqual(value.getBuffer(), source);
+                        done();
+                    } catch (e) {
+                        done(e);
+                    }
+                });
+            });
+
+            it("should ignore IDs supplied with a Buffer date", (done) => {
+                const source = TimeUuid.now().getBuffer();
+                TimeUuid.fromDate(source, 0, "bad", "x", (err, value) => {
+                    try {
+                        assert.ifError(err);
+                        assert.deepStrictEqual(value.getBuffer(), source);
+                        done();
+                    } catch (e) {
+                        done(e);
+                    }
+                });
+            });
+
             it("should support callback as third parameter", (done) =>
                 TimeUuid.fromDate(
                     date,
@@ -942,6 +968,271 @@ describe("TimeUuid", function () {
 
             it("should support callback as first parameter", (done) =>
                 TimeUuid.now(assertTimeUuidFunction(0, done)));
+
+            it("should fill both random IDs in one async request", (done) => {
+                const fill = sandbox.spy(crypto, "randomFill");
+                TimeUuid.now((err, value) => {
+                    try {
+                        assert.ifError(err);
+                        assert.strictEqual(fill.callCount, 1);
+                        assert.strictEqual(
+                            fill.firstCall.args[0],
+                            value.buffer,
+                        );
+                        assert.deepStrictEqual(
+                            fill.firstCall.args.slice(1, 3),
+                            [8, 8],
+                        );
+                        assert.strictEqual(value.buffer[6] >> 4, 1);
+                        assert.strictEqual(value.buffer[8] >> 6, 2);
+                        done();
+                    } catch (e) {
+                        done(e);
+                    }
+                });
+            });
+
+            it("should fill only the missing node ID", (done) => {
+                const fill = sandbox.spy(crypto, "randomFill");
+                TimeUuid.fromDate(new Date(0), 0, null, "02", (err, value) => {
+                    try {
+                        assert.ifError(err);
+                        assert.strictEqual(fill.callCount, 1);
+                        assert.strictEqual(
+                            fill.firstCall.args[0],
+                            value.buffer,
+                        );
+                        assert.deepStrictEqual(
+                            fill.firstCall.args.slice(1, 3),
+                            [10, 6],
+                        );
+                        assert.strictEqual(
+                            value.getClockId()[1],
+                            "2".charCodeAt(0),
+                        );
+                        done();
+                    } catch (e) {
+                        done(e);
+                    }
+                });
+            });
+
+            it("should fill only the missing clock ID", (done) => {
+                const fill = sandbox.spy(crypto, "randomFill");
+                TimeUuid.now("host01", (err, value) => {
+                    try {
+                        assert.ifError(err);
+                        assert.strictEqual(fill.callCount, 1);
+                        assert.strictEqual(
+                            fill.firstCall.args[0],
+                            value.buffer,
+                        );
+                        assert.deepStrictEqual(
+                            fill.firstCall.args.slice(1, 3),
+                            [8, 2],
+                        );
+                        assert.strictEqual(value.getNodeIdString(), "host01");
+                        done();
+                    } catch (e) {
+                        done(e);
+                    }
+                });
+            });
+
+            it("should read supplied ID buffers when asynchronous generation finishes", async () => {
+                const nodeId = Buffer.from("host01");
+                const withNode = new Promise((resolve, reject) => {
+                    TimeUuid.now(nodeId, (err, value) =>
+                        err ? reject(err) : resolve(value),
+                    );
+                });
+                nodeId.write("host02");
+                assert.strictEqual(
+                    (await withNode).getNodeIdString(),
+                    "host02",
+                );
+
+                const clockId = Buffer.from("02");
+                const withClock = new Promise((resolve, reject) => {
+                    TimeUuid.now(null, clockId, (err, value) =>
+                        err ? reject(err) : resolve(value),
+                    );
+                });
+                clockId.write("03");
+                assert.strictEqual(
+                    (await withClock).getClockId()[1],
+                    "3".charCodeAt(0),
+                );
+            });
+
+            it("should validate supplied ID buffers at asynchronous completion", async () => {
+                for (const factory of ["now", "fromDate"]) {
+                    for (const [kind, length] of [
+                        ["Node", 6],
+                        ["Clock", 2],
+                    ]) {
+                        for (const change of ["detach", "grow", "shrink"]) {
+                            const storage = new ArrayBuffer(
+                                change === "grow" ? length - 1 : length,
+                                { maxByteLength: length },
+                            );
+                            const id = Buffer.from(storage).fill(1);
+                            let returned = false;
+                            let calls = 0;
+                            const completed = new Promise((resolve) => {
+                                const callback = (err, value) => {
+                                    calls++;
+                                    resolve({ err, value, returned });
+                                };
+                                const ids =
+                                    kind === "Node" ? [id, null] : [null, id];
+                                if (factory === "now") {
+                                    TimeUuid.now(...ids, callback);
+                                } else {
+                                    TimeUuid.fromDate(
+                                        new Date(),
+                                        0,
+                                        ...ids,
+                                        callback,
+                                    );
+                                }
+                            });
+                            if (change === "detach") {
+                                structuredClone(storage, {
+                                    transfer: [storage],
+                                });
+                            } else {
+                                storage.resize(
+                                    change === "grow" ? length : length - 1,
+                                );
+                            }
+                            returned = true;
+                            const result = await completed;
+                            assert.strictEqual(result.returned, true);
+                            // Node 20 keeps a fixed-length Buffer view when
+                            // the backing ArrayBuffer grows.
+                            if (id.length === length) {
+                                assert.ifError(result.err);
+                                assert.ok(result.value instanceof TimeUuid);
+                                const expected = Buffer.from(id);
+                                if (kind === "Clock")
+                                    expected[0] = (expected[0] & 0x3f) | 0x80;
+                                assert.deepStrictEqual(
+                                    kind === "Node"
+                                        ? result.value.getNodeId()
+                                        : result.value.getClockId(),
+                                    expected,
+                                );
+                            } else {
+                                assert.ok(result.err instanceof Error);
+                                assert.strictEqual(
+                                    result.err.message,
+                                    `${kind} identifier must have ${length} bytes`,
+                                );
+                                assert.strictEqual(result.value, undefined);
+                            }
+                            assert.strictEqual(calls, 1);
+                        }
+                    }
+                }
+            });
+
+            it("should read the current time after asynchronous randomness completes", async () => {
+                const clock = sandbox.useFakeTimers({
+                    now: 1000,
+                    toFake: ["Date"],
+                });
+                let finish;
+                sandbox
+                    .stub(crypto, "randomFill")
+                    .callsFake((buffer, offset, length, callback) => {
+                        buffer.fill(0, offset, offset + length);
+                        finish = () => callback(null, buffer);
+                    });
+                const completed = new Promise((resolve, reject) => {
+                    TimeUuid.now((err, value) =>
+                        err ? reject(err) : resolve(value),
+                    );
+                });
+                clock.setSystemTime(2000);
+                finish();
+                assert.strictEqual((await completed).getDate().getTime(), 2000);
+            });
+
+            it("should read a supplied Date after asynchronous randomness completes", async () => {
+                const date = new Date(1000);
+                let finish;
+                sandbox
+                    .stub(crypto, "randomFill")
+                    .callsFake((buffer, offset, length, callback) => {
+                        buffer.fill(0, offset, offset + length);
+                        finish = () => callback(null, buffer);
+                    });
+                const completed = new Promise((resolve, reject) => {
+                    TimeUuid.fromDate(date, 123, (err, value) =>
+                        err ? reject(err) : resolve(value),
+                    );
+                });
+                date.setTime(2000);
+                finish();
+                const value = await completed;
+                assert.strictEqual(value.getDate().getTime(), 2000);
+                assert.strictEqual(value.getDatePrecision().ticks, 123);
+            });
+
+            it("should treat either empty-string ID as missing in both callback factories", async () => {
+                const fill = sandbox.spy(crypto, "randomFill");
+                for (const method of ["now", "fromDate"]) {
+                    for (const [nodeId, clockId, offset, length] of [
+                        ["", "02", 10, 6],
+                        ["host01", "", 8, 2],
+                        ["", "", 8, 8],
+                    ]) {
+                        fill.resetHistory();
+                        const value = await new Promise((resolve, reject) => {
+                            const args = [
+                                nodeId,
+                                clockId,
+                                (err, value) =>
+                                    err ? reject(err) : resolve(value),
+                            ];
+                            if (method === "fromDate")
+                                args.unshift(new Date(0), 0);
+                            TimeUuid[method](...args);
+                        });
+                        assert.strictEqual(fill.callCount, 1);
+                        assert.deepStrictEqual(
+                            fill.firstCall.args.slice(1, 3),
+                            [offset, length],
+                        );
+                        if (nodeId)
+                            assert.strictEqual(value.getNodeIdString(), nodeId);
+                        if (clockId)
+                            assert.strictEqual(
+                                value.getClockId()[1],
+                                clockId.charCodeAt(1),
+                            );
+                    }
+                }
+            });
+
+            it("should pass random-fill failures to the callback", (done) => {
+                const failure = new Error("random fill failed");
+                sandbox
+                    .stub(crypto, "randomFill")
+                    .callsFake((buffer, offset, length, callback) => {
+                        process.nextTick(() => callback(failure));
+                    });
+                TimeUuid.now((err, value) => {
+                    try {
+                        assert.strictEqual(err, failure);
+                        assert.strictEqual(value, undefined);
+                        done();
+                    } catch (e) {
+                        done(e);
+                    }
+                });
+            });
 
             it("should report an invalid ID asynchronously once", (done) => {
                 let returned = false;
@@ -1084,7 +1375,7 @@ describe("TimeUuid", function () {
 
             it("should defer errors thrown while starting asynchronous random filling", async () => {
                 const failure = new Error("random fill dispatch failed");
-                sandbox.stub(crypto, "randomBytes").throws(failure);
+                sandbox.stub(crypto, "randomFill").throws(failure);
                 let returned = false;
                 let calls = 0;
                 await new Promise((resolve, reject) => {
