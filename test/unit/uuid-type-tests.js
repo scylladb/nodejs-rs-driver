@@ -1,6 +1,9 @@
 "use strict";
 
 const assert = require("assert");
+const { execFileSync } = require("child_process");
+const crypto = require("crypto");
+const sinon = require("sinon");
 const helper = require("../test-helper");
 const utils = require("../../lib/utils");
 const Uuid = require("../../lib/types").Uuid;
@@ -179,6 +182,90 @@ describe("Uuid", function () {
 
     describe("random(cb)", function () {
         this.timeout(20000);
+        it("should defer successful callbacks", async function () {
+            const CachedUuid = Uuid;
+            for (let i = 0; i < 2; i++) {
+                let returned = false;
+                const completed = new Promise((resolve, reject) => {
+                    const result = CachedUuid.random((err, value) => {
+                        try {
+                            assert.ifError(err);
+                            assert.strictEqual(returned, true);
+                            helper.assertInstanceOf(value, CachedUuid);
+                            resolve();
+                        } catch (e) {
+                            reject(e);
+                        }
+                    });
+                    assert.strictEqual(result, undefined);
+                    returned = true;
+                });
+                await completed;
+            }
+        });
+        it("should report generation errors asynchronously and retry on the next call", async function () {
+            const CachedUuid = Uuid;
+            const failure = new Error("random fill failed");
+            const rust = require("../../index");
+            const originalFill = rust.getRandomUuidV4;
+            let fills = 0;
+            const fill = sinon.stub(rust, "getRandomUuidV4").callsFake(() => {
+                if (fills++ === 0) throw failure;
+                return originalFill();
+            });
+            try {
+                let returned = false;
+                const completed = new Promise((resolve, reject) => {
+                    CachedUuid.random((err, value) => {
+                        try {
+                            assert.strictEqual(returned, true);
+                            assert.strictEqual(err, failure);
+                            assert.strictEqual(value, undefined);
+                            resolve();
+                        } catch (e) {
+                            reject(e);
+                        }
+                    });
+                    returned = true;
+                });
+                await completed;
+                assert.strictEqual(fill.callCount, 1);
+                const recovered = CachedUuid.random();
+                assert.strictEqual(recovered.buffer[6] >> 4, 4);
+                assert.strictEqual(recovered.buffer[8] >> 6, 2);
+                assert.strictEqual(fill.callCount, 2);
+            } finally {
+                fill.restore();
+            }
+        });
+        it("should not invoke a throwing callback twice", function () {
+            const output = execFileSync(
+                process.execPath,
+                [
+                    "-e",
+                    `
+                    const assert = require("assert");
+                    const Uuid = require(process.argv[1]);
+                    const failure = new Error("callback failure");
+                    let calls = 0;
+                    process.once("uncaughtException", (err) => {
+                        assert.strictEqual(err, failure);
+                        setImmediate(() => {
+                            assert.strictEqual(calls, 1);
+                            process.stdout.write("once");
+                        });
+                    });
+                    Uuid.random(() => {
+                        calls++;
+                        throw failure;
+                    });
+                    `,
+                    require.resolve("../../lib/types/uuid"),
+                ],
+                { encoding: "utf8", timeout: 5000 },
+            );
+            assert.strictEqual(output, "once");
+        });
         it("should return a Uuid instance", function (done) {
             Uuid.random(function (err, uuid) {
                 helper.assertInstanceOf(uuid, Uuid);
@@ -486,6 +573,9 @@ describe("TimeUuid", function () {
             const startDate = new Date();
             const nodeId = "aHost1";
             const clockId = "ab";
+            const sandbox = sinon.createSandbox();
+
+            afterEach(() => sandbox.restore());
 
             function assertTimeUuidFunction(portions, callback) {
                 return function assertTimeUuid(err, id) {
@@ -511,6 +601,228 @@ describe("TimeUuid", function () {
 
             it("should support callback as first parameter", (done) =>
                 TimeUuid.now(assertTimeUuidFunction(0, done)));
+
+            it("should report an invalid ID asynchronously once", (done) => {
+                let returned = false;
+                let calls = 0;
+                TimeUuid.now(Buffer.alloc(5), (err, value) => {
+                    calls++;
+                    try {
+                        assert.strictEqual(returned, true);
+                        assert.strictEqual(calls, 1);
+                        assert.match(
+                            err.message,
+                            /Node identifier must have 6 bytes/,
+                        );
+                        assert.strictEqual(value, undefined);
+                        done();
+                    } catch (e) {
+                        done(e);
+                    }
+                });
+                returned = true;
+            });
+
+            it("should report an invalid clock ID asynchronously when the node ID is missing", (done) => {
+                let returned = false;
+                TimeUuid.now(null, Buffer.alloc(1), (err, value) => {
+                    try {
+                        assert.strictEqual(returned, true);
+                        assert.match(
+                            err.message,
+                            /Clock identifier must have 2 bytes/,
+                        );
+                        assert.strictEqual(value, undefined);
+                        done();
+                    } catch (e) {
+                        done(e);
+                    }
+                });
+                returned = true;
+            });
+
+            it("should report validation errors asynchronously with any supplied IDs", async () => {
+                const cases = [
+                    [Buffer.alloc(5), null, /Node identifier/],
+                    [Buffer.alloc(5), "02", /Node identifier/],
+                    [null, Buffer.alloc(1), /Clock identifier/],
+                    ["host01", Buffer.alloc(1), /Clock identifier/],
+                ];
+                for (const method of ["now", "fromDate"]) {
+                    for (const [nodeId, clockId, message] of cases) {
+                        let returned = false;
+                        let calls = 0;
+                        await new Promise((resolve, reject) => {
+                            const callback = (err, value) => {
+                                calls++;
+                                try {
+                                    assert.strictEqual(returned, true);
+                                    assert.match(err.message, message);
+                                    assert.strictEqual(value, undefined);
+                                    resolve();
+                                } catch (e) {
+                                    reject(e);
+                                }
+                            };
+                            const args = [nodeId, clockId, callback];
+                            if (method === "fromDate")
+                                args.unshift(new Date(0), 0);
+                            assert.strictEqual(
+                                TimeUuid[method](...args),
+                                undefined,
+                            );
+                            returned = true;
+                        });
+                        await new Promise((resolve) => setImmediate(resolve));
+                        assert.strictEqual(calls, 1);
+                    }
+                }
+            });
+
+            it("should complete asynchronously with any supplied IDs without synchronous random filling", async () => {
+                const syncFill = sandbox.spy(crypto, "randomFillSync");
+                for (const method of ["now", "fromDate"]) {
+                    for (const [nodeId, clockId] of [
+                        [null, null],
+                        ["host01", null],
+                        [null, "02"],
+                        ["host01", "02"],
+                    ]) {
+                        let returned = false;
+                        await new Promise((resolve, reject) => {
+                            const callback = (err, value) => {
+                                try {
+                                    assert.strictEqual(returned, true);
+                                    assert.ifError(err);
+                                    helper.assertInstanceOf(value, TimeUuid);
+                                    resolve();
+                                } catch (e) {
+                                    reject(e);
+                                }
+                            };
+                            const args = [nodeId, clockId, callback];
+                            if (method === "fromDate")
+                                args.unshift(new Date(0), 0);
+                            assert.strictEqual(
+                                TimeUuid[method](...args),
+                                undefined,
+                            );
+                            returned = true;
+                        });
+                    }
+                }
+                assert.strictEqual(syncFill.callCount, 0);
+            });
+
+            it("should copy supplied IDs and date before deferring the callback when no randomness is needed", async () => {
+                const fill = sandbox.spy(crypto, "randomFill");
+                const date = new Date(0);
+                const nodeId = Buffer.from("host01");
+                const clockId = Buffer.from("02");
+                const completed = new Promise((resolve, reject) => {
+                    TimeUuid.fromDate(
+                        date,
+                        0,
+                        nodeId,
+                        clockId,
+                        (err, value) => {
+                            if (err) return reject(err);
+                            resolve(value);
+                        },
+                    );
+                });
+                date.setTime(1000);
+                nodeId.write("host02");
+                clockId.write("03");
+                const value = await completed;
+                assert.strictEqual(value.getDate().getTime(), 0);
+                assert.strictEqual(value.getNodeIdString(), "host01");
+                assert.strictEqual(value.getClockId()[1], "2".charCodeAt(0));
+                assert.strictEqual(fill.callCount, 0);
+            });
+
+            it("should defer errors thrown while starting asynchronous random filling", async () => {
+                const failure = new Error("random fill dispatch failed");
+                sandbox.stub(crypto, "randomBytes").throws(failure);
+                let returned = false;
+                let calls = 0;
+                await new Promise((resolve, reject) => {
+                    TimeUuid.now((err, value) => {
+                        calls++;
+                        try {
+                            assert.strictEqual(returned, true);
+                            assert.strictEqual(err, failure);
+                            assert.strictEqual(value, undefined);
+                            resolve();
+                        } catch (e) {
+                            reject(e);
+                        }
+                    });
+                    returned = true;
+                });
+                await new Promise((resolve) => setImmediate(resolve));
+                assert.strictEqual(calls, 1);
+            });
+
+            it("should defer construction errors when both IDs are supplied", async () => {
+                let returned = false;
+                await new Promise((resolve, reject) => {
+                    TimeUuid.fromDate(
+                        Buffer.alloc(15),
+                        0,
+                        "host01",
+                        "02",
+                        (err, value) => {
+                            try {
+                                assert.strictEqual(returned, true);
+                                assert.match(
+                                    err.message,
+                                    /Buffer for v1 uuid not valid/,
+                                );
+                                assert.strictEqual(value, undefined);
+                                resolve();
+                            } catch (e) {
+                                reject(e);
+                            }
+                        },
+                    );
+                    returned = true;
+                });
+            });
+
+            it("should not invoke a throwing callback twice with supplied or random IDs", () => {
+                for (const fixed of [false, true]) {
+                    const output = execFileSync(
+                        process.execPath,
+                        [
+                            "-e",
+                            `
+                        const assert = require("assert");
+                        const TimeUuid = require(process.argv[1]);
+                        const failure = new Error("callback failure");
+                        let calls = 0;
+                        process.once("uncaughtException", (err) => {
+                            assert.strictEqual(err, failure);
+                            setImmediate(() => {
+                                assert.strictEqual(calls, 1);
+                                process.stdout.write("once");
+                            });
+                        });
+                        const callback = () => { calls++; throw failure; };
+                        if (process.argv[2] === "true") {
+                            TimeUuid.now("host01", "02", callback);
+                        } else {
+                            TimeUuid.now(callback);
+                        }
+                    `,
+                            require.resolve("../../lib/types/time-uuid"),
+                            String(fixed),
+                        ],
+                        { encoding: "utf8", timeout: 5000 },
+                    );
+                    assert.strictEqual(output, "once");
+                }
+            });
 
             it("should support callback as second parameter", (done) =>
                 TimeUuid.now(nodeId, assertTimeUuidFunction(1, done)));
