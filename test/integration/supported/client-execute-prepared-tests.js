@@ -1619,7 +1619,8 @@ describe("Client @SERVER_API", function () {
             const options = { prepare: true };
 
             before(async function () {
-                await setupInfo.client.execute(
+                await helper.ddl(
+                    setupInfo.client,
                     `CREATE TABLE ${table} (id int, ck frozen<list<int>>, ` +
                         "l list<int>, s set<int>, " +
                         "fl frozen<list<int>>, fs frozen<set<int>>, fm frozen<map<text, int>>, " +
@@ -1692,7 +1693,7 @@ describe("Client @SERVER_API", function () {
                 const query =
                     "CREATE TABLE tbl_smallints " +
                     "(id uuid PRIMARY KEY, smallint_sample smallint, tinyint_sample tinyint, text_sample text)";
-                setupInfo.client.execute(query, done);
+                helper.ddl(setupInfo.client, query).then(() => done(), done);
             });
             vit(
                 "2.2",
@@ -1759,7 +1760,7 @@ describe("Client @SERVER_API", function () {
                 const query =
                     "CREATE TABLE tbl_datetimes " +
                     "(id uuid PRIMARY KEY, date_sample date, time_sample time, text_sample text)";
-                setupInfo.client.execute(query, done);
+                helper.ddl(setupInfo.client, query).then(() => done(), done);
             });
             vit(
                 "2.2",
@@ -2347,7 +2348,10 @@ describe("Client @SERVER_API", function () {
                 ];
                 utils.eachSeries(
                     queries,
-                    setupInfo.client.execute.bind(setupInfo.client),
+                    (query, next) =>
+                        helper
+                            .ddl(setupInfo.client, query)
+                            .then(() => next(), next),
                     helper.waitCallback(2000, done),
                 );
             });
