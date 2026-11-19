@@ -53,19 +53,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
-name = "bigdecimal"
-version = "0.4.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d6867f1565b3aad85681f1015055b087fcfd840d6aeee6eee7f2da317603695"
-dependencies = [
- "autocfg",
- "libm",
- "num-bigint 0.4.8",
- "num-integer",
- "num-traits",
-]
-
-[[package]]
 name = "bitflags"
 version = "2.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -445,12 +432,6 @@ dependencies = [
  "cfg-if",
  "windows-link",
 ]
-
-[[package]]
-name = "libm"
-version = "0.2.16"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
 name = "lock_api"
@@ -833,7 +814,7 @@ dependencies = [
  "openssl",
  "rand",
  "rand_pcg",
- "scylla-cql 3.0.0",
+ "scylla-cql",
  "scylla-cql-core",
  "serde",
  "serde_json",
@@ -844,26 +825,6 @@ dependencies = [
  "tokio-openssl",
  "tracing",
  "uuid",
-]
-
-[[package]]
-name = "scylla-cql"
-version = "1.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "86d9ae8618f958fedff008180f2237f6c9fe51a8e1e3496910fb3bb7f4b12816"
-dependencies = [
- "byteorder",
- "bytes",
- "chrono",
- "itertools",
- "lz4_flex",
- "scylla-cql-core",
- "snap",
- "stable_deref_trait",
- "thiserror",
- "tokio",
- "uuid",
- "yoke",
 ]
 
 [[package]]
@@ -915,22 +876,18 @@ dependencies = [
 
 [[package]]
 name = "scylla-proxy"
-version = "0.0.6"
+version = "0.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8be84bd8cc8634cd2a705865d5672f5a9f6a2b611953d2b20c843e3cd6cd8c70"
+checksum = "73db3806e8d8128d0747b76c356e75049d4c0da3b876ed4f5e857391f9434052"
 dependencies = [
- "bigdecimal",
- "byteorder",
  "bytes",
- "chrono",
  "futures",
- "num-bigint 0.3.3",
+ "itertools",
  "rand",
- "scylla-cql 1.8.0",
+ "scylla-cql",
  "thiserror",
  "tokio",
  "tracing",
- "uuid",
 ]
 
 [[package]]

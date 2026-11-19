@@ -28,7 +28,7 @@ openssl = "0.10.70"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["registry"] }
 
-scylla-proxy = { version = "0.0.6", optional = true }
+scylla-proxy = { version = "0.0.9", optional = true }
 
 [features]
 # Enables proxy helpers used by test helpers.
