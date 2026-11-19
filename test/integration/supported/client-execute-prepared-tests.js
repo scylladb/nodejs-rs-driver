@@ -1619,7 +1619,8 @@ describe("Client @SERVER_API", function () {
             const options = { prepare: true };
 
             before(async function () {
-                await setupInfo.client.execute(
+                await helper.ddl(
+                    setupInfo.client,
                     `CREATE TABLE ${table} (id int, ck frozen<list<int>>, ` +
                         "l list<int>, s set<int>, " +
                         "fl frozen<list<int>>, fs frozen<set<int>>, fm frozen<map<text, int>>, " +
@@ -1692,7 +1693,7 @@ describe("Client @SERVER_API", function () {
                 const query =
                     "CREATE TABLE tbl_smallints " +
                     "(id uuid PRIMARY KEY, smallint_sample smallint, tinyint_sample tinyint, text_sample text)";
-                setupInfo.client.execute(query, done);
+                helper.ddl(setupInfo.client, query).then(() => done(), done);
             });
             vit(
                 "2.2",
@@ -1759,7 +1760,7 @@ describe("Client @SERVER_API", function () {
                 const query =
                     "CREATE TABLE tbl_datetimes " +
                     "(id uuid PRIMARY KEY, date_sample date, time_sample time, text_sample text)";
-                setupInfo.client.execute(query, done);
+                helper.ddl(setupInfo.client, query).then(() => done(), done);
             });
             vit(
                 "2.2",
@@ -2347,7 +2348,10 @@ describe("Client @SERVER_API", function () {
                 ];
                 utils.eachSeries(
                     queries,
-                    setupInfo.client.execute.bind(setupInfo.client),
+                    (query, next) =>
+                        helper
+                            .ddl(setupInfo.client, query)
+                            .then(() => next(), next),
                     helper.waitCallback(2000, done),
                 );
             });
@@ -2433,17 +2437,18 @@ describe("Client @SERVER_API", function () {
             const client = setupInfo.client;
             const client2 = newInstance({ keyspace: commonKs });
             let table;
-            beforeEach((done) => {
+            beforeEach(async () => {
                 table = commonKs + "." + helper.getRandomName("table");
-                const queries = [
+                await helper.ddl(
+                    client,
                     util.format(
                         "CREATE TABLE %s (k int, a int, c int, primary key (k, a))",
                         table,
                     ),
-                ];
+                );
 
                 for (let i = 0; i < 10; i++) {
-                    queries.push(
+                    await client.execute(
                         util.format(
                             "INSERT INTO %s (k, a, c) values (%d,%d,%d)",
                             table,
@@ -2453,7 +2458,6 @@ describe("Client @SERVER_API", function () {
                         ),
                     );
                 }
-                utils.eachSeries(queries, client.execute.bind(client), done);
             });
             after((done) => client2.shutdown(done));
             it("should be resilient to schema change between queries", (done) => {
@@ -2500,12 +2504,10 @@ describe("Client @SERVER_API", function () {
                                 },
                             );
                         },
-                        (next) => {
-                            client.execute(
-                                util.format("alter table %s add b int", table),
-                                next,
-                            );
-                        },
+                        helper.toDdlTask(
+                            client,
+                            util.format("alter table %s add b int", table),
+                        ),
                         (seriesNext) => {
                             // execute query 3 times, so reprepare is done on each node.
                             utils.times(
@@ -2600,9 +2602,13 @@ describe("Client @SERVER_API", function () {
                     // Recreate the table instead of ALTER ... TYPE:
                     // Cassandra no longer supports altering column types,
                     // and ScyllaDB accepts only compatible changes (for example, int -> blob).
-                    await client.execute(util.format("DROP TABLE %s", table));
+                    await helper.ddl(
+                        client,
+                        util.format("DROP TABLE %s", table),
+                    );
                     await client.rustClient.waitForSchemaAgreement();
-                    await client.execute(
+                    await helper.ddl(
+                        client,
                         util.format(
                             "CREATE TABLE %s (k int, a int, c text, primary key (k, a))",
                             table,
@@ -2644,7 +2650,8 @@ describe("Client @SERVER_API", function () {
                     ]);
                     await client.execute(query, [0, 0], { prepare: true });
 
-                    await client.execute(
+                    await helper.ddl(
+                        client,
                         util.format("ALTER TABLE %s ADD b text", table),
                     );
                     await client.rustClient.waitForSchemaAgreement();

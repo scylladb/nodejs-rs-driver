@@ -36,10 +36,12 @@ describe("Metadata token ring", function () {
 
         before(async function () {
             const client = setupInfo.client;
-            await client.execute(
+            await helper.ddl(
+                client,
                 `CREATE TABLE ${setupInfo.keyspace}.${singleColumnTable} (k text PRIMARY KEY)`,
             );
-            await client.execute(
+            await helper.ddl(
+                client,
                 `CREATE TABLE ${setupInfo.keyspace}.${compositeTable}` +
                     " (a text, b text, PRIMARY KEY ((a, b)))",
             );

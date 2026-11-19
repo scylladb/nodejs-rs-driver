@@ -6,6 +6,10 @@ const helper = require("../../../test-helper");
 describe("Metadata#checkSchemaAgreement()", function () {
     this.timeout(120000);
 
+    // The DDL statements below use client.execute() on purpose.
+    // helper.ddl() pins a statement to the first node, and that node
+    // can be the stopped one. These tests need a normal coordinator choice.
+
     const setupInfo = helper.setup(3);
     const client = setupInfo.client;
 
