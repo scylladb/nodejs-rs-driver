@@ -1118,7 +1118,6 @@ describe("Client @SERVER_API", function () {
         it("should support buffer as input for any data type", () => {
             const buffer4 = utils.allocBufferFromArray([0, 0, 0, 1]);
             const buffer8 = utils.allocBuffer(8);
-            const buffer16 = types.Uuid.random().getBuffer();
 
             const client = setupInfo.client;
             const insertQuery =
@@ -1126,20 +1125,22 @@ describe("Client @SERVER_API", function () {
                 " (id, text_sample, int_sample, bigint_sample, float_sample, double_sample, inet_sample, list_sample2)" +
                 " VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
             const selectQuery = `SELECT * FROM ${table} WHERE id = ?`;
-            const params = [
-                buffer16,
-                buffer4,
-                buffer4,
-                buffer8,
-                buffer4,
-                buffer8,
-                buffer4,
-                [buffer4],
-            ];
-
             return Promise.all(
-                [false, true].map((prepare) =>
-                    client
+                [false, true].map((prepare) => {
+                    // Each execution mode needs its own row to avoid concurrent list writes.
+                    const buffer16 = types.Uuid.random().getBuffer();
+                    const params = [
+                        buffer16,
+                        buffer4,
+                        buffer4,
+                        buffer8,
+                        buffer4,
+                        buffer8,
+                        buffer4,
+                        [buffer4],
+                    ];
+
+                    return client
                         .execute(insertQuery, params, { prepare })
                         .then(() => client.execute(selectQuery, [buffer16]))
                         .then((rs) => {
@@ -1168,8 +1169,8 @@ describe("Client @SERVER_API", function () {
                                 "0.0.0.1",
                             );
                             assert.deepStrictEqual(row["list_sample2"], [1]);
-                        }),
-                ),
+                        });
+                }),
             );
         });
 
