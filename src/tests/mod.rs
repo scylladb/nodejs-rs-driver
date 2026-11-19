@@ -1,3 +1,4 @@
+pub mod bind_marker_proxy_tests;
 pub mod casync_tests;
 pub mod client_routes_proxy_tests;
 pub mod client_routes_tests;
