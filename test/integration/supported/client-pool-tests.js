@@ -663,6 +663,9 @@ describe("Client", function () {
         });
 
         it("should wait for schema agreement before calling back", function (done) {
+            // The DDL statements use client.execute() on purpose.
+            // This test checks that execute() waits for schema agreement.
+            // helper.ddl() would change the path under test.
             const queries = [
                 "CREATE KEYSPACE ks1 WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor' : 3};",
                 "CREATE TABLE ks1.tbl1 (id uuid PRIMARY KEY, value text)",
