@@ -424,10 +424,16 @@ jobs:
           get_published_integrity() {
             local package_spec=$1
             local view_output
+            local lookup_deadline=$((SECONDS + ${2:-0}))
 
-            if view_output=$(npm view "$package_spec" dist.integrity --json); then
+            if view_output=$(timeout --signal=KILL "${2:-0}" npm view "$package_spec" dist.integrity --json); then
               node -e 'process.stdout.write(JSON.parse(process.argv[1]))' "$view_output"
               return $?
+            else
+              local view_status=$?
+              if [[ "$view_status" == "137" && "${2:-0}" -gt 0 && "$SECONDS" -ge "$lookup_deadline" ]]; then
+                return 124
+              fi
             fi
             if [[ "$view_output" == *'"code": "E404"'* ]]; then
               return 4
@@ -474,11 +480,18 @@ jobs:
             # npm can accept a package several minutes before registry reads see it.
             local verification_deadline=$((SECONDS + 600))
             while true; do
+              local remaining=$((verification_deadline - SECONDS))
+              if [[ "$remaining" -le 0 ]]; then
+                break
+              fi
               published_integrity=
-              if published_integrity=$(get_published_integrity "$package_spec"); then
+              if published_integrity=$(get_published_integrity "$package_spec" "$remaining"); then
                 :
               else
                 lookup_status=$?
+                if [[ "$lookup_status" == "124" ]]; then
+                  break
+                fi
                 if [[ "$lookup_status" != "4" ]]; then
                   exit "$lookup_status"
                 fi
@@ -490,7 +503,7 @@ jobs:
                 echo "::error::$package_spec was published with unexpected package integrity."
                 exit 1
               fi
-              local remaining=$((verification_deadline - SECONDS))
+              remaining=$((verification_deadline - SECONDS))
               if [[ "$remaining" -le 0 ]]; then
                 break
               fi
