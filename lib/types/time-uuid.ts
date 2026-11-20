@@ -98,7 +98,8 @@ class TimeUuid extends Uuid {
      * If not provided a random clockId will be generated.
      * @param callback An optional callback to be invoked with the error as first parameter and the created
      * `TimeUuid` as second parameter. When a callback is provided, the random portions of the
-     * `TimeUuid` instance are created asynchronously.
+     * `TimeUuid` instance are created asynchronously. The callback always runs after this
+     * method returns, including when both IDs are supplied or validation fails.
      *
      *  When nodeId and/or clockId portions are not provided, this method will generate them using
      *  `crypto.randomBytes()`. As it's possible that `crypto.randomBytes()` might block, it's
@@ -168,7 +169,8 @@ class TimeUuid extends Uuid {
      * If not provided a random clockId will be generated.
      * @param callback An optional callback to be invoked with the error as first parameter and the created
      * `TimeUuid` as second parameter. When a callback is provided, the random portions of the
-     * `TimeUuid` instance are created asynchronously.
+     * `TimeUuid` instance are created asynchronously. The callback always runs after this
+     * method returns, including when both IDs are supplied or validation fails.
      *
      * When nodeId and/or clockId portions are not provided, this method will generate them using
      * `crypto.randomBytes()`. As it's possible that `crypto.randomBytes()` might block, it's
@@ -304,37 +306,52 @@ function fromDateInternal(
     }
 
     const done = callback as unknown as TimeUuidCallback;
-    utils.parallel(
-        [
-            (next: (err: Error | null, value?: Buffer) => void) =>
-                getOrGenerateRandom(resolvedNodeId, 6, (err, buffer) =>
-                    next(err, (resolvedNodeId = buffer)),
-                ),
-            (next: (err: Error | null, value?: Buffer) => void) =>
-                getOrGenerateRandom(resolvedClockId, 2, (err, buffer) =>
-                    next(err, (resolvedClockId = buffer)),
-                ),
-        ],
-        (err?: Error | null) => {
-            if (err) {
-                return done(err);
-            }
+    let synchronous = true;
+    let completed = false;
+    const complete: TimeUuidCallback = (err, value) => {
+        if (completed) return;
+        completed = true;
+        if (synchronous) process.nextTick(done, err, value);
+        else done(err, value);
+    };
+    try {
+        utils.parallel(
+            [
+                (next: (err: Error | null, value?: Buffer) => void) =>
+                    getOrGenerateRandom(resolvedNodeId, 6, (err, buffer) =>
+                        next(err, (resolvedNodeId = buffer)),
+                    ),
+                (next: (err: Error | null, value?: Buffer) => void) =>
+                    getOrGenerateRandom(resolvedClockId, 2, (err, buffer) =>
+                        next(err, (resolvedClockId = buffer)),
+                    ),
+            ],
+            (err?: Error | null) => {
+                if (err) {
+                    return complete(err);
+                }
 
-            let timeUuid;
-            try {
-                timeUuid = new TimeUuid(
-                    date,
-                    resolvedTicks,
-                    resolvedNodeId,
-                    resolvedClockId,
-                );
-            } catch (e) {
-                return done(e as Error);
-            }
+                let timeUuid;
+                try {
+                    timeUuid = new TimeUuid(
+                        date,
+                        resolvedTicks,
+                        resolvedNodeId,
+                        resolvedClockId,
+                    );
+                } catch (e) {
+                    return complete(e as Error);
+                }
 
-            done(null, timeUuid);
-        },
-    );
+                complete(null, timeUuid);
+            },
+        );
+    } catch (e) {
+        if (completed) throw e;
+        complete(e as Error);
+    } finally {
+        synchronous = false;
+    }
 }
 
 function writeTime(buffer: Buffer, time: number, ticks: number): void {
