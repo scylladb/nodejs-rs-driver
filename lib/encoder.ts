@@ -19,7 +19,7 @@ import { throwNotSupported } from "./new-utils";
 import { FrameReader } from "./reader";
 import { ColumnInfo, UdtInfo } from "./types/cql-utils";
 import type { ExecutionOptions } from "./execution-options";
-import { GrowableBuffer, MAX_RETAINED_FRAME_SIZE } from "./growable-buffer";
+import { GrowableBuffer } from "./growable-buffer";
 
 const uuidRegex =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -38,7 +38,7 @@ const UNSET_CELL_LENGTH = -2;
  * for the upper bound, when both of these are true:
  * - The upper bound is at most this size. This limits the room that the string does not use.
  *   `encode` returns a view of its buffer, so that room stays allocated with the view.
- * - The upper bound ends at most at {@link MAX_RETAINED_FRAME_SIZE}.
+ * - The upper bound ends at most at {@link GrowableBuffer.maxRetainedSize}.
  *   Else, the buffer could grow past that size for bytes that the encoder does not write.
  *   Then FrameWriter would allocate a new buffer for each such request.
  * Else, the encoder measures the string, and makes room for the exact byte length.
@@ -49,8 +49,9 @@ const UNSET_CELL_LENGTH = -2;
  * - 10,000 ASCII characters at the start of a buffer of 4 KiB: the upper bound is
  *   30,000 bytes, more than this size. The encoder measures the string: 10,000 bytes.
  *   The buffer grows to 16 KiB, not to 32 KiB.
- * - 13 texts of 5,000 ASCII characters in one frame of 65,054 bytes: the 12th text starts
- *   at byte 55,050. Its upper bound, 15,000 bytes, ends at byte 70,050, after 64 KiB.
+ * - 13 texts of 5,000 ASCII characters in one frame of 65,054 bytes, with the default
+ *   maxRetainedSize of 64 KiB: the 12th text starts at byte 55,050.
+ *   Its upper bound, 15,000 bytes, ends at byte 70,050, after 64 KiB.
  *   The encoder measures the string: 5,000 bytes. The buffer stays at 64 KiB.
  *   With the upper bound, it would grow to 128 KiB, and FrameWriter would not keep it.
  */
@@ -1083,7 +1084,7 @@ class EncoderMembers {
         if (start + maxBytes > out.buffer.length) {
             const byUpperBound =
                 maxBytes <= MAX_STRING_GROWTH_BY_UPPER_BOUND &&
-                start + maxBytes <= MAX_RETAINED_FRAME_SIZE;
+                start + maxBytes <= out.maxRetainedSize;
             out.ensure(
                 start,
                 byUpperBound ? maxBytes : Buffer.byteLength(value, encoding),

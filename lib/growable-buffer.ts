@@ -1,16 +1,23 @@
 /**
- * A FrameWriter keeps its buffer between frames up to this size.
- * After a larger frame, it starts again with a small buffer.
- * Thus, a writer must not make a buffer grow past this size for bytes that it does not write.
+ * The size of the first buffer of a FrameWriter.
+ * It must not be 0, because {@link GrowableBuffer.ensure} doubles the size.
+ * {@link DEFAULT_MAX_RETAINED_FRAME_SIZE} must be this size times a power of 2. See its comment.
+ * @internal
+ * @ignore
+ */
+export const INITIAL_FRAME_SIZE = 4096;
+
+/**
+ * The default of {@link GrowableBuffer.maxRetainedSize}.
  *
- * This size must be `INITIAL_FRAME_SIZE` of `frame-writer.ts` times a power of 2.
+ * This size must be {@link INITIAL_FRAME_SIZE} times a power of 2.
  * Then one of the doubled sizes of a FrameWriter buffer is exactly this size.
  * The string encoders need this. They make room for an upper bound of the byte length
  * only when it ends at most at this size. Thus, the buffer grows to at most this size.
  * @internal
  * @ignore
  */
-export const MAX_RETAINED_FRAME_SIZE = 64 * 1024;
+export const DEFAULT_MAX_RETAINED_FRAME_SIZE = 64 * 1024;
 
 /**
  * A buffer that grows when a write needs more room.
@@ -23,10 +30,23 @@ export const MAX_RETAINED_FRAME_SIZE = 64 * 1024;
  */
 export class GrowableBuffer {
     buffer: Buffer;
+    /**
+     * The owner of this buffer keeps it between uses up to this size.
+     * After a use that grows it past this size, the owner starts again with a small buffer.
+     * Thus, a writer should avoid making the buffer grow past this size for bytes that it does not write.
+     */
+    readonly maxRetainedSize: number;
 
-    /** @param size The size of the first buffer. */
-    constructor(size: number) {
+    /**
+     * @param size The size of the first buffer.
+     * @param maxRetainedSize See {@link maxRetainedSize}.
+     */
+    constructor(
+        size: number,
+        maxRetainedSize: number = DEFAULT_MAX_RETAINED_FRAME_SIZE,
+    ) {
         this.buffer = Buffer.allocUnsafe(size);
+        this.maxRetainedSize = maxRetainedSize;
     }
 
     /**
