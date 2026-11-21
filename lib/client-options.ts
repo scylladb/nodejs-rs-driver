@@ -353,19 +353,16 @@ export interface ClientOptions {
     sslOptions?: SslOptions;
     /**
      * Encoding options.
-     * [TODO: Add support for this field]
      */
     encoding?: {
         /**
          * Map constructor to use for Cassandra map<k,v> type encoding and decoding.
          * If not set, it will default to Javascript Object with map keys as property names.
-         * [TODO: Add support for this field]
          */
         map?: Function;
         /**
          * Set constructor to use for Cassandra set<k> type encoding and decoding.
          * If not set, it will default to Javascript Array.
-         * [TODO: Add support for this field]
          */
         set?: Function;
         /**
