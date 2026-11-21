@@ -3,7 +3,11 @@ import type { CqlValue } from "../main";
 import Encoder = require("./encoder");
 import errors = require("./errors");
 import type { ColumnInfo } from "./types/cql-utils";
-import { GrowableBuffer, INITIAL_FRAME_SIZE } from "./growable-buffer";
+import {
+    DEFAULT_MAX_RETAINED_FRAME_SIZE,
+    GrowableBuffer,
+    INITIAL_FRAME_SIZE,
+} from "./growable-buffer";
 
 /** Largest value count that the `[short]` count of a frame can hold. */
 const MAX_FRAME_VALUES = 0xffff;
@@ -13,7 +17,8 @@ const MAX_FRAME_VALUES = 0xffff;
  * `[u16 count]`, then for each value `[i32 length][bytes]`.
  * Length -1 is null, and -2 is unset.
  *
- * The writer reuses its buffer between frames.
+ * The writer reuses its buffer between frames, up to a size that the constructor takes.
+ * After a larger frame, it starts again with a small buffer.
  * A frame is a view of that buffer, valid until the next frame of the same writer.
  * Thus, pass a frame to Rust immediately.
  * This is safe, because Rust copies the frame before the native call returns.
@@ -32,8 +37,24 @@ const MAX_FRAME_VALUES = 0xffff;
  * A nested frame on the same writer throws, because it would overwrite the frame in progress.
  */
 export class FrameWriter {
-    #out = new GrowableBuffer(INITIAL_FRAME_SIZE);
+    readonly #maxRetainedSize: number;
+    #out: GrowableBuffer;
     #busy = false;
+
+    /**
+     * @param maxRetainedSize The writer keeps its buffer between frames up to this size.
+     * It must be at least {@link INITIAL_FRAME_SIZE}. Else, the writer drops even its first buffer
+     * after each frame.
+     */
+    constructor(maxRetainedSize: number = DEFAULT_MAX_RETAINED_FRAME_SIZE) {
+        this.#maxRetainedSize = maxRetainedSize;
+        this.#out = this.#newBuffer();
+    }
+
+    /** Makes a small buffer with the cap of this writer. */
+    #newBuffer(): GrowableBuffer {
+        return new GrowableBuffer(INITIAL_FRAME_SIZE, this.#maxRetainedSize);
+    }
 
     /**
      * Encodes all params of a statement into one frame.
@@ -135,8 +156,8 @@ export class FrameWriter {
         } finally {
             this.#busy = false;
             // The returned frame keeps a large buffer alive until Rust has copied it.
-            if (this.#out.buffer.length > this.#out.maxRetainedSize) {
-                this.#out = new GrowableBuffer(INITIAL_FRAME_SIZE);
+            if (this.#out.buffer.length > this.#maxRetainedSize) {
+                this.#out = this.#newBuffer();
             }
         }
     }

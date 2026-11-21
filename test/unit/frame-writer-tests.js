@@ -211,6 +211,47 @@ describe("FrameWriter", function () {
         assert.strictEqual(second.buffer.byteLength, 65536);
     });
 
+    describe("with a given cap", function () {
+        const blob = { code: types.dataTypes.blob };
+        // A frame of one blob of 80000 bytes has 80006 bytes.
+        const params = (writer, size) =>
+            writer.params([blob], [Buffer.alloc(size)], encoder);
+
+        it("keeps its buffer up to a cap that is not 4096 times a power of 2", function () {
+            const writer = new FrameWriter(100000);
+            const first = params(writer, 80000);
+            const second = params(writer, 80000);
+            assert.strictEqual(second.buffer, first.buffer);
+            assert.strictEqual(second.buffer.byteLength, 100000);
+        });
+
+        it("keeps the cap after it drops a buffer that is too large", function () {
+            const writer = new FrameWriter(100000);
+            const big = params(writer, 150000);
+            const small = writer.params([int], [5], encoder);
+            assert.strictEqual(small.buffer.byteLength, 4096);
+            const first = params(writer, 80000);
+            const second = params(writer, 80000);
+            assert.strictEqual(second.buffer, first.buffer);
+            assert.strictEqual(second.buffer.byteLength, 100000);
+            assert.lengthOf(decodeFrame(big)[0], 300000);
+        });
+
+        it("keeps its buffer when the upper bound of a string ends after a cap below 64 KiB", function () {
+            // The upper bounds of the 12th and 13th texts end past the cap, at 21050 and 22554.
+            // If encodeString used the default cap of 64 KiB, it would make room for them,
+            // and the buffer would grow to 40000.
+            const writer = new FrameWriter(20000);
+            const columns = new Array(13).fill(text);
+            const values = new Array(13).fill("a".repeat(1500));
+            const first = writer.params(columns, values, encoder);
+            assert.lengthOf(first, 19554);
+            const second = writer.params(columns, values, encoder);
+            assert.strictEqual(second.buffer, first.buffer);
+            assert.strictEqual(second.buffer.byteLength, 20000);
+        });
+    });
+
     it("keeps the frames of two writers apart", function () {
         const a = new FrameWriter().params([int], [1], encoder);
         const b = new FrameWriter().params([int], [2], encoder);

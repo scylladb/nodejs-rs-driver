@@ -42,25 +42,34 @@ type PreparedHandleWithBindMetadata = [
 export class RustSession {
     readonly #inner: rust.ExternalObject<rust.SessionWrapper>;
     readonly #encoder: Encoder;
-    readonly #frameWriter = new FrameWriter();
+    readonly #frameWriter: FrameWriter;
 
     private constructor(
         inner: rust.ExternalObject<rust.SessionWrapper>,
         encoder: Encoder,
+        frameWriter: FrameWriter,
     ) {
         this.#inner = inner;
         this.#encoder = encoder;
+        this.#frameWriter = frameWriter;
     }
 
     /**
      * Creates a session based on the provided session options.
      * @param encoder Encodes the values of the requests of this session.
+     * @param maxRetainedParamsBufferSize The session keeps the buffer of its values frames
+     * up to this size. See the client option `encoding.maxRetainedParamsBufferSize`.
      */
     static async create(
         options: rust.SessionOptions,
         encoder: Encoder,
+        maxRetainedParamsBufferSize?: number,
     ): Promise<RustSession> {
-        return new RustSession(await rust.createSession(options), encoder);
+        return new RustSession(
+            await rust.createSession(options),
+            encoder,
+            new FrameWriter(maxRetainedParamsBufferSize),
+        );
     }
 
     /** The native session, for the Rust functions that take it as an argument. */

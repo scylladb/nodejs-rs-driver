@@ -392,6 +392,7 @@ class Client extends events.EventEmitter {
             this.rustClient = await RustSession.create(
                 this.rustOptions,
                 this.#encoder,
+                this.options.encoding?.maxRetainedParamsBufferSize,
             );
             this.metadata = new metadataModule.Metadata(this.rustClient);
         } catch (err) {

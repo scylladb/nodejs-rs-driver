@@ -182,3 +182,53 @@ describe("values frames of concurrent requests", function () {
         }
     });
 });
+
+describe("encoding.maxRetainedParamsBufferSize", function () {
+    /**
+     * Connects a real Client with mock native functions.
+     * The mock records the ArrayBuffer of each values frame.
+     */
+    async function connectClient(options) {
+        const frames = [];
+        Object.assign(native, {
+            createSession: async () => ({}),
+            sessionQueryUnpaged: (session, query, frame) => {
+                frames.push(frame.buffer);
+                return later({ rows: [] });
+            },
+        });
+        const client = new Client({
+            contactPoints: ["127.0.0.1"],
+            logLevel: "off",
+            ...options,
+        });
+        await client.connect();
+        return { client, frames };
+    }
+
+    /** Sends params of 80006 bytes: more than 64 KiB, but less than 100000 bytes. */
+    const insertBlob = (client) =>
+        client.execute("INSERT INTO t (b) VALUES (?)", [Buffer.alloc(80000)], {
+            prepare: false,
+            paged: false,
+            hints: ["blob"],
+        });
+
+    it("lets the Client keep a buffer larger than 64 KiB", async function () {
+        const { client, frames } = await connectClient({
+            encoding: { maxRetainedParamsBufferSize: 100000 },
+        });
+        await insertBlob(client);
+        await insertBlob(client);
+        assert.strictEqual(frames.length, 2);
+        assert.strictEqual(frames[0], frames[1]);
+    });
+
+    it("makes the Client drop a buffer larger than 64 KiB by default", async function () {
+        const { client, frames } = await connectClient({});
+        await insertBlob(client);
+        await insertBlob(client);
+        assert.strictEqual(frames.length, 2);
+        assert.notStrictEqual(frames[0], frames[1]);
+    });
+});
