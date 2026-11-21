@@ -5,6 +5,7 @@ const { runInNewContext } = require("node:vm");
 const Encoder = require("../../lib/encoder");
 const types = require("../../lib/types");
 const { FrameWriter } = require("../../lib/frame-writer");
+const { GrowableBuffer } = require("../../lib/growable-buffer");
 
 // One writer for the tests that do not test the writer itself.
 const writer = new FrameWriter();
@@ -215,5 +216,34 @@ describe("FrameWriter", function () {
         const b = new FrameWriter().params([int], [2], encoder);
         assert.deepEqual(decodeFrame(a), ["00000001"]);
         assert.deepEqual(decodeFrame(b), ["00000002"]);
+    });
+});
+
+describe("GrowableBuffer.ensure", function () {
+    // 100000 is not 4096 times a power of 2, so doubling alone never gives it.
+    it("grows to the cap, not past it, when the bytes fit in the cap", function () {
+        const out = new GrowableBuffer(4096, 100000);
+        out.ensure(0, 70000);
+        assert.strictEqual(out.buffer.length, 100000);
+    });
+
+    it("grows to exactly the cap when the bytes end at the cap", function () {
+        const out = new GrowableBuffer(4096, 100000);
+        out.ensure(99990, 10);
+        assert.strictEqual(out.buffer.length, 100000);
+    });
+
+    it("doubles past the cap when the bytes do not fit in the cap", function () {
+        const out = new GrowableBuffer(4096, 100000);
+        out.ensure(0, 100001);
+        assert.strictEqual(out.buffer.length, 131072);
+    });
+
+    it("keeps the bytes before the offset when it grows to the cap", function () {
+        const out = new GrowableBuffer(4, 10);
+        out.buffer.write("abcd", 0, "latin1");
+        out.ensure(4, 5);
+        assert.strictEqual(out.buffer.length, 10);
+        assert.strictEqual(out.buffer.toString("latin1", 0, 4), "abcd");
     });
 });
