@@ -100,6 +100,8 @@ class Client extends events.EventEmitter {
     rustClient: RustSession | undefined;
     #encoder: Encoder;
     #loggingId: number | undefined;
+    // The warning of #logParamsBufferHint appears once for each Client.
+    #paramsBufferHintLogged = false;
     // Map insertion order determines which prepared handle is evicted first.
     #preparedCache = new Map<string, PreparedInfo>();
     // Share one preparation among concurrent calls for the same statement.
@@ -392,7 +394,16 @@ class Client extends events.EventEmitter {
             this.rustClient = await RustSession.create(
                 this.rustOptions,
                 this.#encoder,
-                this.options.encoding?.maxRetainedParamsBufferSize,
+                {
+                    maxRetainedParamsBufferSize:
+                        this.options.encoding?.maxRetainedParamsBufferSize,
+                    // No closure in this method may use `this`. Native code keeps the logging
+                    // callback above alive, and V8 gives that callback one context with all
+                    // closures of this method. A closure that uses `this` puts `this` into
+                    // that context, so the Client could never be garbage-collected.
+                    // For this reason, this callback is a bound method, not an arrow function.
+                    onOversizeParams: this.#logParamsBufferHint.bind(this),
+                },
             );
             this.metadata = new metadataModule.Metadata(this.rustClient);
         } catch (err) {
@@ -1092,6 +1103,29 @@ class Client extends events.EventEmitter {
         this.isShuttingDown = true;
 
         this.#closeLogging();
+    }
+
+    /**
+     * Logs a warning the first time the params of a request need more than
+     * `encoding.maxRetainedParamsBufferSize`. Then the user knows which option to set.
+     * @param paramsLength The size of the params, in bytes.
+     */
+    #logParamsBufferHint(paramsLength: number): void {
+        if (this.#paramsBufferHintLogged) {
+            return;
+        }
+        this.#paramsBufferHintLogged = true;
+        const option = "encoding.maxRetainedParamsBufferSize";
+        const cap = this.options.encoding?.maxRetainedParamsBufferSize;
+        this.log(
+            "warning",
+            `The params of a request need ${paramsLength} bytes, more than ${option} (${cap} bytes). ` +
+                `For each such request, the driver allocates a new buffer. ` +
+                `If such requests are frequent, set ${option} to at least their size. ` +
+                `The driver logs this warning once for each Client.`,
+            undefined,
+            undefined,
+        );
     }
 
     #closeLogging() {

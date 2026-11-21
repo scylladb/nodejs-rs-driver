@@ -448,6 +448,7 @@ export interface ClientOptions {
          * a larger buffer for this request only. After the request, it frees that buffer,
          * and starts again with a buffer of 4 KiB. So each such request allocates new memory.
          * If such requests are frequent, this costs time and garbage collection.
+         * The driver logs a warning the first time this occurs for each {@link Client}.
          *
          * Set this option to at least the size of the params of your frequent large requests.
          * The size of the params is approximately:

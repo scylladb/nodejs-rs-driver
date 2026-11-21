@@ -250,6 +250,45 @@ describe("FrameWriter", function () {
             assert.strictEqual(second.buffer, first.buffer);
             assert.strictEqual(second.buffer.byteLength, 20000);
         });
+
+        it("calls onOversizeParams with the length of each params frame larger than the cap", function () {
+            const lengths = [];
+            const writer = new FrameWriter(100000, (length) =>
+                lengths.push(length),
+            );
+            params(writer, 80000);
+            params(writer, 150000);
+            params(writer, 80000);
+            params(writer, 120000);
+            assert.deepEqual(lengths, [150006, 120006]);
+        });
+
+        it("calls onOversizeParams for a large batch frame, but not for a large frame of buffers", function () {
+            const lengths = [];
+            const writer = new FrameWriter(100000, (length) =>
+                lengths.push(length),
+            );
+            // In the driver, a frame of buffers holds a partition key for a token computation,
+            // not the params of a request.
+            writer.buffers([Buffer.alloc(150000)]);
+            writer.batch([[blob]], [[Buffer.alloc(120000)]], encoder);
+            assert.deepEqual(lengths, [120008]);
+        });
+
+        it("lets onOversizeParams write a frame, and keeps the large frame", function () {
+            let small;
+            const writer = new FrameWriter(100000, () => {
+                small = writer.params([int], [7], encoder);
+            });
+            const big = writer.params(
+                [blob],
+                [Buffer.alloc(150000, 1)],
+                encoder,
+            );
+            assert.deepEqual(decodeFrame(small), ["00000007"]);
+            assert.strictEqual(big.readInt32BE(2), 150000);
+            assert.isTrue(big.subarray(6).every((byte) => byte === 1));
+        });
     });
 
     it("keeps the frames of two writers apart", function () {

@@ -38,6 +38,7 @@ const MAX_FRAME_VALUES = 0xffff;
  */
 export class FrameWriter {
     readonly #maxRetainedSize: number;
+    readonly #onOversizeParams: ((frameLength: number) => void) | undefined;
     #out: GrowableBuffer;
     #busy = false;
 
@@ -45,9 +46,19 @@ export class FrameWriter {
      * @param maxRetainedSize The writer keeps its buffer between frames up to this size.
      * It must be at least {@link INITIAL_FRAME_SIZE}. Else, the writer drops even its first buffer
      * after each frame.
+     * @param onOversizeParams The writer calls it after each frame of {@link params} or {@link batch}
+     * that is larger than `maxRetainedSize`, with the length of the frame.
+     * At that time, the writer has a new buffer.
+     * Thus, the callback can even write a frame, and that frame does not overwrite the large frame.
+     * The writer does not call it for frames of {@link buffers}: in the driver, these frames hold
+     * the partition key of a token computation, which sends no request.
      */
-    constructor(maxRetainedSize: number = DEFAULT_MAX_RETAINED_FRAME_SIZE) {
+    constructor(
+        maxRetainedSize: number = DEFAULT_MAX_RETAINED_FRAME_SIZE,
+        onOversizeParams?: (frameLength: number) => void,
+    ) {
         this.#maxRetainedSize = maxRetainedSize;
+        this.#onOversizeParams = onOversizeParams;
         this.#out = this.#newBuffer();
     }
 
@@ -69,7 +80,7 @@ export class FrameWriter {
         params: Array<CqlValue>,
         encoder: Encoder,
     ): Buffer {
-        return this.#frame(() =>
+        return this.#paramsFrame(() =>
             this.#writeParamsRow(expectedTypes, params, encoder, 0),
         );
     }
@@ -94,7 +105,7 @@ export class FrameWriter {
                 `Too many statements: ${params.length}, the maximum is ${MAX_FRAME_VALUES}`,
             );
         }
-        return this.#frame(() => {
+        return this.#paramsFrame(() => {
             this.#out.ensure(0, 2);
             this.#out.buffer.writeUInt16BE(params.length, 0);
             let offset = 2;
@@ -160,6 +171,23 @@ export class FrameWriter {
                 this.#out = this.#newBuffer();
             }
         }
+    }
+
+    /**
+     * Writes one frame of params with {@link #frame}.
+     * Then it calls `onOversizeParams` if the frame is larger than the cap.
+     * At that time, the writer is not busy, and it has a new buffer.
+     * @param write Writes the frame from offset 0, and returns the offset after it.
+     * @returns A view of the frame.
+     */
+    #paramsFrame(write: () => number): Buffer {
+        const frame = this.#frame(write);
+        // The buffer grows past the cap only for a frame larger than the cap.
+        // See GrowableBuffer.maxRetainedSize.
+        if (frame.length > this.#maxRetainedSize) {
+            this.#onOversizeParams?.(frame.length);
+        }
+        return frame;
     }
 
     /**

@@ -57,18 +57,28 @@ export class RustSession {
     /**
      * Creates a session based on the provided session options.
      * @param encoder Encodes the values of the requests of this session.
-     * @param maxRetainedParamsBufferSize The session keeps the buffer of its values frames
-     * up to this size. See the client option `encoding.maxRetainedParamsBufferSize`.
+     * @param frameOptions Options of the values frames of this session:
+     * - `maxRetainedParamsBufferSize`: the session keeps the buffer of its values frames
+     *   up to this size. See the client option `encoding.maxRetainedParamsBufferSize`.
+     * - `onOversizeParams`: the session calls it after each params frame of a request
+     *   that is larger than that size, with the length of the frame.
+     *   A token computation does not call it, because it sends no request.
      */
     static async create(
         options: rust.SessionOptions,
         encoder: Encoder,
-        maxRetainedParamsBufferSize?: number,
+        frameOptions: {
+            maxRetainedParamsBufferSize?: number;
+            onOversizeParams?: (frameLength: number) => void;
+        } = {},
     ): Promise<RustSession> {
         return new RustSession(
             await rust.createSession(options),
             encoder,
-            new FrameWriter(maxRetainedParamsBufferSize),
+            new FrameWriter(
+                frameOptions.maxRetainedParamsBufferSize,
+                frameOptions.onOversizeParams,
+            ),
         );
     }
 
