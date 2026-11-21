@@ -470,6 +470,8 @@ export interface ClientOptions {
          * ```
          *
          * It must be an integer from 4096 to 2147483647. Default: 65536 (64 KiB).
+         *
+         * See [Large params](https://github.com/scylladb/nodejs-rs-driver/blob/main/docs/source/statements/parameterized-queries.md#large-params).
          */
         maxRetainedParamsBufferSize?: number;
     };
