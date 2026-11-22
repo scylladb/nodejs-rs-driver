@@ -41,6 +41,7 @@ export async function generatedFn() {
     // to fail at compile time.
     printClasses(root, "root", new Set(["Encoder"]));
     printObjects(root, "root", new Set(["token", "datastax", "geometry"]));
+    printStrings(root, "root");
 
     printClasses(
         auth,
@@ -184,6 +185,27 @@ function printObjects(
         )
         .forEach((k) => {
             console.log(`  o = ${namespaceString}.${k};`);
+        });
+    console.log();
+}
+
+/**
+ * Prints string values as type-safe assignment statements.
+ * For example, given the root module and name `"root"`, outputs:
+ *   // root strings
+ *   s = root.version;
+ * So `tsc` fails when the declared type of such a value is not a string.
+ */
+function printStrings(
+    ns: { [key: string]: any },
+    namespaceString: string,
+): void {
+    console.log(`  // ${namespaceString} strings`);
+
+    Object.keys(ns)
+        .filter((k) => typeof ns[k] === "string")
+        .forEach((k) => {
+            console.log(`  s = ${namespaceString}.${k};`);
         });
     console.log();
 }

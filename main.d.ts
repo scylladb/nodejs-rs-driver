@@ -27,7 +27,7 @@ export { ClientOptions, SslOptions, ClientRoutesProxy };
 export { QueryOptions };
 export { ExecutionProfile };
 
-export const version: number;
+export const version: string;
 
 export function defaultOptions(): ClientOptions;
 
