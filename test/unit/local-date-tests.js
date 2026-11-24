@@ -21,6 +21,20 @@ describe("LocalDate", function () {
             assert.throws(() => new types.LocalDate(2023, 2, 29), Error);
         });
     });
+    describe("#utcNow()", function () {
+        it("should return the current UTC date", function () {
+            const before = new Date().toISOString().slice(0, 10);
+            const result = LocalDate.utcNow();
+            const after = new Date().toISOString().slice(0, 10);
+
+            assert.ok(result instanceof LocalDate);
+            // Accept either side of a midnight rollover during the test run
+            assert.ok(
+                result.toString() === before || result.toString() === after,
+                `utcNow() returned ${result.toString()}, expected ${before} or ${after}`,
+            );
+        });
+    });
     describe("#toString()", function () {
         it("should return the string in the form of yyyy-mm-dd", function () {
             assert.strictEqual(
