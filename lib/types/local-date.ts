@@ -195,7 +195,7 @@ class LocalDate {
      * Creates a new instance of LocalDate using the current date from the system clock at UTC.
      */
     static utcNow(): LocalDate {
-        return new LocalDate(Date.now());
+        return new LocalDate(Math.floor(Date.now() / millisecondsPerDay));
     }
 
     /**
