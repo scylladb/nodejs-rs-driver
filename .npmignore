@@ -30,3 +30,7 @@ coverage
 *.profraw
 scripts
 codecov.yml
+
+# Publish compiled JavaScript and declarations, not TypeScript sources.
+lib/**/*.ts
+!lib/**/*.d.ts
