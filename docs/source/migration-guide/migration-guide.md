@@ -12,8 +12,9 @@ The Apache `cassandra-driver` generates UUID v4 bytes asynchronously with
 generation errors. Use the result inside the callback; use `Uuid.random()` without
 a callback when you need an immediate return value.
 
-UUID v4 generation still runs synchronously through the native addon. Only callback
-delivery is deferred.
+UUID v4 generation uses cached random bytes synchronously. A cache refill
+calls `crypto.randomFillSync()` and can block the calling thread even when a
+callback is supplied.
 
 `Uuid.random(callback)` rejects a truthy non-function callback with an
 `ArgumentError` before generating UUID bytes. The TimeUUID factories do the same

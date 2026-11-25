@@ -4,10 +4,56 @@ const assert = require("assert");
 const { execFileSync } = require("child_process");
 const crypto = require("crypto");
 const sinon = require("sinon");
+const v8 = require("v8");
 const helper = require("../test-helper");
 const utils = require("../../lib/utils");
 const Uuid = require("../../lib/types").Uuid;
 const TimeUuid = require("../../lib/types").TimeUuid;
+
+function withFreshModule(path, check) {
+    const paths = [
+        require.resolve("../../lib/types/entropy-cache"),
+        require.resolve("../../lib/types/uuid"),
+        require.resolve("../../lib/types/time-uuid"),
+    ];
+    const originalModules = paths.map((freshPath) => require.cache[freshPath]);
+    try {
+        for (const freshPath of paths) delete require.cache[freshPath];
+        check(require(path));
+    } finally {
+        paths.forEach((freshPath, i) => {
+            if (originalModules[i]) {
+                require.cache[freshPath] = originalModules[i];
+            } else {
+                delete require.cache[freshPath];
+            }
+        });
+    }
+}
+
+function withSnapshotCallbacks(path, check) {
+    const building = sinon
+        .stub(v8.startupSnapshot, "isBuildingSnapshot")
+        .returns(true);
+    const serialize = sinon.stub(v8.startupSnapshot, "addSerializeCallback");
+    const deserialize = sinon.stub(
+        v8.startupSnapshot,
+        "addDeserializeCallback",
+    );
+    const fill = sinon.spy(crypto, "randomFillSync");
+    try {
+        withFreshModule(path, (Type) => {
+            assert.strictEqual(serialize.callCount, 1);
+            assert.strictEqual(deserialize.callCount, 1);
+            check(Type, { serialize, deserialize, fill });
+        });
+    } finally {
+        fill.restore();
+        deserialize.restore();
+        serialize.restore();
+        building.restore();
+    }
+}
 
 describe("Uuid", function () {
     describe("constructor", function () {
@@ -150,6 +196,63 @@ describe("Uuid", function () {
     });
     describe("random()", function () {
         this.timeout(20000);
+        it("should set version and variant bits across cache refills", function () {
+            const fill = sinon.spy(crypto, "randomFillSync");
+            try {
+                for (let i = 0; i < 384; i++) {
+                    const value = Uuid.random();
+                    assert.strictEqual(value.buffer[6] >> 4, 4);
+                    assert.strictEqual(value.buffer[8] >> 6, 2);
+                }
+                assert.ok(fill.callCount >= 2);
+            } finally {
+                fill.restore();
+            }
+        });
+        it("should discard cached entropy before serializing a startup snapshot", function () {
+            const uuidPath = require.resolve("../../lib/types/uuid");
+            withSnapshotCallbacks(
+                uuidPath,
+                (SnapshotUuid, { serialize, deserialize, fill }) => {
+                    const first = SnapshotUuid.random();
+                    const firstBytes = Buffer.from(first.buffer);
+                    assert.strictEqual(fill.callCount, 1);
+                    serialize.firstCall.args[0]();
+                    const second = SnapshotUuid.random();
+                    assert.strictEqual(fill.callCount, 2);
+                    deserialize.firstCall.args[0]();
+                    SnapshotUuid.random();
+                    assert.strictEqual(fill.callCount, 3);
+                    assert.deepStrictEqual(first.buffer, firstBytes);
+                    assert.strictEqual(second.buffer[6] >> 4, 4);
+                },
+            );
+        });
+        it("should reuse random fills without sharing output buffers", function () {
+            const fill = sinon.spy(crypto, "randomFillSync");
+            try {
+                let first;
+                for (let i = 0; i < 193 && !first; i++) {
+                    const value = Uuid.random();
+                    if (fill.callCount === 1) first = value;
+                }
+                assert.ok(first);
+                const second = Uuid.random();
+                const secondBytes = Buffer.from(second.buffer);
+                assert.strictEqual(first.buffer.byteOffset, 0);
+                assert.strictEqual(first.buffer.buffer.byteLength, 16);
+                first.buffer.fill(0);
+                assert.deepStrictEqual(second.buffer, secondBytes);
+                for (let i = 0; i < 190; i++) Uuid.random();
+                assert.strictEqual(fill.callCount, 1);
+                Uuid.random();
+                assert.strictEqual(fill.callCount, 2);
+                assert.deepStrictEqual(first.buffer, Buffer.alloc(16));
+                assert.deepStrictEqual(second.buffer, secondBytes);
+            } finally {
+                fill.restore();
+            }
+        });
         it("should return a Uuid instance", function () {
             helper.assertInstanceOf(Uuid.random(), Uuid);
         });
@@ -186,47 +289,71 @@ describe("Uuid", function () {
 
         afterEach(() => sandbox.restore());
 
-        it("should defer successful callbacks", async function () {
-            let returned = false;
-            const completed = new Promise((resolve, reject) => {
-                const result = Uuid.random((err, value) => {
-                    try {
-                        assert.ifError(err);
-                        assert.strictEqual(returned, true);
-                        helper.assertInstanceOf(value, Uuid);
-                        resolve();
-                    } catch (e) {
-                        reject(e);
-                    }
-                });
-                assert.strictEqual(result, undefined);
-                returned = true;
+        it("should defer callbacks on cache refills and cache hits", async function () {
+            let CachedUuid;
+            withFreshModule(require.resolve("../../lib/types/uuid"), (Type) => {
+                CachedUuid = Type;
             });
-            await completed;
+            for (let i = 0; i < 2; i++) {
+                let returned = false;
+                const completed = new Promise((resolve, reject) => {
+                    const result = CachedUuid.random((err, value) => {
+                        try {
+                            assert.ifError(err);
+                            assert.strictEqual(returned, true);
+                            helper.assertInstanceOf(value, CachedUuid);
+                            resolve();
+                        } catch (e) {
+                            reject(e);
+                        }
+                    });
+                    assert.strictEqual(result, undefined);
+                    returned = true;
+                });
+                await completed;
+            }
         });
-        it("should report generation errors asynchronously", async function () {
-            const failure = new Error("random fill failed");
-            const rust = require("../../index");
-            const fill = sandbox.stub(rust, "getRandomUuidV4").throws(failure);
-            let returned = false;
-            const completed = new Promise((resolve, reject) => {
-                Uuid.random((err, value) => {
-                    try {
-                        assert.strictEqual(returned, true);
-                        assert.strictEqual(err, failure);
-                        assert.strictEqual(value, undefined);
-                        resolve();
-                    } catch (e) {
-                        reject(e);
-                    }
-                });
-                returned = true;
+        it("should report a failed cache refill asynchronously and retry on the next call", async function () {
+            let CachedUuid;
+            withFreshModule(require.resolve("../../lib/types/uuid"), (Type) => {
+                CachedUuid = Type;
             });
-            await completed;
-            assert.strictEqual(fill.callCount, 1);
+            const failure = new Error("random fill failed");
+            const originalFill = crypto.randomFillSync;
+            let fills = 0;
+            const fill = sinon
+                .stub(crypto, "randomFillSync")
+                .callsFake((buffer) => {
+                    if (fills++ === 0) throw failure;
+                    return originalFill(buffer);
+                });
+            try {
+                let returned = false;
+                const completed = new Promise((resolve, reject) => {
+                    CachedUuid.random((err, value) => {
+                        try {
+                            assert.strictEqual(returned, true);
+                            assert.strictEqual(err, failure);
+                            assert.strictEqual(value, undefined);
+                            resolve();
+                        } catch (e) {
+                            reject(e);
+                        }
+                    });
+                    returned = true;
+                });
+                await completed;
+                assert.strictEqual(fill.callCount, 1);
+                const recovered = CachedUuid.random();
+                assert.strictEqual(recovered.buffer[6] >> 4, 4);
+                assert.strictEqual(recovered.buffer[8] >> 6, 2);
+                assert.strictEqual(fill.callCount, 2);
+            } finally {
+                fill.restore();
+            }
         });
         it("should reject a non-function callback before generating a UUID", function () {
-            const fill = sandbox.spy(require("../../index"), "getRandomUuidV4");
+            const fill = sandbox.spy(crypto, "randomFillSync");
             assert.throws(() => Uuid.random({}), {
                 name: "ArgumentError",
                 message: "callback is not a function",
