@@ -35,6 +35,7 @@ You do not need to manually handle statement preparation. If you enable the `pre
 its cache of prepared statements if the statement is present, or prepares the query before execution and keeps the prepared statement in its cache from now on.
 The driver keeps a cache of the last `ClientOptions.maxPrepared` statements. This cache ensures you can take full advantage of prepared statements.
 
+(prepared-bind-metadata)=
 :::{caution}
 The bind types and parameter names of a prepared statement remain fixed for as long as its cached handle is reused, as in the Rust driver. A schema change does not automatically refresh this metadata. If you change a table or user-defined type used by a prepared statement, create a new `Client` before executing that statement with the changed schema.
 :::
@@ -77,6 +78,67 @@ Results of preparation are not cached between `client.batch()` calls.
 
 Avoid using unprepared batches unless all statements take no bind markers.
 :::
+
+### Bind markers and rolling upgrades
+
+Bind anonymous `?` markers with an array, in statement order:
+
+```js
+await client.execute(
+    "SELECT * FROM events WHERE account = ? AND id IN ?",
+    [account, [firstId, secondId]],
+    { prepare: true },
+);
+```
+
+Use object parameters for explicit `:name` markers:
+
+```js
+await client.execute(
+    "SELECT * FROM events WHERE account = :account AND id IN :ids",
+    { ids: [firstId, secondId], account },
+    { prepare: true },
+);
+```
+
+For anonymous markers, the server assigns metadata names: `pk = ?` uses the
+column name `pk`, while `ck IN ?` uses a synthesized name such as `in(ck)`.
+These **server-assigned names** can change between server versions. Object
+parameters such as `{ pk: 1 }` can work, but relying on server-assigned names
+makes the application depend on those names staying the same. Use arrays for
+anonymous markers throughout a rolling upgrade, including when nodes report
+different names.
+
+For object parameters, the driver looks up each marker's name in the cached
+prepared metadata. It collects the values in marker order. In the example
+above, `:account` comes first in the statement. The driver sends its value first
+even though `ids` is the first object property. The coordinator receives
+only positional values, without the object keys. Explicit `:name` markers let
+the application choose the lookup names instead of relying on names that the
+server generates for anonymous markers.
+
+The following cases assume that marker order and the meaning of the query stay
+the same. By-name binding means object parameters; positional binding means an
+array.
+
+| Binding | Change | Effect and required action |
+|---------|--------|----------------------------|
+| Positional | A server-assigned name changes | Values still bind by position. Both cached handles and fresh preparations work if bind types stay compatible. |
+| By name | A server-assigned name changes | An existing cached handle keeps its original lookup names. A fresh preparation can require different object keys and reject the old keys as missing. Use an array instead. Renaming a schema column can invalidate the original CQL; update the column reference in the query. |
+| Positional | An explicit `:name` changes | Names do not affect array binding. Changing `:old` to `:new` in the CQL text creates a different query, which the driver prepares separately. |
+| By name | An explicit `:name` changes | Update the object key when changing the marker in the CQL text. The new query has its own prepared metadata. If the CQL stays the same, explicit marker names remain the names chosen by the application. Renaming a schema column can invalidate the original CQL; update the column reference even when explicit marker names stay the same. |
+
+For bind-type changes with either binding method, follow the
+[bind-metadata caution](#prepared-bind-metadata).
+
+When a node returns `UNPREPARED` for a statement evicted from the server's
+prepared-statement cache, the driver prepares the statement again and retries
+execution. This does **not** refresh the cached handle's bind names or types.
+Positional binding remains safe when only marker names change, whether those
+names are server-assigned or explicit.
+If the client's prepared-statement cache evicts a statement, the driver prepares
+it again with new bind metadata on its next use. Explicit bind-cache invalidation
+is tracked in [#624](https://github.com/scylladb/nodejs-rs-driver/issues/624).
 
 ### Single vs [Batch](./batch.md)
 
