@@ -40,27 +40,44 @@ module.exports = function addBindMarkerTests(setup, keyspace) {
             }
         });
 
-        async function createClient(spellings) {
+        function endpoint({ address, port }) {
+            return net.isIPv6(address)
+                ? `[${address}]:${port}`
+                : `${address}:${port}`;
+        }
+
+        function socketAddress(address, port) {
+            return new net.SocketAddress({
+                address,
+                port,
+                family: net.isIPv6(address) ? "ipv6" : "ipv4",
+            });
+        }
+
+        async function createClient(names, options = {}) {
             const backends = setup.client.hosts
                 .values()
-                .slice(0, spellings.length)
+                .slice(0, names.length)
                 .map((host) => host.address);
             assert.strictEqual(
                 backends.length,
-                spellings.length,
+                names.length,
                 "fixture needs distinct nodes",
             );
             const addresses = await rust.testsStartBindMarkerProxies(
-                backends.map(({ address, port }) => `${address}:${port}`),
+                backends.map(endpoint),
             );
             const mapping = new Map();
             const allowList = [];
             for (const [index, backend] of backends.entries()) {
-                const [address, port] = addresses[index].split(":");
-                const translated = new net.SocketAddress({
+                const separator = addresses[index].lastIndexOf(":");
+                const address = addresses[index]
+                    .slice(0, separator)
+                    .replace(/^\[|\]$/g, "");
+                const translated = socketAddress(
                     address,
-                    port: Number(port),
-                });
+                    Number(addresses[index].slice(separator + 1)),
+                );
                 for (const port of new Set([
                     9042,
                     19042,
@@ -68,26 +85,25 @@ module.exports = function addBindMarkerTests(setup, keyspace) {
                     translated.port,
                 ])) {
                     mapping.set(
-                        new net.SocketAddress({
-                            address: backend.address,
-                            port,
-                        }),
+                        socketAddress(backend.address, port),
                         translated,
                     );
-                    allowList.push(`${backend.address}:${port}`);
+                    allowList.push(
+                        endpoint({ address: backend.address, port }),
+                    );
                 }
                 mapping.set(translated, translated);
                 allowList.push(addresses[index]);
                 await rust.testsConfigureBindMarkerProxy(
                     index,
-                    spellings[index],
+                    names[index],
                     false,
                 );
             }
             const client = new Client({
                 ...helper.baseOptions,
                 contactPoints: addresses,
-                maxPrepared: 1,
+                ...options,
                 policies: {
                     ...helper.baseOptions.policies,
                     loadBalancing: new policies.loadBalancing.AllowListPolicy(
@@ -112,9 +128,9 @@ module.exports = function addBindMarkerTests(setup, keyspace) {
             );
         }
 
-        for (const spelling of ["IN(ck)", "in(ck)"]) {
-            it(`binds arrays and explicit names with ${spelling} prepared metadata`, async function () {
-                const client = await createClient([spelling]);
+        for (const name of ["IN(ck)", "in(ck)"]) {
+            it(`binds arrays and explicit names with ${name} prepared metadata`, async function () {
+                const client = await createClient([name]);
                 for (const paged of [false, true]) {
                     for (const [restriction, params] of [
                         ["ck IN ?", [1, [2, 1]]],
@@ -137,13 +153,13 @@ module.exports = function addBindMarkerTests(setup, keyspace) {
                 }
                 const [stats] = await rust.testsBindMarkerProxyStats();
                 assert.ok(
-                    stats.names.includes(spelling),
+                    stats.names.includes(name),
                     "proxy must rewrite actual PREPARED metadata",
                 );
             });
 
-            it(`recovers from UNPREPARED after ${spelling} changes beyond case`, async function () {
-                const client = await createClient([spelling]);
+            it(`recovers from UNPREPARED after ${name} changes beyond case`, async function () {
+                const client = await createClient([name], { maxPrepared: 1 });
                 const query = `SELECT ck FROM ${table} WHERE pk = ? AND ck IN ?`;
                 const prepared = await client.prepareStatement(query);
                 assert.deepStrictEqual(prepared.boundParamNames, [
@@ -165,7 +181,7 @@ module.exports = function addBindMarkerTests(setup, keyspace) {
                     after.prepares > before.prepares,
                     "UNPREPARED must cause a new PREPARE",
                 );
-                assert.ok(after.names.includes(spelling));
+                assert.ok(after.names.includes(name));
                 assert.ok(after.names.includes("items_after_upgrade"));
                 assert.strictEqual(
                     await client.prepareStatement(query),
@@ -212,8 +228,8 @@ module.exports = function addBindMarkerTests(setup, keyspace) {
         }
 
         it("uses one client concurrently across nodes reporting different names", async function () {
-            const spellings = ["in(ck)", "items_after_upgrade"];
-            const client = await createClient(spellings);
+            const names = ["in(ck)", "items_after_upgrade"];
+            const client = await createClient(names);
             const queries = [
                 [
                     `SELECT ck FROM ${table} WHERE pk = ? AND ck IN ?`,
@@ -238,7 +254,7 @@ module.exports = function addBindMarkerTests(setup, keyspace) {
                 }),
             );
             const after = await rust.testsBindMarkerProxyStats();
-            for (const [index, spelling] of spellings.entries()) {
+            for (const [index, name] of names.entries()) {
                 assert.ok(
                     after[index].prepares > before[index].prepares,
                     "both nodes must prepare the tested queries",
@@ -248,8 +264,8 @@ module.exports = function addBindMarkerTests(setup, keyspace) {
                     "both nodes must execute concurrent requests",
                 );
                 assert.ok(
-                    after[index].names.includes(spelling),
-                    "both nodes must return their own PREPARED spelling",
+                    after[index].names.includes(name),
+                    "both nodes must return their own PREPARED name",
                 );
             }
         });

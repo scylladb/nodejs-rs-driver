@@ -22,16 +22,22 @@ use tokio::sync::Mutex;
 use crate::async_bridge::{BridgedPromise, JsAsyncResult};
 use crate::errors::{ConvertedError, ConvertedResult, make_js_error};
 
-const SPELLINGS: [&str; 3] = ["IN(ck)", "in(ck)", "items_after_upgrade"];
+const MARKER_NAMES: [&str; 3] = ["IN(ck)", "in(ck)", "items_after_upgrade"];
 
 #[derive(Default)]
 struct State {
-    spelling: AtomicU8,
+    /// Index in MARKER_NAMES to use for this node's next PREPARED response.
+    name: AtomicU8,
+    /// Number of PREPARE requests received by this node.
     prepares: AtomicU32,
+    /// Number of EXECUTE requests, including the injected UNPREPARED request.
     executes: AtomicU32,
+    /// Number of BATCH requests received by this node.
     batches: AtomicU32,
+    /// Number of UNPREPARED responses injected by this node.
     unprepared: AtomicU32,
-    observed_spellings: AtomicU32,
+    /// Bit set per MARKER_NAMES entry written into this node's PREPARED metadata.
+    observed_names: AtomicU32,
 }
 
 struct Active {
@@ -40,9 +46,14 @@ struct Active {
     states: Vec<Arc<State>>,
 }
 
-// Keep all fixture workers in one scope, including workers spawned before
-// Proxy::run returns an error. The runtime also stops these workers if startup
-// is cancelled.
+/// Owns every proxy worker so failed or cancelled startup releases its listeners.
+///
+/// Proxy::run can spawn a listener before a later node fails to bind, without
+/// returning a RunningProxy to finish. Fresh exclusive addresses avoid port
+/// conflicts on the next start, but do not reclaim those workers. Dropping this
+/// runtime does. During teardown the JS fixture stops proxies before closing
+/// its clients, so this also cancels pending connection I/O without waiting for
+/// clients to disconnect. Queued worker errors are checked before shutdown.
 struct OwnedRuntime(Option<Runtime>);
 
 impl OwnedRuntime {
@@ -158,8 +169,8 @@ fn response_rules(state: Arc<State>) -> Vec<ResponseRule> {
                 return frame;
             }
             let offset = frame.body.len() - metadata.len();
-            let spelling = state.spelling.load(Ordering::Relaxed) as usize;
-            let replacement = SPELLINGS[spelling].as_bytes();
+            let name = state.name.load(Ordering::Relaxed) as usize;
+            let replacement = MARKER_NAMES[name].as_bytes();
             let mut body = frame.body[..offset].to_vec();
             let mut rest = metadata;
             let mut changed = false;
@@ -176,9 +187,7 @@ fn response_rules(state: Arc<State>) -> Vec<ResponseRule> {
             if changed {
                 body.extend_from_slice(rest);
                 frame.body = body.into();
-                state
-                    .observed_spellings
-                    .fetch_or(1 << spelling, Ordering::Relaxed);
+                state.observed_names.fetch_or(1 << name, Ordering::Relaxed);
             }
             frame
         })),
@@ -215,7 +224,7 @@ pub fn tests_start_bind_marker_proxies(
             for (index, backend) in backends.into_iter().enumerate() {
                 let address = SocketAddr::new(get_exclusive_local_address(), backend.port());
                 let state = Arc::new(State::default());
-                state.spelling.store((index % 2) as u8, Ordering::Relaxed);
+                state.name.store((index % 2) as u8, Ordering::Relaxed);
                 nodes.push(Node::new(
                     backend,
                     address,
@@ -242,15 +251,15 @@ pub fn tests_start_bind_marker_proxies(
 pub fn tests_configure_bind_marker_proxy(
     env: Env,
     index: u32,
-    spelling: String,
+    name: String,
     fail_next_execute: bool,
 ) -> JsAsyncResult<()> {
     BridgedPromise::spawn(&env, || {
         Ok(async move {
-            let spelling = SPELLINGS
+            let name = MARKER_NAMES
                 .iter()
-                .position(|candidate| *candidate == spelling)
-                .ok_or_else(|| error("Unsupported bind-marker fixture spelling"))?;
+                .position(|candidate| *candidate == name)
+                .ok_or_else(|| error("Unsupported bind-marker fixture name"))?;
             let mut guard = active().lock().await;
             let active = guard
                 .as_mut()
@@ -260,7 +269,7 @@ pub fn tests_configure_bind_marker_proxy(
                 .get(index as usize)
                 .ok_or_else(|| error("Invalid bind-marker proxy index"))?
                 .clone();
-            state.spelling.store(spelling as u8, Ordering::Relaxed);
+            state.name.store(name as u8, Ordering::Relaxed);
             active.proxy.running_nodes[index as usize]
                 .change_request_rules(Some(request_rules(state, fail_next_execute)));
             ConvertedResult::Ok(())
@@ -295,11 +304,11 @@ pub fn tests_bind_marker_proxy_stats(env: Env) -> JsAsyncResult<Vec<BindMarkerPr
                         executes: state.executes.load(Ordering::Relaxed),
                         batches: state.batches.load(Ordering::Relaxed),
                         unprepared: state.unprepared.load(Ordering::Relaxed),
-                        names: SPELLINGS
+                        names: MARKER_NAMES
                             .iter()
                             .enumerate()
                             .filter(|(index, _)| {
-                                state.observed_spellings.load(Ordering::Relaxed) & (1 << index) != 0
+                                state.observed_names.load(Ordering::Relaxed) & (1 << index) != 0
                             })
                             .map(|(_, name)| (*name).to_owned())
                             .collect(),
@@ -315,9 +324,11 @@ pub fn tests_bind_marker_proxy_stats(env: Env) -> JsAsyncResult<Vec<BindMarkerPr
 pub fn tests_stop_bind_marker_proxies(env: Env) -> JsAsyncResult<()> {
     BridgedPromise::spawn(&env, || {
         Ok(async {
-            if let Some(active) = active().lock().await.take() {
+            if let Some(mut active) = active().lock().await.take() {
+                let worker_result = active.proxy.sanity_check();
                 drop(active.proxy);
                 active.runtime.shutdown().await.map_err(error)?;
+                worker_result.map_err(error)?;
             }
             ConvertedResult::Ok(())
         })
