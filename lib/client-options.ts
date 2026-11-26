@@ -19,6 +19,10 @@ import {
     MappingAddressTranslator,
 } from "./policies/address-resolution";
 import { ExecutionProfile } from "./execution-profile";
+import {
+    DEFAULT_MAX_RETAINED_FRAME_SIZE,
+    INITIAL_FRAME_SIZE,
+} from "./growable-buffer";
 import type { QueryOptions } from "./query-options";
 import type { SecureVersion } from "tls";
 
@@ -353,19 +357,16 @@ export interface ClientOptions {
     sslOptions?: SslOptions;
     /**
      * Encoding options.
-     * [TODO: Add support for this field]
      */
     encoding?: {
         /**
          * Map constructor to use for Cassandra map<k,v> type encoding and decoding.
          * If not set, it will default to Javascript Object with map keys as property names.
-         * [TODO: Add support for this field]
          */
         map?: Function;
         /**
          * Set constructor to use for Cassandra set<k> type encoding and decoding.
          * If not set, it will default to Javascript Array.
-         * [TODO: Add support for this field]
          */
         set?: Function;
         /**
@@ -435,6 +436,44 @@ export interface ClientOptions {
          * Note, that using Integer as Varint (`useBigIntAsVarint == false`) is deprecated.
          */
         useBigIntAsVarint?: boolean;
+        /**
+         * The largest buffer, in bytes, that the driver keeps to encode the params of requests.
+         *
+         * The driver encodes the params of each request into one buffer.
+         * A batch puts the params of all its statements into one buffer.
+         * The buffer grows when the params need more room, and the driver keeps it
+         * for the next request, up to this size.
+         *
+         * When the params of a request need more than this size, the driver allocates
+         * a larger buffer for this request only. After the request, it frees that buffer,
+         * and starts again with a buffer of 4 KiB. So each such request allocates new memory.
+         * If such requests are frequent, this costs time and garbage collection.
+         * The driver logs a warning the first time this occurs for each {@link Client}.
+         *
+         * Set this option to at least the size of the params of your frequent large requests.
+         * The size of the params is approximately:
+         * - the size of each encoded value, for example 4 bytes for an `int`, or the length of a blob,
+         * - plus 4 bytes for each value,
+         * - plus 2 bytes for each statement.
+         *
+         * This option does not limit the size of the params: larger requests still work.
+         * Each {@link Client} keeps one such buffer. The buffer grows only when a request needs more room,
+         * but it does not shrink after that. In other words, each {@link Client} can keep up to this many bytes.
+         *
+         * For example, for rows with a blob of up to 200 KiB:
+         *
+         * ```javascript
+         * const client = new Client({
+         *     contactPoints: ["127.0.0.1"],
+         *     encoding: { maxRetainedParamsBufferSize: 256 * 1024 },
+         * });
+         * ```
+         *
+         * It must be an integer from 4096 to 2147483647. Default: 65536 (64 KiB).
+         *
+         * See [Large params](https://github.com/scylladb/nodejs-rs-driver/blob/main/docs/source/statements/parameterized-queries.md#large-params).
+         */
+        maxRetainedParamsBufferSize?: number;
     };
     /**
      * The minimum severity of log events emitted by the driver.
@@ -706,6 +745,7 @@ function defaultOptions(): ClientOptions {
             useUndefinedAsUnset: true,
             useBigIntAsLong: true,
             useBigIntAsVarint: true,
+            maxRetainedParamsBufferSize: DEFAULT_MAX_RETAINED_FRAME_SIZE,
         },
         logLevel: types.logLevels.warning,
     };
@@ -1021,6 +1061,12 @@ function validateAuthenticationOptions(options: ClientOptions): void {
 }
 
 /**
+ * The largest value of the signed 4-byte body length in a CQL frame header.
+ * The driver cannot send a larger frame, so a larger buffer cap has no use.
+ */
+const MAX_FRAME_LENGTH = 0x7fffffff;
+
+/**
  * Validates the encoding options.
  * @private
  */
@@ -1047,6 +1093,22 @@ function validateEncodingOptions(
         ) {
             throw new TypeError("Set constructor not valid");
         }
+    }
+
+    // `extend` can leave `encoding` without this field, for example when the user gives `encoding: null`.
+    // Set the default here, so the Client always has a number to pass on.
+    const maxRetained = encodingOptions.maxRetainedParamsBufferSize;
+    if (maxRetained === undefined) {
+        encodingOptions.maxRetainedParamsBufferSize =
+            DEFAULT_MAX_RETAINED_FRAME_SIZE;
+    } else if (
+        !Number.isSafeInteger(maxRetained) ||
+        maxRetained < INITIAL_FRAME_SIZE ||
+        maxRetained > MAX_FRAME_LENGTH
+    ) {
+        throw new TypeError(
+            `encoding.maxRetainedParamsBufferSize must be an integer from ${INITIAL_FRAME_SIZE} to ${MAX_FRAME_LENGTH}`,
+        );
     }
 }
 

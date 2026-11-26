@@ -5,6 +5,7 @@ const { runInNewContext } = require("node:vm");
 const Encoder = require("../../lib/encoder");
 const types = require("../../lib/types");
 const { FrameWriter } = require("../../lib/frame-writer");
+const { GrowableBuffer } = require("../../lib/growable-buffer");
 
 // One writer for the tests that do not test the writer itself.
 const writer = new FrameWriter();
@@ -210,10 +211,119 @@ describe("FrameWriter", function () {
         assert.strictEqual(second.buffer.byteLength, 65536);
     });
 
+    describe("with a given cap", function () {
+        const blob = { code: types.dataTypes.blob };
+        // A frame of one blob of 80000 bytes has 80006 bytes.
+        const params = (writer, size) =>
+            writer.params([blob], [Buffer.alloc(size)], encoder);
+
+        it("keeps its buffer up to a cap that is not 4096 times a power of 2", function () {
+            const writer = new FrameWriter(100000);
+            const first = params(writer, 80000);
+            const second = params(writer, 80000);
+            assert.strictEqual(second.buffer, first.buffer);
+            assert.strictEqual(second.buffer.byteLength, 100000);
+        });
+
+        it("keeps the cap after it drops a buffer that is too large", function () {
+            const writer = new FrameWriter(100000);
+            const big = params(writer, 150000);
+            const small = writer.params([int], [5], encoder);
+            assert.strictEqual(small.buffer.byteLength, 4096);
+            const first = params(writer, 80000);
+            const second = params(writer, 80000);
+            assert.strictEqual(second.buffer, first.buffer);
+            assert.strictEqual(second.buffer.byteLength, 100000);
+            assert.lengthOf(decodeFrame(big)[0], 300000);
+        });
+
+        it("keeps its buffer when the upper bound of a string ends after a cap below 64 KiB", function () {
+            // The upper bounds of the 12th and 13th texts end past the cap, at 21050 and 22554.
+            // If encodeString used the default cap of 64 KiB, it would make room for them,
+            // and the buffer would grow to 40000.
+            const writer = new FrameWriter(20000);
+            const columns = new Array(13).fill(text);
+            const values = new Array(13).fill("a".repeat(1500));
+            const first = writer.params(columns, values, encoder);
+            assert.lengthOf(first, 19554);
+            const second = writer.params(columns, values, encoder);
+            assert.strictEqual(second.buffer, first.buffer);
+            assert.strictEqual(second.buffer.byteLength, 20000);
+        });
+
+        it("calls onOversizeParams with the length of each params frame larger than the cap", function () {
+            const lengths = [];
+            const writer = new FrameWriter(100000, (length) =>
+                lengths.push(length),
+            );
+            params(writer, 80000);
+            params(writer, 150000);
+            params(writer, 80000);
+            params(writer, 120000);
+            assert.deepEqual(lengths, [150006, 120006]);
+        });
+
+        it("calls onOversizeParams for a large batch frame, but not for a large frame of buffers", function () {
+            const lengths = [];
+            const writer = new FrameWriter(100000, (length) =>
+                lengths.push(length),
+            );
+            // In the driver, a frame of buffers holds a partition key for a token computation,
+            // not the params of a request.
+            writer.buffers([Buffer.alloc(150000)]);
+            writer.batch([[blob]], [[Buffer.alloc(120000)]], encoder);
+            assert.deepEqual(lengths, [120008]);
+        });
+
+        it("lets onOversizeParams write a frame, and keeps the large frame", function () {
+            let small;
+            const writer = new FrameWriter(100000, () => {
+                small = writer.params([int], [7], encoder);
+            });
+            const big = writer.params(
+                [blob],
+                [Buffer.alloc(150000, 1)],
+                encoder,
+            );
+            assert.deepEqual(decodeFrame(small), ["00000007"]);
+            assert.strictEqual(big.readInt32BE(2), 150000);
+            assert.isTrue(big.subarray(6).every((byte) => byte === 1));
+        });
+    });
+
     it("keeps the frames of two writers apart", function () {
         const a = new FrameWriter().params([int], [1], encoder);
         const b = new FrameWriter().params([int], [2], encoder);
         assert.deepEqual(decodeFrame(a), ["00000001"]);
         assert.deepEqual(decodeFrame(b), ["00000002"]);
+    });
+});
+
+describe("GrowableBuffer.ensure", function () {
+    // 100000 is not 4096 times a power of 2, so doubling alone never gives it.
+    it("grows to the cap, not past it, when the bytes fit in the cap", function () {
+        const out = new GrowableBuffer(4096, 100000);
+        out.ensure(0, 70000);
+        assert.strictEqual(out.buffer.length, 100000);
+    });
+
+    it("grows to exactly the cap when the bytes end at the cap", function () {
+        const out = new GrowableBuffer(4096, 100000);
+        out.ensure(99990, 10);
+        assert.strictEqual(out.buffer.length, 100000);
+    });
+
+    it("doubles past the cap when the bytes do not fit in the cap", function () {
+        const out = new GrowableBuffer(4096, 100000);
+        out.ensure(0, 100001);
+        assert.strictEqual(out.buffer.length, 131072);
+    });
+
+    it("keeps the bytes before the offset when it grows to the cap", function () {
+        const out = new GrowableBuffer(4, 10);
+        out.buffer.write("abcd", 0, "latin1");
+        out.ensure(4, 5);
+        assert.strictEqual(out.buffer.length, 10);
+        assert.strictEqual(out.buffer.toString("latin1", 0, 4), "abcd");
     });
 });

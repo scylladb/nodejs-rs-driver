@@ -182,3 +182,115 @@ describe("values frames of concurrent requests", function () {
         }
     });
 });
+
+describe("encoding.maxRetainedParamsBufferSize", function () {
+    /**
+     * Connects a real Client with mock native functions.
+     * The mock records the ArrayBuffer of each values frame.
+     */
+    async function connectClient(options) {
+        const frames = [];
+        Object.assign(native, {
+            createSession: async () => ({}),
+            sessionQueryUnpaged: (session, query, frame) => {
+                frames.push(frame.buffer);
+                return later({ rows: [] });
+            },
+            sessionComputeToken: () => ({}),
+        });
+        const client = new Client({
+            contactPoints: ["127.0.0.1"],
+            logLevel: "off",
+            ...options,
+        });
+        await client.connect();
+        return { client, frames };
+    }
+
+    /** Sends params of 80006 bytes: more than 64 KiB, but less than 100000 bytes. */
+    const insertBlob = (client) =>
+        client.execute("INSERT INTO t (b) VALUES (?)", [Buffer.alloc(80000)], {
+            prepare: false,
+            paged: false,
+            hints: ["blob"],
+        });
+
+    it("lets the Client keep a buffer larger than 64 KiB", async function () {
+        const { client, frames } = await connectClient({
+            encoding: { maxRetainedParamsBufferSize: 100000 },
+        });
+        await insertBlob(client);
+        await insertBlob(client);
+        assert.strictEqual(frames.length, 2);
+        assert.strictEqual(frames[0], frames[1]);
+    });
+
+    it("makes the Client drop a buffer larger than 64 KiB by default", async function () {
+        const { client, frames } = await connectClient({});
+        await insertBlob(client);
+        await insertBlob(client);
+        assert.strictEqual(frames.length, 2);
+        assert.notStrictEqual(frames[0], frames[1]);
+    });
+
+    /**
+     * Sends two requests with params larger than 64 KiB.
+     * @param before When given, it gets the Client before the requests.
+     * @returns The warnings that name the option.
+     */
+    async function hintsOfTwoLargeRequests(logLevel, before) {
+        // With a logLevel other than "off", connect registers a real Rust logging callback.
+        // shutdown removes it.
+        const { client } = await connectClient({ logLevel });
+        const events = [];
+        client.on("log", (level, target, message) =>
+            events.push({ level, message }),
+        );
+        try {
+            before?.(client);
+            await insertBlob(client);
+            await insertBlob(client);
+        } finally {
+            // shutdown also logs a warning, so the filter below needs the option name.
+            await client.shutdown();
+        }
+        return events.filter(
+            (event) =>
+                event.level === "warning" &&
+                event.message.includes("encoding.maxRetainedParamsBufferSize"),
+        );
+    }
+
+    it("makes the Client log one warning when the params need more than the cap", async function () {
+        const hints = await hintsOfTwoLargeRequests("warning");
+        assert.strictEqual(hints.length, 1);
+        assert.match(
+            hints[0].message,
+            /need 80006 bytes, more than encoding\.maxRetainedParamsBufferSize \(65536 bytes\)/,
+        );
+    });
+
+    it("makes each Client log its own warning", async function () {
+        assert.strictEqual(
+            (await hintsOfTwoLargeRequests("warning")).length,
+            1,
+        );
+        assert.strictEqual(
+            (await hintsOfTwoLargeRequests("warning")).length,
+            1,
+        );
+    });
+
+    it("makes the warning give the size of the params, not of a larger partition key of newToken", async function () {
+        // The partition key frame has 90006 bytes, and the params of each request have 80006 bytes.
+        const hints = await hintsOfTwoLargeRequests("warning", (client) =>
+            client.metadata.newToken(Buffer.alloc(90000), "ks", "t"),
+        );
+        assert.strictEqual(hints.length, 1);
+        assert.match(hints[0].message, /need 80006 bytes/);
+    });
+
+    it("logs no warning when logLevel is off", async function () {
+        assert.strictEqual((await hintsOfTwoLargeRequests("off")).length, 0);
+    });
+});

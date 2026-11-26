@@ -3,23 +3,22 @@ import type { CqlValue } from "../main";
 import Encoder = require("./encoder");
 import errors = require("./errors");
 import type { ColumnInfo } from "./types/cql-utils";
-import { GrowableBuffer, MAX_RETAINED_FRAME_SIZE } from "./growable-buffer";
+import {
+    DEFAULT_MAX_RETAINED_FRAME_SIZE,
+    GrowableBuffer,
+    INITIAL_FRAME_SIZE,
+} from "./growable-buffer";
 
 /** Largest value count that the `[short]` count of a frame can hold. */
 const MAX_FRAME_VALUES = 0xffff;
-/**
- * The buffer size of a new {@link FrameWriter}.
- * It must not be 0, because {@link GrowableBuffer.ensure} doubles the size.
- * {@link MAX_RETAINED_FRAME_SIZE} must be this size times a power of 2. See its comment.
- */
-const INITIAL_FRAME_SIZE = 4096;
 
 /**
  * Encodes values into values frames, in the request frame layout:
  * `[u16 count]`, then for each value `[i32 length][bytes]`.
  * Length -1 is null, and -2 is unset.
  *
- * The writer reuses its buffer between frames.
+ * The writer reuses its buffer between frames, up to a size that the constructor takes.
+ * After a larger frame, it starts again with a small buffer.
  * A frame is a view of that buffer, valid until the next frame of the same writer.
  * Thus, pass a frame to Rust immediately.
  * This is safe, because Rust copies the frame before the native call returns.
@@ -38,8 +37,35 @@ const INITIAL_FRAME_SIZE = 4096;
  * A nested frame on the same writer throws, because it would overwrite the frame in progress.
  */
 export class FrameWriter {
-    #out = new GrowableBuffer(INITIAL_FRAME_SIZE);
+    readonly #maxRetainedSize: number;
+    readonly #onOversizeParams: ((frameLength: number) => void) | undefined;
+    #out: GrowableBuffer;
     #busy = false;
+
+    /**
+     * @param maxRetainedSize The writer keeps its buffer between frames up to this size.
+     * It must be at least {@link INITIAL_FRAME_SIZE}. Else, the writer drops even its first buffer
+     * after each frame.
+     * @param onOversizeParams The writer calls it after each frame of {@link params} or {@link batch}
+     * that is larger than `maxRetainedSize`, with the length of the frame.
+     * At that time, the writer has a new buffer.
+     * Thus, the callback can even write a frame, and that frame does not overwrite the large frame.
+     * The writer does not call it for frames of {@link buffers}: in the driver, these frames hold
+     * the partition key of a token computation, which sends no request.
+     */
+    constructor(
+        maxRetainedSize: number = DEFAULT_MAX_RETAINED_FRAME_SIZE,
+        onOversizeParams?: (frameLength: number) => void,
+    ) {
+        this.#maxRetainedSize = maxRetainedSize;
+        this.#onOversizeParams = onOversizeParams;
+        this.#out = this.#newBuffer();
+    }
+
+    /** Makes a small buffer with the cap of this writer. */
+    #newBuffer(): GrowableBuffer {
+        return new GrowableBuffer(INITIAL_FRAME_SIZE, this.#maxRetainedSize);
+    }
 
     /**
      * Encodes all params of a statement into one frame.
@@ -54,7 +80,7 @@ export class FrameWriter {
         params: Array<CqlValue>,
         encoder: Encoder,
     ): Buffer {
-        return this.#frame(() =>
+        return this.#paramsFrame(() =>
             this.#writeParamsRow(expectedTypes, params, encoder, 0),
         );
     }
@@ -79,7 +105,7 @@ export class FrameWriter {
                 `Too many statements: ${params.length}, the maximum is ${MAX_FRAME_VALUES}`,
             );
         }
-        return this.#frame(() => {
+        return this.#paramsFrame(() => {
             this.#out.ensure(0, 2);
             this.#out.buffer.writeUInt16BE(params.length, 0);
             let offset = 2;
@@ -141,10 +167,27 @@ export class FrameWriter {
         } finally {
             this.#busy = false;
             // The returned frame keeps a large buffer alive until Rust has copied it.
-            if (this.#out.buffer.length > MAX_RETAINED_FRAME_SIZE) {
-                this.#out = new GrowableBuffer(INITIAL_FRAME_SIZE);
+            if (this.#out.buffer.length > this.#maxRetainedSize) {
+                this.#out = this.#newBuffer();
             }
         }
+    }
+
+    /**
+     * Writes one frame of params with {@link #frame}.
+     * Then it calls `onOversizeParams` if the frame is larger than the cap.
+     * At that time, the writer is not busy, and it has a new buffer.
+     * @param write Writes the frame from offset 0, and returns the offset after it.
+     * @returns A view of the frame.
+     */
+    #paramsFrame(write: () => number): Buffer {
+        const frame = this.#frame(write);
+        // The buffer grows past the cap only for a frame larger than the cap.
+        // See GrowableBuffer.maxRetainedSize.
+        if (frame.length > this.#maxRetainedSize) {
+            this.#onOversizeParams?.(frame.length);
+        }
+        return frame;
     }
 
     /**

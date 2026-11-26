@@ -148,6 +148,11 @@ The following option is new, with no `cassandra-driver` equivalent:
   requested for frames exchanged with the nodes. No compression is used when it is not set. If a node
   does not support the requested algorithm, the driver falls back to no compression for connections
   to that node.
+- `encoding.maxRetainedParamsBufferSize`: the largest buffer, in bytes, that each `Client`
+  keeps between requests to encode their params. When the params of a request need more, the driver
+  allocates a new buffer for this request, and logs a warning once for each `Client`. Raise it if
+  your params are often larger. See [Large params](../statements/parameterized-queries.md#large-params).
+  Defaults to `65536` (64 KiB).
 
 ## Client internal members
 

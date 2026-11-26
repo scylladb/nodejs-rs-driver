@@ -67,6 +67,12 @@ If you execute the same batch many times, use `{ prepare: true }`.
 The driver then prepares each statement once and reuses it.
 :::
 
+:::{note}
+A batch puts the params of all its statements into one buffer, so the params of a batch can easily need more than 64 KiB.
+Each `Client` keeps this buffer between requests, but only up to `encoding.maxRetainedParamsBufferSize`.
+If your batches often need more, see [Large params](parameterized-queries.md#large-params).
+:::
+
 Note that batches are not suitable for bulk loading, there are dedicated tools for that. Batches allow you
 to group related updates in a single request, so keep the batch size small (in the order of tens).
 Refer to [CQL documentation][batches] for information about correct and incorrect use of batches.

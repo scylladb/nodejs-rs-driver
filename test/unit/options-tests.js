@@ -105,6 +105,56 @@ describe("Client options", function () {
         });
     });
 
+    describe("encoding.maxRetainedParamsBufferSize", function () {
+        const withSize = (size) => ({
+            contactPoints: ["127.0.0.1"],
+            encoding: { maxRetainedParamsBufferSize: size },
+        });
+
+        it("defaults to 64 KiB", function () {
+            for (const user of [
+                { contactPoints: ["127.0.0.1"] },
+                { contactPoints: ["127.0.0.1"], encoding: {} },
+                { contactPoints: ["127.0.0.1"], encoding: null },
+                withSize(undefined),
+            ]) {
+                assert.strictEqual(
+                    extend(user).encoding.maxRetainedParamsBufferSize,
+                    65536,
+                );
+            }
+        });
+
+        it("accepts integers from 4096 to 2147483647", function () {
+            for (const size of [4096, 100000, 0x7fffffff]) {
+                assert.strictEqual(
+                    extend(withSize(size)).encoding.maxRetainedParamsBufferSize,
+                    size,
+                );
+            }
+        });
+
+        it("rejects other values", function () {
+            for (const size of [
+                4095,
+                0,
+                -1,
+                1.5,
+                0x80000000,
+                "65536",
+                NaN,
+                Infinity,
+                null,
+            ]) {
+                assert.throws(
+                    () => extend(withSize(size)),
+                    /encoding\.maxRetainedParamsBufferSize must be an integer from 4096 to 2147483647/,
+                    String(size),
+                );
+            }
+        });
+    });
+
     it("should correctly convert client options", function () {
         rust.testsCheckClientOption(setRustOptions(options), 1);
         rust.testsCheckClientOption(setRustOptions(optionsV2), 3);
